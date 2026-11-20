@@ -1,0 +1,15 @@
+AO3 Client uses Qt 6.8.3 libraries, dynamically linked under LGPL v3.
+Copyright (C) The Qt Company Ltd. and other contributors.
+License: licenses/Qt-LGPL-3.0.txt
+Qt source: https://download.qt.io/archive/qt/6.8/6.8.3/single/
+Qt components may include additional permissively licensed third-party code;
+see the LICENSES and attribution files in the corresponding Qt source.
+
+This package includes OpenSSL 3 libraries under Apache License 2.0.
+Copyright The OpenSSL Project Authors.
+License: licenses/OpenSSL-Apache-2.0.txt
+Source/build instructions: https://github.com/KDAB/android_openssl
+Build revision: b71f1470962019bd89534a2919f5925f93bc5779
+
+The client source and scripts/build-android.sh can rebuild this package with
+modified Qt libraries. No app-level restriction prevents this replacement.

@@ -1,0 +1,941 @@
+#include "mainwindow.h"
+#include "readinglibrary.h"
+#include "librarybackup.h"
+#include <QSaveFile>
+#include <QMessageBox>
+#include <QDesktopServices>
+#include <QComboBox>
+#include "mobileui.h"
+#include "mobilestack.h"
+#include "readabletheme.h"
+#include <QGuiApplication>
+#include <QInputMethod>
+#include <QMenu>
+#include <QGridLayout>
+#include <QKeyEvent>
+#include <QScroller>
+#include "workcontent.h"
+#include "workitemwidget.h"
+#include <QApplication>
+#include <QShortcut>
+#include <QKeySequence>
+#include <QFrame>
+#include <QIcon>
+#include <QTimer>
+#include <QLocale>
+#include <QPixmap>
+#include <QFileDialog>
+#include <QFile>
+#include <QTextStream>
+#include <QStyle>
+#include <QSettings>
+#include <QEvent>
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
+    , m_loginManager(new LoginManager(this))
+    , m_client(new AO3Client(m_loginManager, this))
+    , m_currentPage(1)
+{
+    setupUI();
+    m_defaultLanguageApplied = true;
+    if (QSettings().value(QStringLiteral("reader/filterLanguage"), false).toBool()) {
+        auto filters = m_filterPanel->filters();
+        filters[QStringLiteral("language_id")] = {QSettings().value(QStringLiteral("reader/language"), QStringLiteral("en")).toString()};
+        m_filterPanel->setFilters(filters);
+    }
+
+
+    connect(m_client, &AO3Client::searchOptionsFetched, this, [this](const SearchOptions &options) {
+        m_filterChoicesLoaded = options.error.isEmpty();
+        m_filterPanel->setOptions(options);
+        if (options.error.isEmpty() && !m_defaultLanguageApplied) {
+            m_defaultLanguageApplied = true;
+            if (QSettings().value(QStringLiteral("reader/filterLanguage"), false).toBool()) {
+                auto filters = m_filterPanel->filters();
+                filters[QStringLiteral("language_id")] = {QSettings().value(QStringLiteral("reader/language"), QStringLiteral("en")).toString()};
+                m_filterPanel->setFilters(filters);
+            }
+        }
+    });
+    connect(m_client, &AO3Client::tagSuggestionsFetched, m_filterPanel, &SearchFilterPanel::showTagSuggestions);
+    connect(m_filterPanel, &SearchFilterPanel::tagSuggestionsRequested, m_client, &AO3Client::fetchTagSuggestions);
+    connect(m_client, &AO3Client::searchCompleted, this, &MainWindow::onSearchCompleted);
+    connect(m_client, &AO3Client::userWorksFetched, this, [this](const SearchResult &result) {
+        if (m_showingUserWorks) onSearchCompleted(result);
+    });
+    connect(m_client, &AO3Client::errorOccurred, this, &MainWindow::onError);
+    connect(m_client, &AO3Client::loginSuccessful, this, &MainWindow::onLoginSuccessful);
+    connect(m_client, &AO3Client::loginFailed, this, &MainWindow::onLoginFailed);
+    connect(m_client, &AO3Client::sessionChecked, this, &MainWindow::onSessionChecked);
+    connect(m_client, &AO3Client::workContentFetched, this, [this](const QString &workId, const QString &, const QString &text) {
+        if (m_detailWidget->currentWork().id != workId) return;
+        if (text.isEmpty()) {
+            m_detailWidget->showContent(QStringLiteral("(could not extract work content)"));
+            statusBar()->showMessage(QStringLiteral("Failed to extract content"));
+        } else {
+            m_detailWidget->showContent(text);
+            statusBar()->showMessage(QStringLiteral("Loaded %1 characters").arg(text.size()));
+        }
+    });
+
+    connect(m_client, &AO3Client::workChaptersFetched, this, [this](const QString &id, const QString &title, const QVector<WorkChapter> &chapters) {
+        if (m_detailWidget->currentWork().id != id || chapters.isEmpty() || m_pendingReadId != id) return;
+        m_pendingReadId.clear();
+        Work work = m_detailWidget->currentWork();
+        if (!title.isEmpty()) work.title = title;
+        openReader(work, chapters);
+    });
+    connect(m_detailWidget, &WorkDetailWidget::readRequested, this, [this](const QString &workId) {
+        m_pendingReadId = workId;
+        QGuiApplication::inputMethod()->hide();
+        statusBar()->showMessage(QStringLiteral("Loading work content..."));
+        m_client->fetchWorkContent(workId);
+    });
+
+    connect(m_client, &AO3Client::workDownloaded, this, [this](const QString &workId, const QString &html) {
+        Q_UNUSED(workId)
+
+        QRegularExpression trx(QStringLiteral(R"regex(<h2\s+class="title[^"]*"[^>]*>(.*?)</h2>)regex"),
+                               QRegularExpression::DotMatchesEverythingOption);
+        QRegularExpressionMatch tm = trx.match(html);
+        QString title = tm.hasMatch() ? tm.captured(1).trimmed() : QString();
+        title.replace(QRegularExpression(QStringLiteral("<[^>]*>")), QString());
+
+        QString author;
+        QRegularExpression arx(QStringLiteral(R"regex(<a\s+rel="author"[^>]*href="[^"]*"[^>]*>(.*?)</a>)regex"),
+                               QRegularExpression::DotMatchesEverythingOption);
+        QRegularExpressionMatch am = arx.match(html);
+        if (am.hasMatch()) author = am.captured(1).trimmed();
+
+        QString cleanTitle = QString(title).replace(QRegularExpression(QStringLiteral("[/\\\\:*?\"<>|]")), QStringLiteral("_"));
+        QString cleanAuthor = QString(author).replace(QRegularExpression(QStringLiteral("[/\\\\:*?\"<>|]")), QStringLiteral("_"));
+
+        const QString plainText = extractWorkText(html);
+        if (plainText.isEmpty()) {
+            statusBar()->showMessage(QStringLiteral("Could not extract work content; nothing was saved"));
+            return;
+        }
+
+        QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save Work"),
+                                                     QStringLiteral("%1 - %2.txt").arg(cleanTitle, cleanAuthor),
+                                                     QStringLiteral("Text Files (*.txt)"));
+        if (path.isEmpty()) return;
+
+        QString fullText = QStringLiteral("%1\nby %2\n\n%3\n\n%4")
+                               .arg(title, author, QString(50, QChar('=')),
+                                    plainText.isEmpty() ? QStringLiteral("(no content could be extracted)") : plainText);
+
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out.setEncoding(QStringConverter::Utf8);
+            out << fullText;
+            file.close();
+            statusBar()->showMessage(QStringLiteral("Saved to %1").arg(path));
+        } else {
+            statusBar()->showMessage(QStringLiteral("Could not write file"));
+        }
+    });
+
+    connect(m_detailWidget, &WorkDetailWidget::profileRequested, this, &MainWindow::showProfile);
+    connect(m_client, &AO3Client::authorProfileFetched, this, [this](const AuthorProfile &profile) {
+        if(profile.username != m_profileUsername) return;
+        m_profileText->setPlainText(profile.error.isEmpty() ? profile.username + "\n\n" + profile.title + "\n\n" + profile.details + "\n\n" + (profile.biography.isEmpty() ? "No public biography provided." : profile.biography) : profile.error);
+    });
+    connect(m_client, &AO3Client::authorWorksFetched, this, [this](const QString &username, bool bookmarks, const SearchResult &result) {
+        if(username == m_listingAuthor && bookmarks == m_listingBookmarks) onSearchCompleted(result);
+    });
+    connect(m_detailWidget, &WorkDetailWidget::downloadRequested, this, [this](const Work &work) {
+        statusBar()->showMessage(QStringLiteral("Downloading..."));
+        m_client->downloadWork(work.id);
+    });
+
+    connect(m_searchInput, &QLineEdit::returnPressed, this, &MainWindow::performSearch);
+
+    statusBar()->showMessage(QStringLiteral("Ready"));
+
+    QTimer::singleShot(0, this, [this]() {
+        m_client->checkSession();
+
+    });
+}
+
+void MainWindow::setupUI()
+{
+    setWindowTitle(QStringLiteral("Archive of Our Own"));
+    resize(1440, 900);
+    setWindowIcon(QIcon(QStringLiteral(":/icons/ao3.png")));
+
+    auto *centralWidget = new QWidget(this);
+    auto *mainLayout = new QVBoxLayout(centralWidget);
+    mainLayout->setSpacing(0);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+
+    // ── Header ──
+    m_headerBar = new QWidget(centralWidget);
+    m_headerBar->setMinimumHeight(72);
+    m_headerBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    m_headerBar->setStyleSheet(QStringLiteral("background: #900;"));
+    auto *headerLayout = new QGridLayout(m_headerBar);
+    headerLayout->setContentsMargins(16, 8, 16, 8);
+    headerLayout->setSpacing(12);
+
+    m_logoLabel = new QLabel(m_headerBar);
+    m_logoLabel->setPixmap(QPixmap(QStringLiteral(":/icons/ao3.png")).scaledToHeight(56, Qt::SmoothTransformation));
+    m_logoLabel->setStyleSheet(QStringLiteral("background: transparent;"));
+    m_logoLabel->setCursor(Qt::PointingHandCursor);
+    headerLayout->addWidget(m_logoLabel, 0, 0);
+
+    m_searchInput = new QLineEdit(m_headerBar);
+    m_searchInput->setPlaceholderText(QStringLiteral("Search works..."));
+    m_searchInput->setMinimumHeight(32);
+    m_searchInput->setMinimumWidth(280);
+    m_searchInput->setMaximumWidth(450);
+    m_searchInput->setStyleSheet(QStringLiteral(
+        "QLineEdit { border: 1px solid #bbb; border-radius: 4px; padding: 2px 10px; background: white; color: #333; font-size: 10pt; }"
+    ));
+    headerLayout->addWidget(m_searchInput, 0, 1);
+
+    m_searchButton = new QPushButton(QStringLiteral("Search"), m_headerBar);
+    m_searchButton->setMinimumHeight(32);
+    m_searchButton->setStyleSheet(QStringLiteral(
+        "QPushButton { background: #600; color: white; border: none; border-radius: 4px; padding: 2px 18px; font-weight: bold; font-size: 10pt; }"
+        "QPushButton:hover { background: #700; }"
+    ));
+    connect(m_searchButton, &QPushButton::clicked, this, &MainWindow::performSearch);
+    headerLayout->addWidget(m_searchButton, 0, 2);
+    m_filterPanel = new SearchFilterPanel(this);
+    m_filterButton = new QPushButton(QStringLiteral("Filters"), m_headerBar);
+    m_filterButton->setMinimumHeight(32);
+    m_filterButton->setStyleSheet(m_searchButton->styleSheet());
+    headerLayout->addWidget(m_filterButton, mobileUi() ? 1 : 0, mobileUi() ? 1 : 3);
+    m_filterDock = new QDockWidget(QStringLiteral("Search filters"), this);
+    m_filterDock->setObjectName(QStringLiteral("searchFiltersDock"));
+    m_filterDock->setFeatures(QDockWidget::DockWidgetClosable);
+    m_filterDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_filterDock->setWidget(m_filterPanel);
+    addDockWidget(Qt::LeftDockWidgetArea, m_filterDock);
+    m_filterButton->setCheckable(true);
+    m_filterButton->setChecked(true);
+    connect(m_filterButton, &QPushButton::clicked, this, [this](bool checked) {
+        if (!mobileUi()) { m_filterDock->setVisible(checked); return; }
+        m_pendingReadId.clear();
+        if (checked) { m_beforeFilters = m_contentStack->currentIndex(); m_contentStack->setCurrentWidget(m_mobileFilters); }
+        else m_contentStack->setCurrentIndex(m_beforeFilters);
+    });
+    connect(m_filterDock, &QDockWidget::visibilityChanged, m_filterButton, &QPushButton::setChecked);
+    connect(m_filterPanel, &SearchFilterPanel::searchRequested, this, [this] {
+        m_currentFilters = m_filterPanel->filters();
+        m_currentQuery = m_searchInput->text().trimmed();
+        m_currentPage = 1;
+        showSearchView(1);
+    });
+
+
+    auto *headerSpacer = new QWidget(m_headerBar);
+    headerSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    headerLayout->addWidget(headerSpacer, 0, 4);
+    headerLayout->setColumnStretch(mobileUi() ? 1 : 4, 1);
+
+    m_userGreeting = new QLabel(m_headerBar);
+    m_userGreeting->setStyleSheet(QStringLiteral("color: #ffcccc; font-size: 9pt; background: transparent;"));
+    m_userGreeting->hide();
+    headerLayout->addWidget(m_userGreeting, 0, 5);
+
+    m_loginButton = new QPushButton(QStringLiteral("Log In"), m_headerBar);
+    m_loginButton->setMinimumHeight(32);
+    m_loginButton->setStyleSheet(QStringLiteral(
+        "QPushButton { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; padding: 2px 18px; font-size: 10pt; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.15); }"
+    ));
+    connect(m_loginButton, &QPushButton::clicked, this, &MainWindow::onLoginClicked);
+    headerLayout->addWidget(m_loginButton, mobileUi() ? 1 : 0, mobileUi() ? 2 : 6);
+    if (mobileUi()) {
+        m_logoLabel->hide(); headerSpacer->hide();
+        m_searchInput->setMinimumWidth(0); m_searchInput->setMaximumWidth(QWIDGETSIZE_MAX);
+        m_searchButton->setMinimumHeight(44); m_filterButton->setMinimumHeight(44); m_loginButton->setMinimumHeight(44);
+        headerLayout->setContentsMargins(8, 6, 8, 6); headerLayout->setSpacing(6);
+    }
+
+    mainLayout->addWidget(m_headerBar);
+
+    // ── Navigation ──
+    m_navBar = new QWidget(centralWidget);
+    m_navBar->setObjectName(QStringLiteral("navigationBar"));
+    m_navBar->setStyleSheet(QStringLiteral("QWidget#navigationBar { background: #f5f0eb; border-bottom: 2px solid #d5ccc2; }"));
+    auto *navLayout = new QHBoxLayout(m_navBar);
+    navLayout->setContentsMargins(16, 0, 16, 2);
+    navLayout->setSpacing(2);
+
+    auto makeNavBtn = [](const QString &text) {
+        auto *btn = new QPushButton(text);
+        btn->setFlat(true);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(QStringLiteral(
+            "QPushButton { background: transparent; color: #555; padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
+            "QPushButton:hover { color: #900; background: rgba(0,0,0,0.04); }"
+        ));
+        return btn;
+    };
+
+    m_navHome = makeNavBtn(QStringLiteral("Home"));
+    m_navSearch = makeNavBtn(QStringLiteral("Search"));
+    m_navWorks = makeNavBtn(QStringLiteral("My Works"));
+    m_navLogout = makeNavBtn(QStringLiteral("Sign Out"));
+    m_navLogout->setStyleSheet(QStringLiteral(
+        "QPushButton { background: transparent; color: #900; padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
+        "QPushButton:hover { background: rgba(200,0,0,0.08); }"
+    ));
+
+    connect(m_navWorks, &QPushButton::clicked, this, &MainWindow::showUserWorks);
+    connect(m_navHome, &QPushButton::clicked, this, &MainWindow::showDashboard);
+    connect(m_navSearch, &QPushButton::clicked, this, [this]() {
+        m_pendingReadId.clear();
+        if (m_contentStack->currentWidget() == m_reader) closeReader();
+        m_contentStack->setCurrentIndex(2);
+    });
+    connect(m_navLogout, &QPushButton::clicked, this, &MainWindow::onLogout);
+
+    navLayout->addWidget(m_navHome);
+    if (!mobileUi()) {
+        auto *library = makeNavBtn(QStringLiteral("Library"));
+        navLayout->addWidget(library); connect(library, &QPushButton::clicked, this, &MainWindow::showLibrary);
+    }
+    navLayout->addWidget(m_navSearch);
+    navLayout->addWidget(m_navWorks);
+    m_navWorks->hide();
+
+    navLayout->addStretch();
+    navLayout->addWidget(m_navLogout);
+    auto *readingSettings = makeNavBtn(QStringLiteral("Reading settings"));
+    connect(readingSettings, &QPushButton::clicked, this, [this] { m_reader->showSettings(); });
+    navLayout->addWidget(readingSettings);
+    auto *online=makeNavBtn("On AO3 ↗"); auto *onlineMenu=new QMenu(online); online->setMenu(onlineMenu); navLayout->addWidget(online);
+    onlineMenu->addAction("Open AO3 in browser",this,[] { QDesktopServices::openUrl(QUrl("https://archiveofourown.org/")); });
+    for(const auto &item:QVector<QPair<QString,QString>>{{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Account preferences","preferences"}}) {
+        onlineMenu->addAction(item.first+" · browser",this,[this,item] { const QString user=m_loginManager->username(); QDesktopServices::openUrl(QUrl(user.isEmpty()?"https://archiveofourown.org/users/login":"https://archiveofourown.org/users/"+QString::fromLatin1(QUrl::toPercentEncoding(user))+"/"+item.second)); });
+    }
+    if (!mobileUi()) { auto *profile = makeNavBtn("My profile"); navLayout->addWidget(profile); connect(profile, &QPushButton::clicked, this, [this] { if(m_loginManager->isLoggedIn()) showProfile("/users/" + m_loginManager->username()); else showLoginView(); }); }
+
+
+    m_navLogout->hide();
+
+    if (mobileUi()) {
+        readingSettings->setText(QStringLiteral("Settings"));
+        m_navWorks->setText(QStringLiteral("My works")); m_navWorks->show();
+        navLayout->setContentsMargins(4, 4, 4, 4); navLayout->setSpacing(0);
+        delete navLayout->takeAt(3);
+        for (auto *button : {m_navHome, m_navSearch, m_navWorks, readingSettings}) {
+            button->setCheckable(true); button->setMinimumWidth(0); button->setMinimumHeight(48);
+            button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            button->setStyleSheet(QStringLiteral(
+                "QPushButton { background: #fff; color: #655e57; border: none; border-radius: 8px; padding: 8px 2px; font-size: 10pt; }"
+                "QPushButton:checked { background: #f3e3e0; color: #900; font-weight: bold; }"));
+        }
+        readingSettings->setCheckable(false);
+    } else mainLayout->addWidget(m_navBar);
+
+    // ── Content ──
+    m_contentStack = mobileUi() ? new MobileStack(centralWidget) : new QStackedWidget(centralWidget);
+    m_contentStack->setObjectName(QStringLiteral("contentPages"));
+    m_contentStack->setStyleSheet(QStringLiteral("QStackedWidget#contentPages { background: #faf8f6; }"));
+
+    // Dashboard view (0)
+    m_dashboardView = new DashboardWidget(this);
+    m_contentStack->addWidget(m_dashboardView);
+    connect(m_dashboardView, &DashboardWidget::browseRequested, this, [this] {
+        m_contentStack->setCurrentIndex(2); m_searchInput->setFocus();
+    });
+
+    // Login view (1)
+    m_loginView = new LoginDialog(this);
+    if (mobileUi()) {
+        auto *loginScroll = new QScrollArea(m_contentStack); loginScroll->setWidgetResizable(true);
+        loginScroll->setFrameShape(QFrame::NoFrame); loginScroll->setWidget(m_loginView);
+        m_contentStack->addWidget(loginScroll);
+    } else m_contentStack->addWidget(m_loginView);
+    connect(m_loginView, &LoginDialog::loginRequested, this, &MainWindow::onLoginRequested);
+    connect(m_loginView, &LoginDialog::cancelled, this, [this]() {
+        showDashboard();
+    });
+
+    // Search view (2) — splitter with work list + detail
+    auto *searchView = new QWidget(this);
+    auto *searchViewLayout = new QVBoxLayout(searchView);
+    searchViewLayout->setContentsMargins(0, 0, 0, 0);
+    searchViewLayout->setSpacing(0);
+    if (mobileUi()) {
+        auto *searchBar = new QWidget(searchView);
+        auto *searchRow = new QHBoxLayout(searchBar); searchRow->setContentsMargins(12, 8, 12, 8);
+        m_searchInput->setParent(searchBar); m_searchButton->setParent(searchBar);
+        m_searchInput->setMinimumHeight(44); m_searchInput->setPlaceholderText(QStringLiteral("Title, author, or keywords"));
+        m_searchButton->setText(QStringLiteral("Go"));
+        searchRow->addWidget(m_searchInput, 1); searchRow->addWidget(m_searchButton);
+        searchViewLayout->addWidget(searchBar);
+        auto *tools = new QHBoxLayout; tools->setContentsMargins(12, 0, 12, 8);
+        auto *heading = new QLabel(QStringLiteral("Find your next read"), searchView);
+        heading->setStyleSheet(QStringLiteral("font-size: 12pt; font-weight: bold; color: #443a34;"));
+        tools->addWidget(heading, 1);
+        m_filterButton->setParent(searchView); m_filterButton->setMinimumHeight(44);
+        tools->addWidget(m_filterButton); searchViewLayout->addLayout(tools);
+        m_headerBar->setMinimumHeight(0); m_headerBar->setMaximumHeight(60);
+        auto *brand = new QLabel(QStringLiteral("AO3 Client"), m_headerBar);
+        brand->setStyleSheet(QStringLiteral("color: white; font-size: 17pt; font-weight: bold; background: transparent;"));
+        headerLayout->removeWidget(m_loginButton); headerLayout->addWidget(brand, 0, 1);
+        headerLayout->addWidget(m_loginButton, 0, 2);
+        m_loginButton->setText(QStringLiteral("Sign in"));
+    }
+
+
+    m_searchSplitter = new QSplitter(Qt::Horizontal, searchView);
+    m_searchSplitter->setHandleWidth(1);
+    m_searchSplitter->setStyleSheet(QStringLiteral("QSplitter::handle { background: #ddd; }"));
+
+    m_workList = new QListWidget(m_searchSplitter);
+    m_workList->setMinimumWidth(280);
+    m_workList->viewport()->installEventFilter(this);
+    m_workList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_workList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_workList->setStyleSheet(QStringLiteral(
+        "QListWidget { border: none; background: white; }"
+        "QListWidget::item { border-bottom: 1px solid #e8e3dc; padding: 0; }"
+        "QListWidget::item:selected { background: #e8f0f8; }"
+    ));
+
+    if (!mobileUi()) connect(m_workList, &QListWidget::currentRowChanged, this, &MainWindow::onWorkSelected);
+
+    auto *detailScroll = new QScrollArea(m_searchSplitter);
+    detailScroll->setWidgetResizable(true);
+    if (mobileUi()) detailScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    detailScroll->setFrameShape(QFrame::NoFrame);
+    m_detailWidget = new WorkDetailWidget(detailScroll);
+    detailScroll->setWidget(m_detailWidget);
+    m_searchSplitter->addWidget(m_workList);
+    m_searchSplitter->addWidget(detailScroll);
+    m_searchSplitter->setStretchFactor(0, 3);
+    m_searchSplitter->setStretchFactor(1, 4);
+
+    searchViewLayout->addWidget(m_searchSplitter, 1);
+
+    // Pagination bar
+    m_paginationWidget = new QWidget(searchView);
+    m_paginationWidget->setStyleSheet(QStringLiteral(
+        "background: white; border-top: 1px solid #e0ddd5; padding: 6px;"
+    ));
+    auto *pageLayout = new QHBoxLayout(m_paginationWidget);
+    pageLayout->setContentsMargins(12, 6, 12, 6);
+
+    m_prevButton = new QPushButton(QStringLiteral("Previous"), m_paginationWidget);
+    m_prevButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+    m_prevButton->setStyleSheet(QStringLiteral(
+        "QPushButton { color: #2a5f8f; border: 1px solid #ccc; border-radius: 3px; padding: 4px 14px; background: #faf8f6; font-size: 9pt; }"
+        "QPushButton:hover { background: #e8f0f8; }"
+        "QPushButton:disabled { color: #bbb; }"
+    ));
+    m_pageLabel = new QLabel(m_paginationWidget);
+    m_pageLabel->setAlignment(Qt::AlignCenter);
+    m_pageLabel->setStyleSheet(QStringLiteral("color: #666; font-size: 9pt;"));
+    m_nextButton = new QPushButton(QStringLiteral("Next"), m_paginationWidget);
+    m_nextButton->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
+    m_nextButton->setStyleSheet(QStringLiteral(
+        "QPushButton { color: #2a5f8f; border: 1px solid #ccc; border-radius: 3px; padding: 4px 14px; background: #faf8f6; font-size: 9pt; }"
+        "QPushButton:hover { background: #e8f0f8; }"
+        "QPushButton:disabled { color: #bbb; }"
+    ));
+
+    pageLayout->addWidget(m_prevButton);
+    pageLayout->addWidget(m_pageLabel, 1);
+    pageLayout->addWidget(m_nextButton);
+    m_paginationWidget->hide();
+
+    connect(m_prevButton, &QPushButton::clicked, this, [this]() { goToPage(m_currentPage - 1); });
+    connect(m_nextButton, &QPushButton::clicked, this, [this]() { goToPage(m_currentPage + 1); });
+
+    searchViewLayout->addWidget(m_paginationWidget);
+    m_contentStack->addWidget(searchView);
+
+    m_reader = new ReaderWidget(this);
+    m_contentStack->addWidget(m_reader);
+    connect(m_reader, &ReaderWidget::backRequested, this, &MainWindow::closeReader);
+    connect(m_reader, &ReaderWidget::fullscreenRequested, this, &MainWindow::toggleReaderFullscreen);
+    connect(m_reader, &ReaderWidget::preferencesChanged, this, [this] {
+        auto filters = m_filterPanel->filters();
+        if (QSettings().value(QStringLiteral("reader/filterLanguage"), false).toBool())
+            filters[QStringLiteral("language_id")] = {QSettings().value(QStringLiteral("reader/language"), QStringLiteral("en")).toString()};
+        else filters.remove(QStringLiteral("language_id"));
+        m_filterPanel->setFilters(filters);
+    });
+    auto *fullscreen = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    connect(fullscreen, &QShortcut::activated, this, &MainWindow::toggleReaderFullscreen);
+    auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escape, &QShortcut::activated, this, [this] {
+        if (m_contentStack->currentWidget() == m_reader && m_reader->closeOptions()) return;
+        if (m_contentStack->currentWidget() == m_reader && isFullScreen()) { showNormal(); m_reader->setFullscreen(false); }
+    });
+    if (mobileUi()) {
+        m_filterDock->hide(); removeDockWidget(m_filterDock);
+        m_filterPanel->setParent(nullptr);
+        m_mobileFilters = new QWidget(m_contentStack);
+        auto *filtersLayout = new QVBoxLayout(m_mobileFilters);
+        auto *back = new QPushButton(QStringLiteral("Back to browsing"), m_mobileFilters);
+        back->setMinimumHeight(44);
+        filtersLayout->addWidget(back); filtersLayout->addWidget(m_filterPanel, 1);
+        m_contentStack->addWidget(m_mobileFilters);
+        connect(back, &QPushButton::clicked, this, [this] { navigateBack(); });
+        m_filterButton->setChecked(false);
+        connect(m_contentStack, &QStackedWidget::currentChanged, this, [this] {
+            m_filterButton->setChecked(m_contentStack->currentWidget() == m_mobileFilters);
+        });
+        m_mobileDetails = new QWidget(m_contentStack);
+        auto *detailsLayout = new QVBoxLayout(m_mobileDetails);
+        auto *results = new QPushButton(QStringLiteral("Back to results"), m_mobileDetails);
+        results->setMinimumHeight(44); detailsLayout->addWidget(results);
+        detailScroll->setParent(m_mobileDetails); detailsLayout->addWidget(detailScroll, 1);
+        m_contentStack->addWidget(m_mobileDetails);
+        connect(results, &QPushButton::clicked, this, [this] { m_contentStack->setCurrentIndex(2); });
+        // A tap opens details, including when the same result is selected again.
+        connect(m_workList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) { onWorkSelected(m_workList->row(item)); });
+        QScroller::grabGesture(m_workList->viewport(), QScroller::TouchGesture);
+        statusBar()->setSizeGripEnabled(false);
+        m_prevButton->setText(QStringLiteral("Back"));
+        m_prevButton->setMinimumHeight(44); m_nextButton->setMinimumHeight(44);
+    }
+    m_libraryPage = new QWidget(m_contentStack);
+    auto *libraryLayout = new QVBoxLayout(m_libraryPage);
+    auto *libraryHeading = new QLabel(QStringLiteral("Your reading library"), m_libraryPage);
+    libraryHeading->setStyleSheet(QStringLiteral("font-size: 18pt; font-weight: bold; color: #292723;")); libraryLayout->addWidget(libraryHeading);
+    m_libraryFilter = new QComboBox(m_libraryPage); m_libraryFilter->addItems({"Recent reads", "Offline saved", "Favorites"}); libraryLayout->addWidget(m_libraryFilter);
+    m_librarySearch=new QLineEdit(m_libraryPage); m_librarySearch->setPlaceholderText("Search library by title or author"); libraryLayout->addWidget(m_librarySearch); connect(m_librarySearch,&QLineEdit::textChanged,this,[this] { refreshLibrary(); });
+    auto *backupRow=new QHBoxLayout; auto *backup=new QPushButton("Export library backup",m_libraryPage); auto *restore=new QPushButton("Import library backup",m_libraryPage); backupRow->addWidget(backup); backupRow->addWidget(restore); libraryLayout->addLayout(backupRow);
+    connect(backup,&QPushButton::clicked,this,[this] {
+        m_reader->saveProgress(); const auto path=QFileDialog::getSaveFileName(this,"Export library backup","ao3-library-backup.json","JSON files (*.json)"); if(path.isEmpty()) return;
+        const bool includeDownloads=QMessageBox::question(this,"Backup contents","Include downloaded chapter text? Choose No for a compact reading-data backup (maximum backup size: 100 MB).",QMessageBox::Yes|QMessageBox::No,QMessageBox::Yes)==QMessageBox::Yes;
+        const auto data=QJsonDocument(LibraryBackup::snapshot(ReadingLibrary(),includeDownloads)).toJson(QJsonDocument::Compact); if(data.size()>100*1024*1024) { onError("Backup exceeds 100 MB. Export without downloads and save large fics separately as text."); return; } QSaveFile file(path);
+        if(!file.open(QIODevice::WriteOnly) || file.write(data)!=data.size() || !file.commit()) { onError("Could not save backup. Check storage and permissions."); return; }
+        statusBar()->showMessage("Library backup exported. It contains reading history and downloaded text; keep it private.");
+    });
+    connect(restore,&QPushButton::clicked,this,[this] {
+        const auto path=QFileDialog::getOpenFileName(this,"Import library backup",{},"JSON files (*.json)"); if(path.isEmpty()) return;
+        if(QMessageBox::question(this,"Import library backup?","Merge the backup into your library? Existing downloads and reading positions are kept. Only import files you trust.")!=QMessageBox::Yes) return;
+        QFile file(path); if(file.size()>100*1024*1024 || !file.open(QIODevice::ReadOnly)) { onError("Could not read backup (maximum 100 MB)"); return; }
+        QString error; if(!LibraryBackup::merge(QJsonDocument::fromJson(file.readAll()).object(),&error)) { onError(error); return; }
+        refreshLibrary(); statusBar()->showMessage("Library backup imported. Existing downloads and reading positions were kept.");
+    });
+    m_libraryList = new QListWidget(m_libraryPage); m_libraryList->setWordWrap(true); libraryLayout->addWidget(m_libraryList, 1);
+    auto *libraryActions = new QHBoxLayout;
+    auto *openSaved = new QPushButton("Open / continue", m_libraryPage); auto *favorite = new QPushButton("Toggle favorite", m_libraryPage); auto *removeSaved = new QPushButton("Remove offline copy", m_libraryPage);
+    libraryActions->addWidget(openSaved); libraryActions->addWidget(favorite); libraryActions->addWidget(removeSaved); libraryLayout->addLayout(libraryActions);
+    m_contentStack->addWidget(m_libraryPage);
+    connect(m_libraryFilter, &QComboBox::currentIndexChanged, this, [this] { refreshLibrary(); });
+    connect(openSaved, &QPushButton::clicked, this, &MainWindow::openLibrarySelection);
+    connect(m_libraryList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *) { openLibrarySelection(); });
+    connect(favorite, &QPushButton::clicked, this, [this] {
+        auto *item = m_libraryList->currentItem(); if (!item) return;
+        const auto entry = QJsonObject::fromVariantMap(item->data(Qt::UserRole).toMap());
+        if (!ReadingLibrary().favorite(ReadingLibrary::work(entry).id, !entry.value("favorite").toBool())) onError("Could not update favorite");
+        refreshLibrary();
+    });
+    connect(removeSaved, &QPushButton::clicked, this, [this] {
+        auto *item = m_libraryList->currentItem(); if (!item) return;
+        const auto entry = QJsonObject::fromVariantMap(item->data(Qt::UserRole).toMap());
+        if (!ReadingLibrary().removeOffline(ReadingLibrary::work(entry).id)) onError("Could not remove offline copy");
+        refreshLibrary();
+    });
+    m_profilePage = new QWidget(m_contentStack); auto *profileLayout = new QVBoxLayout(m_profilePage);
+    auto *profileActions = new QHBoxLayout; auto *authorWorks = new QPushButton("Author's works", m_profilePage); auto *authorBookmarks = new QPushButton("Public AO3 bookmarks", m_profilePage);
+    profileActions->addWidget(authorWorks); profileActions->addWidget(authorBookmarks); profileLayout->addLayout(profileActions);
+    m_profileText = new QTextBrowser(m_profilePage); profileLayout->addWidget(m_profileText, 1); m_contentStack->addWidget(m_profilePage);
+    connect(authorWorks, &QPushButton::clicked, this, [this] { showAuthorListing(false); }); connect(authorBookmarks, &QPushButton::clicked, this, [this] { showAuthorListing(true); });
+    mainLayout->addWidget(m_contentStack, 1);
+    if (mobileUi()) {
+        m_mobileStatus = new QLabel(centralWidget); m_mobileStatus->setWordWrap(true);
+        m_mobileStatus->setMinimumWidth(0); m_mobileStatus->setMaximumHeight(96);
+        m_mobileStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        m_mobileStatus->setStyleSheet(QStringLiteral("color: #655e57; background: #faf8f6; padding: 6px 12px; font-size: 10pt;"));
+        mainLayout->addWidget(m_mobileStatus); mainLayout->addWidget(m_navBar);
+        connect(statusBar(), &QStatusBar::messageChanged, m_mobileStatus, &QLabel::setText);
+        connect(m_contentStack, &QStackedWidget::currentChanged, this, [this](int index) {
+            m_navHome->setChecked(index == 0); m_navSearch->setChecked(index == 2 || index >= 4);
+            m_navWorks->setChecked(index == 2 && m_showingUserWorks);
+            if (m_showingUserWorks && index == 2) m_navSearch->setChecked(false);
+        });
+        statusBar()->hide();
+    }
+
+
+    // Status bar
+    statusBar()->setStyleSheet(QStringLiteral(
+        "QStatusBar { background: #f5f0eb; border-top: 1px solid #ddd; color: #666; font-size: 8pt; }"
+    ));
+
+    setCentralWidget(centralWidget);
+    if (!mobileUi()) resizeDocks({m_filterDock}, {320}, Qt::Horizontal);
+    showDashboard();
+    if (mobileUi()) applyReadableTheme(this);
+}
+
+void MainWindow::performSearch()
+{
+    m_listingAuthor.clear();
+    QGuiApplication::inputMethod()->hide();
+    const QString query = m_searchInput->text().trimmed();
+    const SearchFilters filters = m_filterPanel->filters();
+    if (query.isEmpty() && filters.isEmpty())
+        return;
+    m_currentQuery = query;
+    m_currentFilters = filters;
+    m_currentPage = 1;
+    showSearchView(1);
+}
+
+void MainWindow::showSearchView(int page)
+{
+    m_listingAuthor.clear();
+    m_pendingReadId.clear();
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    m_showingUserWorks = false;
+    m_contentStack->setCurrentIndex(2);
+    m_paginationWidget->hide();
+    if (page == 1 || !m_currentQuery.isEmpty()) {
+        m_workList->clear();
+        m_detailWidget->clear();
+        m_currentResult = SearchResult();
+        statusBar()->showMessage(QStringLiteral("Searching..."));
+        m_client->search(m_currentQuery, page, m_currentFilters);
+    }
+}
+
+void MainWindow::onSearchCompleted(const SearchResult &result)
+{
+    if (!result.errorMessage.isEmpty()) {
+        m_currentResult = SearchResult();
+        m_workList->clear();
+        m_detailWidget->clear();
+        m_paginationWidget->hide();
+        statusBar()->showMessage(QStringLiteral("Error: %1").arg(result.errorMessage));
+        return;
+    }
+
+    m_currentResult = result;
+    m_currentPage = result.currentPage;
+    populateWorkList();
+
+    if (result.works.isEmpty()) {
+        statusBar()->showMessage(m_showingUserWorks ? QStringLiteral("You have no works to display.") : QStringLiteral("No works found. Try another search."));
+        return;
+    }
+    statusBar()->showMessage(
+        QStringLiteral("Found %1 works (page %2 of %3)")
+            .arg(QLocale().toString(result.totalResults))
+            .arg(result.currentPage)
+            .arg(result.totalPages)
+    );
+}
+
+void MainWindow::onWorkSelected(int index)
+{
+    if (index < 0 || index >= m_currentResult.works.size()) {
+        m_detailWidget->clear();
+        return;
+    }
+    m_detailWidget->showWork(m_currentResult.works[index]);
+    if (mobileUi()) m_contentStack->setCurrentWidget(m_mobileDetails);
+}
+
+void MainWindow::onError(const QString &error)
+{
+    statusBar()->showMessage(QStringLiteral("Error: %1").arg(error));
+}
+
+void MainWindow::onLoginClicked()
+{
+    if (mobileUi() && m_loginManager->isLoggedIn()) {
+        QMenu menu(this); menu.addSection(m_loginManager->username());
+        auto *logout = menu.addAction(QStringLiteral("Sign out"));
+        if (menu.exec(m_loginButton->mapToGlobal(QPoint(0, m_loginButton->height()))) == logout) onLogout();
+        return;
+    }
+    showLoginView();
+}
+
+void MainWindow::onLoginRequested(const QString &login, const QString &password)
+{
+    m_loginView->setStatus(QStringLiteral("Signing in..."));
+    m_client->login(login, password);
+}
+
+void MainWindow::onLoginSuccessful(const UserInfo &user)
+{
+    m_loginView->clearInputs();
+    setLoggedInState(true);
+    showDashboard();
+    statusBar()->showMessage(QStringLiteral("Signed in as %1").arg(user.username));
+}
+
+void MainWindow::onLoginFailed(const QString &reason)
+{
+    m_loginView->setStatus(reason);
+}
+
+void MainWindow::onSessionChecked(bool valid, const UserInfo &user)
+{
+    if (valid) {
+        setLoggedInState(true);
+        m_dashboardView->showUserInfo(user);
+    } else {
+        setLoggedInState(false);
+        m_dashboardView->showNoUser();
+        if (m_showingUserWorks) {
+            m_showingUserWorks = false;
+            m_currentResult = SearchResult();
+            m_workList->clear();
+            m_detailWidget->clear();
+            m_paginationWidget->hide();
+            showDashboard();
+        }
+    }
+}
+
+void MainWindow::onLogout()
+{
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    m_reader->clear();
+    m_client->logout();
+    m_showingUserWorks = false;
+    m_currentResult = SearchResult();
+    m_workList->clear();
+    m_detailWidget->clear();
+    m_paginationWidget->hide();
+    setLoggedInState(false);
+    statusBar()->showMessage(QStringLiteral("Signed out"));
+    showDashboard();
+}
+
+void MainWindow::goToPage(int page)
+{
+    if (page < 1 || page > m_currentResult.totalPages)
+        return;
+    m_currentPage = page;
+    m_workList->clear();
+    m_detailWidget->clear();
+    statusBar()->showMessage(QStringLiteral("Loading page %1...").arg(page));
+    if (!m_listingAuthor.isEmpty()) m_client->fetchAuthorWorks(m_listingAuthor, page, m_listingBookmarks);
+    else if (m_showingUserWorks) m_client->fetchUserWorks(page);
+    else m_client->search(m_currentQuery, page, m_currentFilters);
+}
+
+void MainWindow::showUserWorks()
+{
+    m_listingAuthor.clear();
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    if (!m_loginManager->isLoggedIn()) {
+        showLoginView();
+        return;
+    }
+    m_showingUserWorks = true;
+    m_currentPage = 1;
+    m_currentResult = SearchResult();
+    m_workList->clear();
+    m_detailWidget->clear();
+    m_paginationWidget->hide();
+    m_contentStack->setCurrentIndex(2);
+    statusBar()->showMessage(QStringLiteral("Loading your works..."));
+    m_client->fetchUserWorks();
+}
+
+void MainWindow::showDashboard()
+{
+    m_pendingReadId.clear();
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    if (m_loginManager->isLoggedIn()) {
+        m_dashboardView->showUserInfo(m_loginManager->userInfo());
+    } else {
+        m_dashboardView->showNoUser();
+    }
+    m_contentStack->setCurrentIndex(0);
+}
+
+void MainWindow::showLoginView()
+{
+    m_pendingReadId.clear();
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    m_loginView->clearInputs();
+    m_contentStack->setCurrentIndex(1);
+}
+
+void MainWindow::setLoggedInState(bool loggedIn)
+{
+    m_navWorks->setVisible(mobileUi() || loggedIn);
+    m_navLogout->setVisible(!mobileUi() && loggedIn);
+
+    if (loggedIn) {
+        QString name = m_loginManager->userInfo().username;
+        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : QStringLiteral("Hi, %1").arg(name));
+        m_loginButton->setToolTip(name);
+        m_loginButton->setEnabled(mobileUi());
+        m_userGreeting->setText(QString());
+        m_userGreeting->hide();
+    } else {
+        m_loginButton->setText(mobileUi() ? QStringLiteral("Sign in") : QStringLiteral("Log In"));
+        m_loginButton->setEnabled(true);
+        m_userGreeting->hide();
+    }
+}
+
+void MainWindow::populateWorkList()
+{
+    m_workList->blockSignals(true);
+    m_workList->clear();
+    m_workList->blockSignals(false);
+
+    m_pageLabel->setText(
+        QStringLiteral("Page %1 of %2")
+            .arg(m_currentResult.currentPage)
+            .arg(m_currentResult.totalPages)
+    );
+    m_paginationWidget->setVisible(m_currentResult.totalPages > 1);
+    m_prevButton->setEnabled(m_currentResult.currentPage > 1);
+    m_nextButton->setEnabled(m_currentResult.currentPage < m_currentResult.totalPages);
+
+    for (int i = 0; i < m_currentResult.works.size(); ++i) {
+        const Work &w = m_currentResult.works[i];
+        auto *item = new QListWidgetItem();
+        item->setData(Qt::UserRole, i);
+        int h = 80;
+        if (!w.fandom.isEmpty()) h += 16;
+        if (!w.summary.isEmpty()) h += qMin(60, w.summary.length() / 3);
+        h += 16;
+        item->setSizeHint(QSize(0, qMax(h, 110)));
+        auto *widget = new WorkItemWidget(w);
+        m_workList->addItem(item);
+        m_workList->setItemWidget(item, widget);
+    }
+
+    resizeWorkItems();
+    if (!mobileUi() && !m_currentResult.works.isEmpty()) {
+        m_workList->setCurrentRow(0);
+    }
+}
+
+void MainWindow::openReader(const Work &work, const QVector<WorkChapter> &chapters)
+{
+    if (m_contentStack->currentWidget() != m_reader) {
+        m_beforeReader = (mobileUi() || m_contentStack->currentWidget() == m_libraryPage) ? m_contentStack->currentIndex() : 2;
+        m_readerFiltersVisible = !m_filterDock->isHidden();
+        m_readerWasFullscreen = isFullScreen();
+    }
+    m_reader->openWork(work, chapters);
+    m_filterDock->hide(); m_headerBar->hide(); m_navBar->hide(); statusBar()->hide();
+    if (m_mobileStatus) m_mobileStatus->hide();
+    m_contentStack->setCurrentWidget(m_reader);
+    m_reader->setFullscreen(isFullScreen());
+}
+void MainWindow::closeReader()
+{
+    m_reader->saveProgress();
+    m_reader->cancelTranslation();
+    if (!m_readerWasFullscreen && isFullScreen()) showNormal();
+    m_contentStack->setCurrentIndex(m_beforeReader);
+    m_headerBar->show(); m_navBar->show(); statusBar()->setVisible(!mobileUi());
+    if (m_mobileStatus) m_mobileStatus->show();
+    m_filterDock->setVisible(!mobileUi() && m_readerFiltersVisible);
+}
+void MainWindow::toggleReaderFullscreen()
+{
+    if (m_contentStack->currentWidget() != m_reader) return;
+    if (isFullScreen()) showNormal(); else showFullScreen();
+    m_reader->setFullscreen(isFullScreen());
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_workList->viewport() && event->type() == QEvent::Resize && !m_workResizeScheduled) {
+        m_workResizeScheduled = true;
+        QTimer::singleShot(0, this, [this] { resizeWorkItems(); m_workResizeScheduled = false; });
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+void MainWindow::resizeWorkItems()
+{
+    const int width = qMax(200, m_workList->viewport()->width() - 4);
+    for (int i = 0; i < m_workList->count(); ++i) {
+        auto *item = m_workList->item(i);
+        auto *widget = m_workList->itemWidget(item);
+        if (!widget || !widget->layout()) continue;
+        widget->setFixedWidth(width);
+        auto *layout = widget->layout();
+        const int height = layout->hasHeightForWidth() ? layout->totalHeightForWidth(width) : layout->sizeHint().height();
+        item->setSizeHint(QSize(width, qMax(140, height + 8)));
+    }
+}
+
+bool MainWindow::navigateBack()
+{
+    m_pendingReadId.clear();
+    QGuiApplication::inputMethod()->hide();
+    if (m_contentStack->currentWidget() == m_reader && m_reader->closeOptions()) return true;
+    if (m_contentStack->currentWidget() == m_reader && isFullScreen()) {
+        showNormal(); m_reader->setFullscreen(false); return true;
+    }
+    if (m_contentStack->currentWidget() == m_reader) { closeReader(); return true; }
+    if (m_contentStack->currentWidget() == m_mobileFilters) { m_contentStack->setCurrentIndex(m_beforeFilters); return true; }
+    if (m_contentStack->currentWidget() == m_mobileDetails) { m_contentStack->setCurrentIndex(2); return true; }
+    if (m_contentStack->currentIndex() != 0) { showDashboard(); return true; }
+    return false;
+}
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (mobileUi() && event->key() == Qt::Key_Back) {
+        if (QGuiApplication::inputMethod()->isVisible()) {
+            QGuiApplication::inputMethod()->hide(); event->accept(); return;
+        }
+        if (navigateBack()) { event->accept(); return; }
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::showLibrary()
+{
+    if (m_contentStack->currentWidget() == m_reader) closeReader();
+    m_pendingReadId.clear(); refreshLibrary(); m_contentStack->setCurrentWidget(m_libraryPage);
+}
+void MainWindow::refreshLibrary()
+{
+    if (!m_libraryList) return;
+    m_libraryList->clear();
+    for (const auto &value : ReadingLibrary().entries()) {
+        const auto entry = value.toObject(); const auto work = ReadingLibrary::work(entry);
+        if(m_librarySearch && !m_librarySearch->text().trimmed().isEmpty() && !(work.title+" "+work.author).contains(m_librarySearch->text().trimmed(),Qt::CaseInsensitive)) continue;
+        if (m_libraryFilter->currentIndex() == 1 && !entry.value("offline").toBool()) continue;
+        if (m_libraryFilter->currentIndex() == 2 && !entry.value("favorite").toBool()) continue;
+        auto *item = new QListWidgetItem(QStringLiteral("%1\nby %2 · %3%4").arg(work.title, work.author, entry.value("offline").toBool() ? "Saved offline" : "Online", entry.value("favorite").toBool() ? " · Favorite" : ""), m_libraryList);
+        item->setData(Qt::UserRole, entry.toVariantMap()); item->setSizeHint(QSize(0, 72));
+    }
+    statusBar()->showMessage(QStringLiteral("%1 works in this view").arg(m_libraryList->count()));
+}
+void MainWindow::openLibrarySelection()
+{
+    auto *item = m_libraryList->currentItem(); if (!item) return;
+    const auto entry = QJsonObject::fromVariantMap(item->data(Qt::UserRole).toMap()); const auto work = ReadingLibrary::work(entry);
+    m_detailWidget->showWork(work);
+    const auto chapters = ReadingLibrary().load(work.id);
+    if (!chapters.isEmpty()) { openReader(work, chapters); return; }
+    m_pendingReadId = work.id; statusBar()->showMessage("Loading fic from AO3..."); m_client->fetchWorkContent(work.id);
+}
+
+void MainWindow::showProfile(const QString &authorUrl)
+{
+    if(m_contentStack->currentWidget() == m_reader) closeReader();
+    m_pendingReadId.clear();
+    const QStringList path = QUrl(authorUrl).path().split('/', Qt::SkipEmptyParts);
+    if(path.size() < 2 || path[0] != "users") { onError("This work has no public author profile."); return; }
+    m_profileUsername = path[1]; m_profileText->setPlainText("Loading profile..."); m_contentStack->setCurrentWidget(m_profilePage); m_client->fetchAuthorProfile(m_profileUsername);
+}
+void MainWindow::showAuthorListing(bool bookmarks)
+{
+    if(m_profileUsername.isEmpty()) return;
+    m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
+    m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
+    statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
+}

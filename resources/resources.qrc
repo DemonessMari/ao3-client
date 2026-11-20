@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icons/check.png">../icons/check.png</file>
+        <file alias="icons/down.png">../icons/down.png</file>
+        <file alias="icons/check.svg">../icons/check.svg</file>
+        <file alias="icons/ao3.png">../icons/ao3.png</file>
+        <file alias="docs/PRIVACY.md">../PRIVACY.md</file>
+        <file alias="docs/THIRD-PARTY-NOTICES.md">../THIRD-PARTY-NOTICES.md</file>
+        <file alias="docs/LICENSE">../LICENSE</file>
+    </qresource>
+</RCC>

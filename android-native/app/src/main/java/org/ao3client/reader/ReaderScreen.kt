@@ -1,0 +1,160 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+package org.ao3client.reader
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+
+@Composable fun ReaderScreen(vm: ClientState) {
+    val fic = vm.selected ?: return
+    if(vm.chapters.isEmpty()) return
+    val activity = LocalContext.current as MainActivity
+    val context = LocalContext.current
+    var tools by remember { mutableStateOf(false) }
+    var translationConsent by remember { mutableStateOf(false) }
+    var appearance by remember { mutableStateOf(false) }
+    var chaptersMenu by remember { mutableStateOf(false) }
+    var bookmarksMenu by remember { mutableStateOf(false) }
+    var bookmarkDialog by remember { mutableStateOf(false) }
+    var bookmarkName by remember { mutableStateOf("") }
+    val text = vm.translation ?: vm.chapters[vm.chapter].text
+    val paragraphs = remember(text) { text.split(Regex("""\n\s*\n""")).filter { it.isNotBlank() }.ifEmpty { listOf(text) } }
+    val chapterIndex = vm.chapter
+    val scroll = key(vm.chapter, vm.readerRevision, vm.bookMode) { rememberLazyListState(vm.positionIndex.coerceIn(paragraphs.indices), vm.positionOffset.coerceAtLeast(0)) }
+    val ioScope=rememberCoroutineScope()
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        uri?.let { ioScope.launch { try {
+            val content = fic.title + "\nby " + fic.author + "\n\n" + vm.chapters.joinToString("\n\n") { it.title + "\n\n" + it.text }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { context.contentResolver.openOutputStream(it)?.bufferedWriter()?.use { writer -> writer.write(content) } ?: error("Unable to open file") }
+        } catch (e: Exception) { vm.error = e.message } } }
+    }
+    val hideChrome = vm.fullScreen || vm.textOnly
+    DisposableEffect(hideChrome) {
+        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hideChrome) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
+        onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+    LaunchedEffect(scroll, chapterIndex, vm.translation, vm.bookMode) {
+        snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; vm.saveProgress() } }
+    }
+    BackHandler { when { appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
+    Scaffold(
+        topBar = { if(!hideChrome) TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } }) },
+        bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                IconButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous chapter") }
+                Box { TextButton(onClick = { chaptersMenu = true }) { Text("Chapter ${vm.chapter + 1} of ${vm.chapters.size}") }
+                    DropdownMenu(expanded = chaptersMenu, onDismissRequest = { chaptersMenu = false }, modifier = Modifier.heightIn(max = 320.dp).widthIn(max = 320.dp)) {
+                        vm.chapters.forEachIndexed { i, chapter -> DropdownMenuItem(text = { Text("${i + 1}. ${chapter.title}", softWrap = true) }, onClick = { chaptersMenu = false; vm.changeChapter(i) }) }
+                    }
+                }
+                IconButton(onClick = { vm.changeChapter(vm.chapter + 1) }, enabled = vm.chapter < vm.chapters.lastIndex) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next chapter") }
+            }
+        } }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize()) {
+                if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
+                if(!vm.textOnly) Text(vm.chapters[vm.chapter].title, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+                if(!vm.textOnly) vm.error?.let { ErrorCard(it) { vm.error = null } }
+                if(vm.translating && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.translationProgress, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium) }
+                if(vm.translation != null && !vm.textOnly) Text("Machine translation · ${vm.preferences.language}", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+                if(vm.bookMode) BookReader(vm,text,paragraphs,Modifier.weight(1f).fillMaxWidth())
+                else SelectionContainer(Modifier.weight(1f)) {
+                    LazyColumn(state = scroll, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
+                        itemsIndexed(paragraphs) { _, paragraph -> Text(paragraph, fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp) }
+                        item {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                TextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }
+                                TextButton(onClick = { vm.changeChapter(vm.chapter + 1) }, enabled = vm.chapter < vm.chapters.lastIndex) { Text("Next chapter") }
+                            }
+                        }
+                        item { Spacer(Modifier.height(24.dp)) }
+                    }
+                }
+            }
+            if(vm.textOnly && !vm.bookMode) Box(Modifier.align(Alignment.Center).size(80.dp).clickable(onClickLabel="Show reading controls") { vm.textOnly=false })
+            if(vm.fullScreen && !vm.textOnly) FilledTonalIconButton(onClick = { vm.fullScreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Icon(Icons.Default.Close, "Exit fullscreen") }
+        }
+    }
+    if(tools) ModalBottomSheet(
+        onDismissRequest = { tools = false },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Reading options", style = MaterialTheme.typography.titleLarge)
+            MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
+            MenuRow("Add bookmark", onClick = { tools = false; bookmarkName = vm.chapters[vm.chapter].title; bookmarkDialog = true })
+            MenuRow("Bookmarks · ${vm.bookmarks.size}", onClick = { tools = false; bookmarksMenu = true })
+            MenuRow("Reading appearance", supportingText = "Theme, font, text size and line spacing · applies immediately", onClick = { tools = false; appearance = true })
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Text size · ${vm.preferences.fontSize}", Modifier.weight(1f))
+                Row { OutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize - 1) }) { Text("A−") }; Spacer(Modifier.width(12.dp)); OutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize + 1) }) { Text("A+") } }
+            }
+            Button(onClick = { if(vm.translating || vm.storage.getBoolean("translationConsented",false)) { vm.translate(); tools = false } else translationConsent=true }, Modifier.fillMaxWidth()) { Text(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}") }
+            if(vm.translation != null) MenuRow("Show original", onClick = { vm.original(); tools = false })
+            MenuRow("Text only", supportingText="Hide all controls. Tap the center or press Back to restore them.", onClick={ tools=false; vm.textOnly=true })
+            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Book mode · swipe between pages",Modifier.weight(1f)); Switch(checked=vm.bookMode,onCheckedChange={vm.readingMode(book=it)}) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Animate page turns",Modifier.weight(1f)); Switch(checked=vm.pageAnimation,onCheckedChange={vm.readingMode(animation=it)}) }
+            MenuRow("Fullscreen reading", onClick = { tools = false; vm.fullScreen = true })
+            MenuRow("Reading and translation settings", onClick = { tools = false; vm.navigate("settings") })
+            MenuRow("Save full fic as text", onClick = { tools = false; save.launch(fic.title.replace(Regex("[/\\:*?\"<>|]"), "_") + ".txt") })
+            HorizontalDivider()
+            Ao3WorkLinks(fic.id)
+            MenuRow("Start from the beginning", onClick = { tools = false; vm.restart() })
+        }
+    }
+    if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("The chapter text will be sent to your configured translation service. AO3 credentials are not sent. Only continue if you trust this service.")},confirmButton={TextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={TextButton(onClick={translationConsent=false}) { Text("Cancel") }})
+    if(appearance) ModalBottomSheet(
+        onDismissRequest = { appearance = false },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ReadingAppearanceControls(vm)
+            Button(onClick = { appearance = false }, modifier = Modifier.fillMaxWidth()) { Text("Done · return to story") }
+        }
+    }
+    if(bookmarkDialog) AlertDialog(onDismissRequest = { bookmarkDialog = false }, title = { Text("Add bookmark") }, text = {
+        OutlinedTextField(bookmarkName, { bookmarkName = it }, label = { Text("Bookmark name") }, singleLine = true)
+    }, confirmButton = { TextButton(onClick = { vm.addBookmark(bookmarkName); bookmarkDialog = false }, enabled = bookmarkName.isNotBlank()) { Text("Save bookmark") } }, dismissButton = { TextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") } })
+    if(bookmarksMenu) ModalBottomSheet(onDismissRequest = { bookmarksMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
+        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            item { Text("Bookmarks", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp)) }
+            if(vm.bookmarks.isEmpty()) item { Text("Add a bookmark from Reading options to keep a named place in this fic.", Modifier.padding(16.dp)) }
+            items(vm.bookmarks, key = { it.id }) { bookmark ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { MenuRow(bookmark.title, supportingText = "Chapter ${bookmark.chapter + 1}", onClick = { vm.jumpBookmark(bookmark); bookmarksMenu = false }) }
+                    TextButton(onClick = { vm.removeBookmark(bookmark) }) { Text("Delete") }
+                }
+            }
+        }
+    }
+
+}

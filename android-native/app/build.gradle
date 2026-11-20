@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+android {
+    namespace 'org.ao3client.reader'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'org.ao3client.reader'
+        minSdk 28
+        targetSdk 36
+        versionCode 13
+        versionName '3.0.0'
+    }
+    sourceSets { test.resources.srcDir file("../../tests/fixtures") }
+    signingConfigs {
+        release {
+            if (System.getenv('AO3_SIGNING_FILE')) {
+                storeFile file(System.getenv('AO3_SIGNING_FILE'))
+                storePassword System.getenv('AO3_SIGNING_PASSWORD')
+                keyAlias 'ao3-release'
+                keyPassword System.getenv('AO3_SIGNING_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { debuggable false; minifyEnabled false; signingConfig signingConfigs.release } }
+    buildFeatures { compose true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    testOptions { unitTests.returnDefaultValues = true; unitTests.all { maxHeapSize = "256m"; inputs.property("ao3LiveTest", System.getenv("AO3_LIVE_TEST") ?: "0") } }
+}
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2024.10.00')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-core'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6'
+    implementation 'org.jsoup:jsoup:1.24.1'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
+    testImplementation 'org.json:json:20240303'
+}

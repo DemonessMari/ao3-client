@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AO3 Client
+GenericName=AO3 Desktop Client
+Comment=Browse and search Archive of Our Own
+Exec=ao3-client
+Icon=ao3-client
+Categories=Network;Qt;
+Terminal=false
+StartupNotify=true

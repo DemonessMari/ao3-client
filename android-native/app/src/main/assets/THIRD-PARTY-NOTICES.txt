@@ -1,0 +1,10 @@
+AO3 Client for Android uses Kotlin and AndroidX / Jetpack Compose under the
+Apache License 2.0. Copyright their respective contributors.
+License: licenses/Apache-2.0.txt
+Sources: https://github.com/JetBrains/kotlin and https://android.googlesource.com/platform/frameworks/support/
+
+HTML parsing uses jsoup 1.24.1 under the MIT license.
+License: licenses/Jsoup-MIT.txt
+Source: https://github.com/jhy/jsoup/tree/jsoup-1.24.1
+
+This native Android application does not bundle Qt or OpenSSL.

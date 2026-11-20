@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#c00"/>
+  <text x="128" y="110" font-family="Georgia,serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle">AO3</text>
+  <rect x="78" y="135" width="100" height="8" rx="4" fill="white" opacity="0.9"/>
+  <rect x="78" y="151" width="80" height="8" rx="4" fill="white" opacity="0.7"/>
+  <rect x="78" y="167" width="90" height="8" rx="4" fill="white" opacity="0.5"/>
+</svg>
