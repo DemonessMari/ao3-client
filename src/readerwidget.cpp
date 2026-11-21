@@ -148,7 +148,10 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_browser->viewport()->installEventFilter(this);
     page->addWidget(m_browser, 1); page->addStretch(); layout->addLayout(page, 1);
     QPushButton *desktopOnline=nullptr;
-    auto *comments = new QPushButton("Comments",this); comments->setObjectName("readerComments"); layout->addWidget(comments);
+    auto *feedback=new QWidget(this);auto *feedbackRow=new QHBoxLayout(feedback);feedbackRow->setContentsMargins(0,0,0,0);layout->addWidget(feedback);
+    auto *comments = new QPushButton("Comments",feedback); comments->setObjectName("readerComments"); feedbackRow->addWidget(comments);
+    m_kudosButton=new QPushButton("Give kudos",feedback);m_kudosButton->setObjectName("readerKudos");feedbackRow->addWidget(m_kudosButton);
+    connect(m_kudosButton,&QPushButton::clicked,this,[this] {if(!m_work.id.isEmpty())emit kudosRequested(m_work.id);});
     connect(comments,&QPushButton::clicked,this,[this] {saveProgress();if(!m_work.id.isEmpty())emit commentsRequested(m_work.id);});
     if(!mobileUi()) { auto *online=new QPushButton("Open on AO3 (browser)",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_work.id+"?show_comments=true#comments")); }); }
     auto *bottom = new QHBoxLayout;
@@ -285,6 +288,7 @@ QString ReaderWidget::cacheKey() const { return QString::number(m_index) + QChar
 void ReaderWidget::openWork(const Work &work, const QVector<WorkChapter> &chapters)
 {
     clear(); m_work = work; m_chapters = chapters;
+    emit workOpened(work.id);
     m_title->setText(work.title + QStringLiteral(" — ") + work.author);
     m_title->setToolTip(m_title->text());
     closeOptions();
@@ -292,6 +296,9 @@ void ReaderWidget::openWork(const Work &work, const QVector<WorkChapter> &chapte
     for (int i = 0; i < chapters.size(); ++i) m_chapter->addItem(QStringLiteral("%1 / %2 · %3").arg(i + 1).arg(chapters.size()).arg(chapters[i].title));
     const int saved = progressKey().isEmpty() ? 0 : QSettings().value(progressKey() + QStringLiteral("chapter"), 0).toInt();
     if (!chapters.isEmpty()) showChapter(qBound(0, saved, int(chapters.size()) - 1));
+}
+void ReaderWidget::setKudosStatus(const QString &status,bool guest) {
+    m_kudosButton->setEnabled(status.isEmpty());m_kudosButton->setText(status.isEmpty()?(guest?"Give guest kudos":"Give kudos"):status);
 }
 void ReaderWidget::showChapter(int index)
 {

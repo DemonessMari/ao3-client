@@ -120,11 +120,13 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
         "QPushButton:hover { background: #e8e3dc; }"
     ));
     btnLayout->addWidget(m_downloadButton);
+    m_kudosButton=new QPushButton("Give kudos",m_buttonBar);m_kudosButton->setObjectName("giveKudos");btnLayout->addWidget(m_kudosButton);
+    connect(m_kudosButton,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty())emit kudosRequested(m_currentWork.id); });
     auto *profile = new QPushButton("Author profile", m_buttonBar); profile->setObjectName("authorProfileButton"); profile->setVisible(!mobileUi()); btnLayout->addWidget(profile);
     connect(profile, &QPushButton::clicked, this, [this] { if(!m_currentWork.authorUrl.isEmpty()) emit profileRequested(m_currentWork.authorUrl); });
     auto *comments = new QPushButton("Comments",m_buttonBar); comments->setObjectName("workComments"); btnLayout->addWidget(comments);
     connect(comments,&QPushButton::clicked,this,[this] {if(!m_currentWork.id.isEmpty())emit commentsRequested(m_currentWork.id);});
-    auto *online=new QPushButton("Open on AO3 · browser",m_buttonBar); btnLayout->addWidget(online); online->setToolTip("Comments, kudos, subscriptions, AO3 bookmarks, series and collections. The browser has its own sign-in.");
+    auto *online=new QPushButton("Open on AO3 · browser",m_buttonBar); btnLayout->addWidget(online); online->setToolTip("Subscriptions, AO3 bookmarks, series and collections. The browser has its own sign-in.");
     connect(online,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_currentWork.id)); });
     btnLayout->addStretch();
     layout->addWidget(m_buttonBar);
@@ -178,6 +180,7 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
 void WorkDetailWidget::showWork(const Work &work)
 {
     m_currentWork = work;
+    emit workShown(work.id);
     if(auto *button = findChild<QPushButton *>("authorProfileButton")) button->setEnabled(!work.authorUrl.isEmpty());
     m_noSelectionWidget->hide();
     m_detailWidget->show();

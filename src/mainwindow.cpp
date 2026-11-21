@@ -141,6 +141,13 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_detailWidget, &WorkDetailWidget::profileRequested, this, &MainWindow::showProfile);
+    connect(m_detailWidget,&WorkDetailWidget::kudosRequested,m_client,&AO3Client::giveKudos);
+    connect(m_detailWidget,&WorkDetailWidget::workShown,this,[this](const QString &id) { m_detailWidget->setKudosStatus(m_client->kudosStatus(id),!m_loginManager->isLoggedIn()); });
+    connect(m_client,&AO3Client::kudosChanged,this,[this](const QString &id,const QString &status,const QString &message) {
+        if(m_detailWidget->currentWork().id==id) m_detailWidget->setKudosStatus(status,!m_loginManager->isLoggedIn());
+        if(m_reader->workId()==id) m_reader->setKudosStatus(status,!m_loginManager->isLoggedIn());
+        if(!message.isEmpty())statusBar()->showMessage(message);
+    });
     connect(m_client, &AO3Client::authorProfileFetched, this, [this](const AuthorProfile &profile) {
         if(profile.username != m_profileUsername) return;
         m_profileText->setPlainText(profile.error.isEmpty() ? profile.username + "\n\n" + profile.title + "\n\n" + profile.details + "\n\n" + (profile.biography.isEmpty() ? "No public biography provided." : profile.biography) : profile.error);
@@ -474,6 +481,8 @@ void MainWindow::setupUI()
     m_reader = new ReaderWidget(this);
     m_contentStack->addWidget(m_reader);
     connect(m_reader, &ReaderWidget::backRequested, this, &MainWindow::closeReader);
+    connect(m_reader,&ReaderWidget::kudosRequested,m_client,&AO3Client::giveKudos);
+    connect(m_reader,&ReaderWidget::workOpened,this,[this](const QString &id) {m_reader->setKudosStatus(m_client->kudosStatus(id),!m_loginManager->isLoggedIn());});
     connect(m_reader, &ReaderWidget::fullscreenRequested, this, &MainWindow::toggleReaderFullscreen);
     connect(m_reader, &ReaderWidget::preferencesChanged, this, [this] {
         auto filters = m_filterPanel->filters();
@@ -838,6 +847,8 @@ void MainWindow::showLoginView()
 
 void MainWindow::setLoggedInState(bool loggedIn)
 {
+    m_detailWidget->setKudosStatus(m_client->kudosStatus(m_detailWidget->currentWork().id),!loggedIn);
+    m_reader->setKudosStatus(m_client->kudosStatus(m_reader->workId()),!loggedIn);
     m_navWorks->setVisible(mobileUi() || loggedIn);
     m_navLogout->setVisible(!mobileUi() && loggedIn);
 

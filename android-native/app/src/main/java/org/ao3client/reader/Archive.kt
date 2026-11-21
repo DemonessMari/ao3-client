@@ -148,8 +148,8 @@ class Archive(private val prefs: SharedPreferences) {
             return "/works/search?" + args.joinToString("&") { encode(it.first) + "=" + encode(it.second) }
         }
     }
-    private fun request(path: String, form: Map<String,String>? = null): String {
-        val generation = cookieGeneration
+    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null): String {
+        val generation = expectedGeneration ?: cookieGeneration
         var url = URL(BASE + path)
         var post = form
         repeat(6) {
@@ -163,7 +163,10 @@ class Archive(private val prefs: SharedPreferences) {
                 connection.connectTimeout = 15000; connection.readTimeout = 30000
                 connection.setRequestProperty("User-Agent", "AO3Client/3.0 (Unofficial Android Reader)")
                 connection.setRequestProperty("Accept", if(path.startsWith("/autocomplete/")) "application/json" else "text/html")
-                val cookieHeader = cookies.get(url.toURI(), emptyMap())["Cookie"]
+                val cookieHeader = synchronized(cookieLock) {
+                    if(generation!=cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
+                    cookies.get(url.toURI(), emptyMap())["Cookie"]
+                }
                 if (!cookieHeader.isNullOrEmpty()) connection.setRequestProperty("Cookie", cookieHeader.joinToString("; "))
                 post?.let { values ->
                     connection.requestMethod = "POST"; connection.doOutput = true
@@ -209,6 +212,17 @@ class Archive(private val prefs: SharedPreferences) {
         require(id.matches(Regex("[0-9]+")))
         return OfficialDownloads.parse(request("/works/$id?view_adult=true"),id)
     }
+    fun giveKudos(id:String,expected:String?):KudosResult {
+        require(id.matches(Regex("[0-9]+")))
+        val generation=cookieGeneration
+        val html=request("/works/$id?view_adult=true")
+        require(ArchiveParser.sessionIdentity(html)==expected) { "Your AO3 session changed. Sign in again before giving kudos." }
+        val fields=KudosParser.form(html,id)
+        if(generation!=cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
+        return try { KudosParser.result(request("/kudos",fields,generation)) }
+            catch(e:java.util.concurrent.CancellationException) { throw e }
+            catch(_:Exception) { KudosResult("Could not confirm kudos. Check this work on AO3.",uncertain=true) }
+    }
     fun rememberedUsername(): String? = synchronized(cookieLock) {
         prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
     }
@@ -240,6 +254,7 @@ class Archive(private val prefs: SharedPreferences) {
         return user
     }
     fun login(name: String, password: String): String {
+        synchronized(cookieLock) { cookieGeneration++ }
         val token = Jsoup.parse(request("/users/login")).selectFirst("input[name=authenticity_token]")?.attr("value") ?: error("AO3 did not return a sign-in form")
         request("/users/login", mapOf("authenticity_token" to token, "user[login]" to name, "user[password]" to password, "user[remember_me]" to "1", "commit" to "Log in"))
         return session() ?: error("Sign-in failed. Check your username and password.")

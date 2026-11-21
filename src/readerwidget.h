@@ -32,15 +32,20 @@ public:
     void applyAppearance();
     void setTextOnly(bool enabled);
     void setBookMode(bool enabled);
+    void setKudosStatus(const QString &status,bool guest=false);
+    QString workId() const { return m_work.id; }
 protected:
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *, QEvent *) override;
 signals:
+    void kudosRequested(const QString &workId);
+    void workOpened(const QString &workId);
     void backRequested();
     void commentsRequested(const QString &workId);
     void fullscreenRequested();
     void preferencesChanged();
 private:
+    QPushButton *m_kudosButton=nullptr;
     void showChapter(int index);
     void showNotes();
     QPushButton *m_notes = nullptr;

@@ -89,6 +89,7 @@ LoginManager *AO3Client::loginManager() const
 
 void AO3Client::login(const QString &login, const QString &password)
 {
+    m_kudosStatus.clear();
     const quint64 generation = ++m_authGeneration;
     QNetworkRequest request = makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/users/login")));
 
@@ -147,6 +148,7 @@ void AO3Client::checkSession()
 
 void AO3Client::logout()
 {
+    m_kudosStatus.clear();
     ++m_commentsGeneration;
     ++m_authGeneration;
     ++m_listingGeneration;
@@ -155,6 +157,34 @@ void AO3Client::logout()
     }
     m_loginManager->logout();
     emit loggedOut();
+}
+
+void AO3Client::giveKudos(const QString &id) {
+    if(!QRegularExpression("^[0-9]+$").match(id).hasMatch() || m_kudosStatus.contains(id)) return;
+    const auto generation=m_authGeneration;
+    const auto expected=m_loginManager->isLoggedIn()?m_loginManager->username():QString();
+    const QUrl source("https://archiveofourown.org/works/"+id+"?view_adult=true");
+    m_kudosStatus[id]="Sending kudos…"; emit kudosChanged(id,m_kudosStatus[id],{});
+    auto fresh=makeRequest(source);fresh.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);fresh.setRawHeader("Cache-Control","no-cache");
+    auto *reply=m_manager->get(fresh);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,id,generation,expected,source] {
+        reply->deleteLater(); if(generation!=m_authGeneration)return;
+        const auto html=QString::fromUtf8(reply->readAll());
+        const auto fields=parseKudosForm(html,id);
+        if(reply->error()!=QNetworkReply::NoError || fields.isEmpty() || !kudosIdentityMatches(html,expected)) {
+            m_kudosStatus.remove(id); emit kudosChanged(id,{},"Kudos could not be sent. Check your sign-in and whether kudos are available for this work."); return;
+        }
+        QByteArray body;for(auto it=fields.cbegin();it!=fields.cend();++it) { if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value()); }
+        auto request=makeRequest(QUrl("https://archiveofourown.org/kudos"));
+        request.setRawHeader("Content-Type","application/x-www-form-urlencoded"); request.setRawHeader("Referer",source.toEncoded());
+        auto *posted=m_manager->post(request,body);
+        connect(posted,&QNetworkReply::finished,this,[this,posted,id,generation] {
+            posted->deleteLater();if(generation!=m_authGeneration)return;
+            auto result=posted->error()==QNetworkReply::NoError?parseKudosResult(QString::fromUtf8(posted->readAll())):KudosResult{"Could not confirm kudos. Check this work on AO3.",false,true};
+            m_kudosStatus[id]=result.success?"Kudos given":result.uncertain?"Check kudos on AO3":"Kudos unavailable";
+            emit kudosChanged(id,m_kudosStatus[id],result.message);
+        });
+    });
 }
 
 void AO3Client::verifySession(bool loginAttempt, quint64 generation)

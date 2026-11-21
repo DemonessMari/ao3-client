@@ -34,6 +34,23 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var profileReturn = "details"
     var ownWorks by mutableStateOf(false)
     var selected by mutableStateOf<Fic?>(null)
+    val kudosStates=mutableStateMapOf<String,String>()
+    private var kudosGeneration=0
+    fun giveKudos(id:String) {
+        if(kudosStates.containsKey(id))return
+        error=null
+        val generation=kudosGeneration;val expected=username
+        kudosStates[id]="Sending kudos…"
+        viewModelScope.launch {
+            try {
+                val result=withContext(Dispatchers.IO) { archive.giveKudos(id,expected) }
+                if(generation!=kudosGeneration)return@launch
+                kudosStates[id]=if(result.success) "Kudos given" else if(result.uncertain) "Check kudos on AO3" else "Kudos unavailable"
+                notice=result.message
+            } catch(e:CancellationException) { if(generation==kudosGeneration)kudosStates[id]="Check kudos on AO3";throw e }
+              catch(e:Exception) { if(generation==kudosGeneration) { kudosStates.remove(id);error=e.message ?: "Kudos could not be sent" } }
+        }
+    }
     var officialDownloads by mutableStateOf<List<OfficialDownload>?>(null)
     fun fetchOfficialDownloads(id:String)=load {
         val formats=withContext(Dispatchers.IO) { archive.downloads(id) }
@@ -254,11 +271,12 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         cancelTranslation(); chapter = 0; positionIndex = 0; positionOffset = 0; bookOffset = 0; translation = null; readerRevision++
     }
     fun login(name: String, password: String) = load {
+        ++kudosGeneration;kudosStates.clear()
         sessionJob?.cancel()
         username = withContext(Dispatchers.IO) { archive.login(name.trim(), password) }
         screen = "home"
     }
-    fun logout() { sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { ++kudosGeneration;kudosStates.clear();sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()

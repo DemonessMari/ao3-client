@@ -8,7 +8,7 @@ class CommentsTest {
         assertEquals("csrf+&=token",form.hidden["authenticity_token"]);assertEquals("12",form.hidden["comment[pseud_id]"])
         assertEquals(2,form.pseuds.size);assertTrue(form.notice.contains("moderated"));assertFalse(form.guest)
         assertFalse(validCommentAction("https://example.invalid/comments"));assertFalse(validCommentAction("//example.invalid/comments"))
-        assertTrue(parseCommentSubmission("<p id='comment_notice'>Comment awaiting moderation.</p>").notice.contains("moderation"))
+        assertTrue(parseCommentSubmission("<div class='flash comment_notice'>Comment awaiting moderation.</div>").notice.contains("moderation"))
         assertFalse(parseCommentSubmission("<div id='errorExplanation'>Comment is too long.</div>").uncertain)
         assertTrue(parseCommentSubmission("<h1>Maintenance</h1>").uncertain)
     }

@@ -105,9 +105,12 @@ inline CommentForm parseCommentForm(const QString &html) {
 }
 inline CommentSubmission parseCommentSubmission(const QString &html) {
     using namespace CommentHtml;CommentSubmission result;const auto list=nodes(html);
-    for(const auto &node:list) {
-        if(node.attrs.value("id")=="comment_notice")result.notice=text(html.mid(node.begin,node.end-node.begin));
-        if(node.attrs.value("id")=="errorExplanation" || node.attrs.value("id")=="error" || hasClass(node,"errorExplanation"))result.error=text(html.mid(node.begin,node.end-node.begin));
+    for(int i=0;i<list.size();++i) {
+        const auto &node=list[i];bool story=hasClass(node,"userstuff");
+        for(int p=node.parent;p>=0;p=list[p].parent) if(list[p].attrs.value("id")=="workskin" || hasClass(list[p],"userstuff"))story=true;
+        if(story)continue;
+        if(hasClass(node,"flash") && hasClass(node,"comment_notice"))result.notice=text(html.mid(node.begin,node.end-node.begin));
+        if(node.attrs.value("id")=="errorExplanation" || node.attrs.value("id")=="error" || hasClass(node,"errorExplanation") || (hasClass(node,"flash") && hasClass(node,"comment_error")))result.error=text(html.mid(node.begin,node.end-node.begin));
     }
     if(result.notice.isEmpty() && result.error.isEmpty()) {result.uncertain=true;result.error="Could not confirm whether the comment was posted. Refresh comments before trying again.";}
     return result;

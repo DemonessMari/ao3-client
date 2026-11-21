@@ -16,9 +16,12 @@ public:
     void showWork(const Work &work);
     void showContent(const QString &html);
     void clear();
+    void setKudosStatus(const QString &status,bool guest=false) { m_kudosButton->setEnabled(status.isEmpty()); m_kudosButton->setText(status.isEmpty()?(guest?QString("Give guest kudos"):QString("Give kudos")):status); }
     Work currentWork() const { return m_currentWork; }
 
 signals:
+    void kudosRequested(const QString &workId);
+    void workShown(const QString &workId);
     void commentsRequested(const QString &workId);
     void readRequested(const QString &workId);
     void profileRequested(const QString &authorUrl);
@@ -42,6 +45,7 @@ private:
 
     QPushButton *m_readButton;
     QPushButton *m_downloadButton;
+    QPushButton *m_kudosButton;
     QWidget *m_buttonBar;
 
     Work m_currentWork;

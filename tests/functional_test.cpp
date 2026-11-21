@@ -88,6 +88,41 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void kudosFormsResultsAndPosting() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/kudos-form.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(fixture.readAll());
+        const auto fields=parseKudosForm(html,"123");QCOMPARE(fields.size(),3);QCOMPARE(fields.value("authenticity_token"),QString("csrf+&=token"));
+        QVERIFY(parseKudosForm(html,"456").isEmpty());
+        QVERIFY(parseKudosForm(QString(html).replace("action=\"/kudos\"","action=\"https://evil.example/kudos\""),"123").isEmpty());
+        QVERIFY(kudosIdentityMatches(html,{}));QVERIFY(!kudosIdentityMatches(html,"Alice"));
+        const QString signedIn="<div id='greeting'>Hi, <a href='/users/Alice'>Alice</a><a href='/users/logout'>Log out</a></div>";
+        QVERIFY(kudosIdentityMatches(signedIn,"Alice"));QVERIFY(!kudosIdentityMatches(signedIn,{}));
+        QVERIFY(!kudosIdentityMatches(QString(signedIn).replace("Alice","Bob")+"<div id='workskin'>Hi, <a href='/users/Alice'>Alice</a></div>","Alice"));
+        const QString success="<div id='feedback'><div class='flash kudos_notice'>Thank you for leaving kudos!</div></div>";
+        QVERIFY(parseKudosResult(success).success);
+        QVERIFY(!parseKudosResult("<div id='feedback'><div class='flash kudos_error'>You have already left kudos here.</div></div>").success);
+        QVERIFY(parseKudosResult("<div id='workskin'>"+success+"</div>").uncertain);
+        QVERIFY(parseKudosResult("<div class='notice'>Not a kudos confirmation</div>").uncertain);
+        QVERIFY(parseCommentSubmission("<div class='userstuff'><div class='flash comment_notice'>Fake confirmation</div></div>").uncertain);
+        QVERIFY(parseCommentSubmission("<div class='flash comment_error'>Comment rejected</div>").error.contains("rejected"));
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);
+        network->pages={html.toUtf8(),success.toUtf8()};const int before=network->requests.size();
+        Work work;work.id="123";window.m_detailWidget->showWork(work);
+        auto *button=window.m_detailWidget->findChild<QPushButton *>("giveKudos");QVERIFY(button);QVERIFY(button->text().contains("guest"));
+        button->click();button->click();QVERIFY(!button->isEnabled());
+        QTRY_COMPARE(window.m_client->kudosStatus("123"),QString("Kudos given"));
+        QCOMPARE(network->requests.size(),before+2);QCOMPARE(network->requests.last().path(),QString("/kudos"));
+        QCOMPARE(network->operations.last(),QNetworkAccessManager::PostOperation);
+        QMap<QString,QString> body;for(const auto &pair:network->bodies.last().split('&')) {const int eq=pair.indexOf('=');body[QUrl::fromPercentEncoding(pair.left(eq))]=QUrl::fromPercentEncoding(pair.mid(eq+1));}
+        QCOMPARE(body.value("kudo[commentable_id]"),QString("123"));QCOMPARE(body.value("authenticity_token"),QString("csrf+&=token"));
+        window.m_client->giveKudos("123");QCOMPARE(network->requests.size(),before+2);
+        window.m_reader->openWork(work,{{"One","Story"}});auto *readerKudos=window.m_reader->findChild<QPushButton *>("readerKudos");QVERIFY(readerKudos);QVERIFY(!readerKudos->isEnabled());QCOMPARE(readerKudos->text(),QString("Kudos given"));
+        const auto other=QString(html).replace("value=\"123\"","value=\"456\"");network->pages={other.toUtf8(),QByteArray("<h1>Unknown response</h1>")};
+        window.m_client->giveKudos("456");QTRY_COMPARE(window.m_client->kudosStatus("456"),QString("Check kudos on AO3"));
+        const int after=network->requests.size();window.m_client->giveKudos("456");QCOMPARE(network->requests.size(),after);
+        window.m_loginManager->setUserInfo({"Alice", "https://archiveofourown.org/users/Alice",true});network->page=QString(html).replace("value=\"123\"","value=\"789\"").toUtf8();
+        window.m_client->giveKudos("789");QTRY_VERIFY(window.m_client->kudosStatus("789").isEmpty());QCOMPARE(network->requests.size(),after+1);
+        window.m_client->logout();QVERIFY(window.m_client->kudosStatus("123").isEmpty());
+    }
     void officialDownloadsSaveFilesAndPreserveOnFailure() {
         MainWindow window; auto *network=installNetwork(window);
         QTest::qWait(50);
@@ -125,14 +160,14 @@ private slots:
         QCOMPARE(form.pseuds.size(),2);QVERIFY(form.notice.contains("moderated"));QVERIFY(!form.guest);
         QVERIFY(!validCommentAction("https://example.invalid/comments"));QVERIFY(!validCommentAction("//example.invalid/comments"));
         QVERIFY(!parseCommentForm(QString::fromUtf8(html).replace("/works/123/comments","https://example.invalid/comments")).error.isEmpty());
-        QVERIFY(parseCommentSubmission("<p id='comment_notice'>Comment awaiting moderation.</p>").notice.contains("moderation"));
+        QVERIFY(parseCommentSubmission("<div class='flash comment_notice'>Comment awaiting moderation.</div>").notice.contains("moderation"));
         QVERIFY(!parseCommentSubmission("<div id='errorExplanation'>Comment is too long.</div>").uncertain);
         QVERIFY(parseCommentSubmission("<h1>Maintenance</h1>").uncertain);
         MainWindow window;window.show();auto *network=installNetwork(window);QTest::qWait(30);network->page=html;
         window.m_commentsWork="123";window.m_contentStack->setCurrentWidget(window.m_commentsPage);window.composeComment();
         QTRY_VERIFY(!window.m_commentForm.action.isEmpty());QCOMPARE(network->operations.last(),QNetworkAccessManager::GetOperation);
         QCOMPARE(network->requests.last().path(),QString("/works/123/comments/new"));
-        window.m_commentDraft->setPlainText("A+B & 世界 %2B=100%\nSecond line");network->page="<p id='comment_notice'>Comment awaiting moderation.</p>";
+        window.m_commentDraft->setPlainText("A+B & 世界 %2B=100%\nSecond line");network->page="<div class='flash comment_notice'>Comment awaiting moderation.</div>";
         const int before=network->requests.size();window.m_commentPost->click();window.m_commentPost->click();
         QTRY_VERIFY(!window.m_commentSending);QVERIFY(window.m_commentDraft->toPlainText().isEmpty());
         int posts=0;for(int i=before;i<network->operations.size();++i)if(network->operations[i]==QNetworkAccessManager::PostOperation) {

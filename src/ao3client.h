@@ -8,6 +8,7 @@
 #include "searchfilters.h"
 #include "loginmanager.h"
 #include "officialdownload.h"
+#include "kudos.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -21,6 +22,8 @@ public:
     void fetchWorkDetails(const QString &workId);
     void fetchWorkContent(const QString &workId);
     void downloadWork(const QString &workId);
+    void giveKudos(const QString &workId);
+    QString kudosStatus(const QString &workId) const { return m_kudosStatus.value(workId); }
     void fetchOfficialDownloads(const QString &workId);
     void saveOfficialDownload(const QString &workId, const QUrl &url, const QString &path);
     void login(const QString &login, const QString &password);
@@ -37,6 +40,7 @@ public:
     LoginManager *loginManager() const;
 
 signals:
+    void kudosChanged(const QString &workId,const QString &status,const QString &message);
     void officialDownloadsFetched(const QString &workId, const QVector<OfficialDownload> &downloads);
     void officialDownloadSaved(const QString &path);
     void tagSuggestionsFetched(const QString &field, quint64 revision, const QStringList &suggestions, const QString &error);
@@ -74,4 +78,5 @@ private:
     quint64 m_profileGeneration = 0;
     quint64 m_authGeneration = 0;
     quint64 m_listingGeneration = 0;
+    QMap<QString,QString> m_kudosStatus;
 };

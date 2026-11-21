@@ -97,7 +97,7 @@ fun parseCommentForm(html:String):CommentForm {
 }
 fun parseCommentSubmission(html:String):CommentSubmission {
     val doc=Jsoup.parse(html)
-    val notice=doc.selectFirst("#comment_notice")?.text().orEmpty()
-    val error=doc.select("#errorExplanation, #error, .errorExplanation").joinToString("\n") { it.text() }
+    val notice=doc.select(".flash.comment_notice").firstOrNull { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }?.text().orEmpty()
+    val error=doc.select("#errorExplanation, #error, .errorExplanation, .flash.comment_error").filter { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }.joinToString("\n") { it.text() }
     return if(notice.isNotBlank() || error.isNotBlank()) CommentSubmission(notice,error) else CommentSubmission(error="Could not confirm whether the comment was posted. Refresh comments before trying again.",uncertain=true)
 }
