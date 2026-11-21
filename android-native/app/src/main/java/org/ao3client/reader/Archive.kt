@@ -84,8 +84,15 @@ object ArchiveParser {
     }
     fun username(html: String): String? {
         val doc = Jsoup.parse(html)
-        if (doc.select("a[href*=logout]").isEmpty()) return null
+        if (doc.select("a[href*=\"/users/logout\"], form[action*=\"/users/logout\"]").isEmpty()) return null
         return doc.selectFirst("#greeting a[href^=/users/]")?.attr("href")?.substringAfter("/users/")?.substringBefore('/')?.substringBefore('?')
+    }
+
+    fun sessionIdentity(html: String): String? {
+        username(html)?.takeIf { it.matches(Regex("[A-Za-z0-9_]+")) }?.let { return it }
+        val doc = Jsoup.parse(html)
+        if (doc.select("a[href='/users/login'], form[action='/users/login']").isNotEmpty()) return null
+        error("Could not verify session. Try again when AO3 is available.")
     }
 }
 
@@ -127,6 +134,8 @@ class Archive(private val prefs: SharedPreferences) {
             val connection = url.openConnection() as HttpURLConnection
             try {
                 connection.instanceFollowRedirects = false
+                connection.useCaches = false
+                connection.setRequestProperty("Cache-Control", "no-cache")
                 connection.connectTimeout = 15000; connection.readTimeout = 30000
                 connection.setRequestProperty("User-Agent", "AO3Client/3.0 (Unofficial Android Reader)")
                 connection.setRequestProperty("Accept", if(path.startsWith("/autocomplete/")) "application/json" else "text/html")
@@ -172,13 +181,23 @@ class Archive(private val prefs: SharedPreferences) {
         val html = request("/works/$id?view_adult=true&view_full_work=true")
         return ArchiveParser.chapters(html) to html
     }
-    fun session(): String? = ArchiveParser.username(request("/"))
+    fun rememberedUsername(): String? = synchronized(cookieLock) {
+        prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
+    }
+    fun session(): String? {
+        val user = ArchiveParser.sessionIdentity(request("/"))
+        synchronized(cookieLock) {
+            if (user == null) prefs.edit().remove("sessionUsername").apply()
+            else prefs.edit().putString("sessionUsername", user).apply()
+        }
+        return user
+    }
     fun login(name: String, password: String): String {
         val token = Jsoup.parse(request("/users/login")).selectFirst("input[name=authenticity_token]")?.attr("value") ?: error("AO3 did not return a sign-in form")
         request("/users/login", mapOf("authenticity_token" to token, "user[login]" to name, "user[password]" to password, "user[remember_me]" to "1", "commit" to "Log in"))
         return session() ?: error("Sign-in failed. Check your username and password.")
     }
-    fun logout() = synchronized(cookieLock) { cookieGeneration++; cookies.cookieStore.removeAll(); prefs.edit().remove("cookies").apply() }
+    fun logout() = synchronized(cookieLock) { cookieGeneration++; cookies.cookieStore.removeAll(); prefs.edit().remove("cookies").remove("sessionUsername").apply() }
     fun suggest(type: String, term: String): List<String> {
         require(type in listOf("tag", "fandom", "character", "relationship", "freeform"))
         val array = JSONArray(request("/autocomplete/$type?term=${encode(term)}"))

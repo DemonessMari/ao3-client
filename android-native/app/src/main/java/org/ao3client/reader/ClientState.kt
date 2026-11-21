@@ -39,7 +39,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var translation by mutableStateOf<String?>(null)
     var translating by mutableStateOf(false)
     var translationProgress by mutableStateOf("")
-    var username by mutableStateOf<String?>(null)
+    var username by mutableStateOf<String?>(archive.rememberedUsername())
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var notice by mutableStateOf<String?>(null)

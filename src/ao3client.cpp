@@ -127,7 +127,10 @@ void AO3Client::logout()
 
 void AO3Client::verifySession(bool loginAttempt, quint64 generation)
 {
-    auto *reply = m_manager->get(makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/"))));
+    auto request = makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/")));
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setRawHeader("Cache-Control", "no-cache");
+    auto *reply = m_manager->get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply, loginAttempt, generation]() {
         reply->deleteLater();
         if (generation != m_authGeneration) return;
@@ -151,6 +154,13 @@ void AO3Client::verifySession(bool loginAttempt, quint64 generation)
             user.username = text.toPlainText().trimmed();
             user.dashboardUrl = QUrl(QStringLiteral("https://archiveofourown.org")).resolved(QUrl(href.captured(1))).toString();
             user.isLoggedIn = !user.username.isEmpty();
+        }
+        const QRegularExpression signInRx(QStringLiteral(R"regex((?:href|action)\s*=\s*['"]/users/login(?:\?[^'"]*)?['"])regex"));
+        if (!user.isLoggedIn && !signInRx.match(html).hasMatch()) {
+            const auto message = QStringLiteral("Could not verify session. Try again when AO3 is available.");
+            if (loginAttempt) emit loginFailed(message);
+            else emit errorOccurred(message);
+            return;
         }
         m_loginManager->setUserInfo(user);
         if (loginAttempt) {

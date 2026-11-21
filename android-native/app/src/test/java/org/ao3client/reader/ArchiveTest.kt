@@ -51,6 +51,28 @@ class ArchiveTest {
         assertNull(ArchiveParser.username("<a href='/users/Somebody'>Somebody</a>"))
         assertEquals("Somebody", ArchiveParser.username("<div id='greeting'><a href='/users/Somebody'>Hi!</a><a href='/users/logout'>Log out</a></div>"))
     }
+    @Test fun rememberedAccountSurvivesRestartAndClearsOnLogout() {
+        val prefs = MemoryPreferences()
+        prefs.edit().putString("sessionUsername", "Somebody").putString("cookies", """[{"value":"_session_id=test; Path=/; Secure; Domain=archiveofourown.org"}]""").apply()
+        val archive = Archive(prefs)
+        assertEquals("Somebody", archive.rememberedUsername())
+        assertEquals("Somebody", Archive(prefs).rememberedUsername())
+        archive.logout()
+        assertNull(Archive(prefs).rememberedUsername())
+        assertFalse(prefs.contains("sessionUsername"))
+    }
+    @Test fun accountWithoutCookiesIsNotRestored() {
+        val prefs = MemoryPreferences()
+        prefs.edit().putString("sessionUsername", "Somebody").apply()
+        assertNull(Archive(prefs).rememberedUsername())
+    }
+    @Test fun logoutFormConfirmsSession() {
+        assertEquals("Somebody", ArchiveParser.sessionIdentity("<div id='greeting'><a href='/users/Somebody'>Account</a><form action='/users/logout'></form></div>"))
+        assertNull(ArchiveParser.sessionIdentity("<a href='/users/login'>Sign in</a>"))
+    }
+    @Test(expected = IllegalStateException::class) fun maintenanceDoesNotConfirmLogout() {
+        ArchiveParser.sessionIdentity("<h1>Maintenance</h1>")
+    }
     @Test fun tagSuggestionsReplaceOnlyTheTokenAtTheCaret() {
         val result = insertTag("First, sh, Last", 9, "Sherlock Holmes")
         assertEquals("First, Sherlock Holmes, Last", result.text)

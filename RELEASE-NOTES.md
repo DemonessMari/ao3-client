@@ -2,6 +2,7 @@
 
 - Removed decorative wording and repeated instructions from both apps.
 - Shortened documentation and notices.
+- Preserve sessions on incomplete verification responses; restore the remembered Android account while checking the session.
 
 Android: install the APK over the production-signed 3.0.0 app. Development-signed installs still require backup and migration before switching keys.
 

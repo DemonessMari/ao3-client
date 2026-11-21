@@ -199,6 +199,12 @@ private slots:
         QTRY_COMPARE(checked.count(), 1);
         QVERIFY(checked.first().first().toBool());
         QCOMPARE(window.m_loginManager->username(), QStringLiteral("MixedCase"));
+        // An incomplete response must not be mistaken for an expired session.
+        network->page = "<h1>Maintenance</h1>";
+        QSignalSpy incomplete(window.m_client, &AO3Client::errorOccurred);
+        window.m_client->checkSession();
+        QTRY_COMPARE(incomplete.count(), 1);
+        QVERIFY(window.m_loginManager->isLoggedIn());
         // Temporary connection failures do not erase a verified session or cookies.
         network->fail = true;
         QSignalSpy error(window.m_client, &AO3Client::errorOccurred);
