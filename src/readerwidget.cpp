@@ -115,6 +115,9 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_chapter->setMinimumWidth(0);
     m_chapter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     chapterRow->addWidget(m_chapter, 1);
+    m_notes = new QPushButton("Author notes",this); m_notes->setObjectName("chapterNotes"); m_notes->hide();
+    chapterRow->addWidget(m_notes);
+    connect(m_notes,&QPushButton::clicked,this,&ReaderWidget::showNotes);
     layout->addLayout(chapterRow);
     navigation->addWidget(m_previous); navigation->addWidget(m_next); navigation->addStretch();
     if (mobileUi()) { layout->addLayout(navigation); navigation = new QHBoxLayout; }
@@ -296,6 +299,7 @@ void ReaderWidget::showChapter(int index)
     m_translator->cancel(); m_busy = false; m_index = index;
     m_translate->setEnabled(true); m_translate->setText(QStringLiteral("Translate chapter")); m_original->setEnabled(true);
     m_chapter->setCurrentIndex(index);
+    m_notes->setVisible(!m_chapters[index].notesBefore.isEmpty() || !m_chapters[index].notesAfter.isEmpty());
     m_previous->setEnabled(index > 0); m_bottomPrevious->setEnabled(index > 0);
     m_next->setEnabled(index + 1 < m_chapters.size()); m_bottomNext->setEnabled(index + 1 < m_chapters.size());
     const double position = progressKey().isEmpty() ? 0.0 : QSettings().value(progressKey() + QStringLiteral("positions/%1").arg(index), 0.0).toDouble();
@@ -334,6 +338,22 @@ void ReaderWidget::renderText(const QString &text, double fraction)
         if(m_bookMode) { m_book->setContent(m_browser->document(), fraction, m_browser->palette().color(QPalette::Base), m_browser->palette().color(QPalette::Text)); if(anchor>=0) m_book->restoreAnchor(anchor); }
     });
 }
+void ReaderWidget::showNotes()
+{
+    if (m_index < 0 || m_index >= m_chapters.size()) return;
+    const auto &chapter = m_chapters[m_index];
+    QDialog dialog(this); dialog.setWindowTitle("Author notes"); dialog.resize(700,600);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *text = new QTextBrowser(&dialog); text->setObjectName("authorNotesText");
+    text->setFont(m_browser->document()->defaultFont());
+    QStringList sections;
+    if (!chapter.notesBefore.isEmpty()) sections << "Before chapter\n\n" + chapter.notesBefore;
+    if (!chapter.notesAfter.isEmpty()) sections << "After chapter\n\n" + chapter.notesAfter;
+    text->setPlainText(sections.join("\n\n")); layout->addWidget(text);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close,&dialog); layout->addWidget(buttons);
+    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    dialog.exec();
+}
 void ReaderWidget::translateChapter()
 {
     if (m_index < 0) return;
@@ -357,7 +377,7 @@ void ReaderWidget::clear()
     ++m_renderRevision;
     m_restoringPosition = true;
     m_translator->cancel(); m_busy = false; m_index = -1; m_work = {}; m_chapters.clear(); m_translations.clear();
-    m_chapter->clear(); m_browser->clear(); m_title->clear(); m_status->clear();
+    m_notes->hide(); m_chapter->clear(); m_browser->clear(); m_title->clear(); m_status->clear();
     for (auto *button : {m_previous, m_next, m_bottomPrevious, m_bottomNext, m_translate, m_original}) button->setEnabled(false);
     m_restoringPosition = false;
 }
@@ -483,7 +503,7 @@ void ReaderWidget::saveText()
 {
     if(m_chapters.isEmpty()) return;
     const auto path=QFileDialog::getSaveFileName(this,"Export original fic",m_work.title+".txt","Text files (*.txt)"); if(path.isEmpty()) return;
-    QString text=m_work.title+"\nby "+m_work.author+"\n\n"; for(const auto &chapter:m_chapters) text+=chapter.title+"\n\n"+chapter.text+"\n\n";
+    QString text=m_work.title+"\nby "+m_work.author+"\n\n"; for(const auto &chapter:m_chapters) text+=chapter.exportText()+"\n\n";
     QSaveFile file(path); const auto bytes=text.toUtf8(); const bool saved=file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size() && file.commit();
     m_status->setText(saved?"Original fic exported":"Could not export fic. Check storage and permissions.");
 }

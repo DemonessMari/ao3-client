@@ -49,6 +49,15 @@ struct UserInfo {
 struct WorkChapter {
     QString title;
     QString text;
+    QString notesBefore = {};
+    QString notesAfter = {};
+    QString exportText() const {
+        QStringList sections{title};
+        if (!notesBefore.isEmpty()) sections << "Author notes\n\n" + notesBefore;
+        sections << text;
+        if (!notesAfter.isEmpty()) sections << "End notes\n\n" + notesAfter;
+        return sections.join("\n\n");
+    }
 };
 
 struct AuthorProfile {

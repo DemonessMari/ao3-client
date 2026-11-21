@@ -14,7 +14,13 @@ import org.json.JSONObject
 
 data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "")
 data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String)
-data class Chapter(val title: String, val text: String)
+data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "") {
+    fun exportText(): String = listOfNotNull(title,notesBefore.takeIf { it.isNotBlank() }?.let { "Author notes\n\n$it" },text,notesAfter.takeIf { it.isNotBlank() }?.let { "End notes\n\n$it" }).joinToString("\n\n")
+    fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter)
+    companion object {
+        fun fromJson(value: JSONObject) = Chapter(value.optString("title"),value.getString("text"),value.optString("notesBefore"),value.optString("notesAfter"))
+    }
+}
 data class Listing(val works: List<Fic>, val page: Int, val pages: Int, val total: String)
 data class Choice(val label: String, val value: String)
 data class FilterField(val key: String, val label: String, val hint: String = "", val suggestion: String? = null, val choices: List<Choice> = emptyList(), val multi: Boolean = false)
@@ -67,20 +73,38 @@ object ArchiveParser {
         val root = Jsoup.parse(html).selectFirst("div.user.profile") ?: error("AO3 did not return this user's public profile.")
         return AuthorProfile(username, root.selectFirst("h3.heading")?.text().orEmpty(), root.selectFirst("dl.meta")?.text().orEmpty(), root.selectFirst(".bio blockquote.userstuff")?.text().orEmpty())
     }
+    private fun readableText(element: Element): String {
+        val body = element.clone()
+        body.select(".landmark, .hidden").remove()
+        body.select("br").forEach { it.after("\n") }
+        body.select("p, div, h1, h2, h3, h4, blockquote, li").forEach { it.appendText("\n\n") }
+        return body.wholeText().trim()
+    }
     fun chapters(html: String): List<Chapter> {
         val doc = Jsoup.parse(html)
-        val result = doc.select("#chapters .userstuff").filter { el ->
+        val bodies = doc.select("#chapters .userstuff").filter { el ->
             el.parents().none { it.hasClass("preface") || it.hasClass("afterword") || it.hasClass("notes") || it.hasClass("summary") || it.hasClass("userstuff") }
-        }.mapIndexed { i, el ->
-            val body = el.clone()
-            body.select(".landmark, .hidden").remove()
-            body.select("br").forEach { it.after("\n") }
-            body.select("p, div, h1, h2, h3, h4, blockquote, li").forEach { it.appendText("\n\n") }
-            val title = el.parents().firstOrNull { it.hasClass("chapter") }?.selectFirst("h3.title")?.text()
-            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", body.wholeText().trim())
-        }.filter { it.text.isNotBlank() }
-        if (result.isEmpty()) error("No readable chapters were returned. The work may need sign-in or be unavailable.")
-        return result
+        }.filter { readableText(it).isNotBlank() }
+        if (bodies.isEmpty()) error("No readable chapters were returned. The work may need sign-in or be unavailable.")
+        fun chapterRoot(el: Element) = el.parents().firstOrNull { it.hasClass("chapter") && !it.hasClass("preface") }
+        val order = doc.getAllElements().withIndex().associate { it.value to it.index }
+        val before = Array(bodies.size) { mutableListOf<String>() }
+        val after = Array(bodies.size) { mutableListOf<String>() }
+        doc.select(".notes .userstuff").forEach { note ->
+            if (note.parents().any { it.hasClass("userstuff") }) return@forEach
+            val root = chapterRoot(note)
+            val target = if (root != null) bodies.indexOfFirst { chapterRoot(it) === root }
+                else if (order.getValue(note) < order.getValue(bodies.first())) 0 else bodies.lastIndex
+            if (target < 0) return@forEach
+            val content = readableText(note)
+            if (content.isNotBlank()) {
+                if (order.getValue(note) < order.getValue(bodies[target])) before[target].add(content) else after[target].add(content)
+            }
+        }
+        return bodies.mapIndexed { i, el ->
+            val title = chapterRoot(el)?.selectFirst("h3.title")?.text()
+            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", readableText(el), before[i].joinToString("\n\n"), after[i].joinToString("\n\n"))
+        }
     }
     fun username(html: String): String? {
         val doc = Jsoup.parse(html)

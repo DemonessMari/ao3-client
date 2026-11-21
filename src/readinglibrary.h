@@ -44,9 +44,15 @@ public:
         entry["offline"] = QFile::exists(cachePath(work.id)); updated.prepend(entry);
         return write(m_root + "/index.json", {{"entries", updated}});
     }
+    static QJsonObject chapterMetadata(const WorkChapter &chapter) {
+        return {{"title",chapter.title},{"text",chapter.text},{"notesBefore",chapter.notesBefore},{"notesAfter",chapter.notesAfter}};
+    }
+    static WorkChapter readChapter(const QJsonObject &chapter) {
+        return {chapter.value("title").toString(),chapter.value("text").toString(),chapter.value("notesBefore").toString(),chapter.value("notesAfter").toString()};
+    }
     bool saveOffline(const Work &work, const QVector<WorkChapter> &chapters) {
         if (!valid(work.id) || chapters.isEmpty()) return false;
-        QJsonArray content; for (const auto &chapter : chapters) content.append(QJsonObject{{"title", chapter.title}, {"text", chapter.text}});
+        QJsonArray content; for (const auto &chapter : chapters) content.append(chapterMetadata(chapter));
         return write(cachePath(work.id), {{"work", metadata(work)}, {"chapters", content}}) && remember(work);
     }
     QVector<WorkChapter> load(const QString &id) const {
@@ -54,7 +60,7 @@ public:
         QFile file(cachePath(id)); if (!file.open(QIODevice::ReadOnly)) return {};
         const auto list = QJsonDocument::fromJson(file.readAll()).object().value("chapters").toArray();
         QVector<WorkChapter> result;
-        for (const auto &value : list) { const auto item = value.toObject(); if(item.value("text").toString().trimmed().isEmpty()) return {}; result.append({item.value("title").toString(), item.value("text").toString()}); }
+        for (const auto &value : list) { const auto item = value.toObject(); if(item.value("text").toString().trimmed().isEmpty()) return {}; result.append(readChapter(item)); }
         return result;
     }
     bool removeOffline(const QString &id) {

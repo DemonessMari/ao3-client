@@ -10,7 +10,7 @@ object LibraryBackup {
         val works=JSONArray()
         library.entries().forEach { entry ->
             val id=entry.fic.id; val chapters=library.load(id).orEmpty(); val content=JSONArray(); val positions=JSONArray(); val marks=JSONArray()
-            if(includeDownloads) chapters.forEach { content.put(JSONObject().put("title",it.title).put("text",it.text)) }
+            if(includeDownloads) chapters.forEach { content.put(it.json()) }
             fun fraction(chapter:Int,index:Int,bookOffset:Int):Double {
                 val text=chapters.getOrNull(chapter)?.text.orEmpty()
                 return if(bookOffset>=0 && text.isNotEmpty()) (bookOffset.toDouble()/text.length).coerceIn(0.0,1.0) else if(text.isNotEmpty()) (index.toDouble()/text.split(Regex("""\n\s*\n""")).size.coerceAtLeast(1)).coerceIn(0.0,1.0) else 0.0
@@ -43,7 +43,7 @@ object LibraryBackup {
             val entry=works.getJSONObject(i); val work=entry.getJSONObject("work"); val id=work.getString("id")
             val fic=Fic(id,work.optString("title"),work.optString("author"),work.optString("fandom"),work.optString("summary"),language=work.optString("language"),authorPath=work.optString("authorUrl"),rating=work.optString("rating"),warnings=work.optString("warnings"))
             library.remember(fic)
-            val content=entry.getJSONArray("chapters"); val chapters=(0 until content.length()).map { val chapter=content.getJSONObject(it); Chapter(chapter.optString("title"),chapter.getString("text")) }
+            val content=entry.getJSONArray("chapters"); val chapters=(0 until content.length()).map { val chapter=content.getJSONObject(it); Chapter.fromJson(chapter) }
             if(chapters.isNotEmpty() && library.load(id)==null) library.saveOffline(fic,chapters)
             if(entry.optBoolean("favorite")) library.favorite(id,true)
             val marks=entry.getJSONArray("bookmarks"); val existing=library.bookmarks(id)

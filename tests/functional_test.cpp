@@ -978,6 +978,46 @@ private slots:
         QCOMPARE(window.m_currentResult.totalPages, 1);
         QVERIFY(window.m_paginationWidget->isHidden());
     }
+    void chapterNotesStaySeparateAndSurviveOfflineBackup() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/work-notes.html")); QVERIFY(fixture.open(QIODevice::ReadOnly));
+        const auto chapters = extractWorkChapters(QString::fromUtf8(fixture.readAll()));
+        QCOMPARE(chapters.size(),2);
+        QVERIFY(chapters[0].notesBefore.contains("Work opening & 世界."));
+        QVERIFY(chapters[0].notesBefore.contains("Nested opening paragraph."));
+        QVERIFY(chapters[0].notesBefore.contains("Chapter one opening."));
+        QVERIFY(!chapters[0].notesBefore.contains("See the end"));
+        QVERIFY(!chapters[0].notesBefore.contains("summary"));
+        QVERIFY(chapters[0].notesAfter.contains("Chapter one ending."));
+        QVERIFY(chapters[0].notesAfter.contains("A nested quotation."));
+        QVERIFY(!chapters[0].notesAfter.contains("Work ending."));
+        QVERIFY(chapters[1].notesBefore.isEmpty());
+        QVERIFY(chapters[1].notesAfter.contains("Chapter two ending."));
+        QVERIFY(chapters[1].notesAfter.contains("Work ending."));
+        QVERIFY(!chapters[0].text.contains("opening"));
+        QVERIFY(chapters[0].text.contains("A story heading"));
+        QTemporaryDir source,destination;
+        ReadingLibrary library(source.path()); Work work; work.id="991122"; work.title="Notes test";
+        QVERIFY(library.saveOffline(work,chapters));
+        QCOMPARE(library.load(work.id)[0].notesBefore,chapters[0].notesBefore);
+        const auto backup=LibraryBackup::snapshot(library);
+        QVERIFY(LibraryBackup::merge(backup,nullptr,ReadingLibrary(destination.path())));
+        QCOMPARE(ReadingLibrary(destination.path()).load(work.id)[1].notesAfter,chapters[1].notesAfter);
+        const auto legacy=ReadingLibrary::readChapter(QJsonObject{{"title","Old"},{"text","Old offline copy"}});
+        QVERIFY(legacy.notesBefore.isEmpty()); QVERIFY(legacy.notesAfter.isEmpty());
+        ReaderWidget reader; reader.openWork(work,chapters);
+        QVERIFY(!reader.m_notes->isHidden());
+        const auto body=reader.m_browser->toPlainText();
+        QTimer::singleShot(0,[] {
+            auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            auto *notes=dialog->findChild<QTextBrowser *>("authorNotesText");
+            QVERIFY(notes); QVERIFY(notes->toPlainText().contains("Chapter one ending."));
+            dialog->reject();
+        });
+        reader.showNotes();
+        QCOMPARE(reader.m_browser->toPlainText(),body);
+        reader.showChapter(1); QCOMPARE(reader.m_browser->toPlainText(),chapters[1].text);
+    }
     void offlineLibraryAndBookmarks() {
         QTemporaryDir directory;
         Work work; work.id = "777123"; work.title = "Offline 世界"; work.author = "Author";

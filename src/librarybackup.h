@@ -10,7 +10,7 @@ public:
         QJsonArray works; QSettings settings;
         for(const auto &value:library.entries()) {
             const auto entry=value.toObject(); const auto work=ReadingLibrary::work(entry); QJsonArray chapters,marks,positions;
-            for(const auto &chapter:includeDownloads?library.load(work.id):QVector<WorkChapter>{}) chapters.append(QJsonObject{{"title",chapter.title},{"text",chapter.text}});
+            for(const auto &chapter:includeDownloads?library.load(work.id):QVector<WorkChapter>{}) chapters.append(ReadingLibrary::chapterMetadata(chapter));
             for(const auto &value:settings.value("bookmarks/"+work.id).toList()) { const auto mark=value.toMap(); marks.append(QJsonObject{{"id",mark.value("id").toString()},{"title",mark.value("title").toString()},{"chapter",mark.value("chapter").toInt()},{"fraction",mark.value("position").toDouble()}}); }
             const QString prefix="readingProgress/"+work.id+"/positions/";
             for(const auto &key:settings.allKeys()) if(key.startsWith(prefix)) positions.append(QJsonObject{{"chapter",key.mid(prefix.size()).toInt()},{"fraction",settings.value(key).toDouble()}});
@@ -39,7 +39,7 @@ public:
         QSettings settings;
         for(const auto &value:root.value("works").toArray()) {
             const auto entry=value.toObject(); const auto work=ReadingLibrary::work(entry); QVector<WorkChapter> chapters;
-            for(const auto &c:entry.value("chapters").toArray()) chapters.append({c.toObject().value("title").toString(),c.toObject().value("text").toString()});
+            for(const auto &c:entry.value("chapters").toArray()) chapters.append(ReadingLibrary::readChapter(c.toObject()));
             if(!library.remember(work) || (!chapters.isEmpty() && library.load(work.id).isEmpty() && !library.saveOffline(work,chapters)) || (entry.value("favorite").toBool() && !library.favorite(work.id,true))) { if(error) *error="Could not save imported library. Check available storage."; return false; }
             auto marks=settings.value("bookmarks/"+work.id).toList();
             for(const auto &m:entry.value("bookmarks").toArray()) { const auto mark=m.toObject(); bool exists=false; for(const auto &v:marks) { const auto old=v.toMap(); if(old.value("title").toString()==mark.value("title").toString() && old.value("chapter").toInt()==mark.value("chapter").toInt() && qAbs(old.value("position").toDouble()-mark.value("fraction").toDouble())<.00001) exists=true; } if(!exists) marks.append(QVariantMap{{"id",mark.value("id").toString()},{"title",mark.value("title").toString()},{"chapter",mark.value("chapter").toInt()},{"position",mark.value("fraction").toDouble()}}); }

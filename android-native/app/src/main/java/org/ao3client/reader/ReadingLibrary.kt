@@ -55,13 +55,13 @@ class ReadingLibrary(private val root: File) {
     }
     @Synchronized fun saveOffline(fic: Fic, chapters: List<Chapter>) {
         id(fic.id); require(chapters.isNotEmpty())
-        val content = JSONArray(); chapters.forEach { content.put(JSONObject().put("title", it.title).put("text", it.text)) }
+        val content = JSONArray(); chapters.forEach { content.put(it.json()) }
         write("${fic.id}.json", JSONObject().put("fic", ficJson(fic)).put("chapters", content).toString()); remember(fic)
     }
     @Synchronized fun load(ficId: String): List<Chapter>? {
         val file = File(root, "${id(ficId)}.json"); if(!file.exists()) return null
         val data = try { JSONObject(file.readText()).getJSONArray("chapters") } catch(e:Exception) { error("The saved fic is damaged. Remove its offline copy from Library and download again. Your bookmarks are kept.") }
-        val result = (0 until data.length()).map { val chapter = data.getJSONObject(it); Chapter(chapter.getString("title"), chapter.getString("text")) }
+        val result = (0 until data.length()).map { val chapter = data.getJSONObject(it); Chapter.fromJson(chapter) }
         check(result.isNotEmpty() && result.all { it.text.isNotBlank() }) { "The saved fic is damaged. Remove its offline copy and try downloading again." }
         return result
     }

@@ -42,6 +42,8 @@ signals:
     void preferencesChanged();
 private:
     void showChapter(int index);
+    void showNotes();
+    QPushButton *m_notes = nullptr;
     void renderText(const QString &text, double fraction = -1);
     QString progressKey() const;
     BookView *m_book = nullptr;

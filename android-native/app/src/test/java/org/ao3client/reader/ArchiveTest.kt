@@ -34,6 +34,24 @@ class ArchiveTest {
         val multi = """<div id="chapters"><div class="chapter"><h3 class="title">First</h3><div class="userstuff module"><p>One</p></div></div><div class="chapter"><h3 class="title">Second</h3><div class="userstuff module"><p>Two</p></div></div></div>"""
         assertEquals(listOf("First", "Second"), ArchiveParser.chapters(multi).map { it.title })
     }
+    @Test fun notesAreScopedToTheRightChapterAndExcludeJumpLinks() {
+        val html=javaClass.classLoader!!.getResourceAsStream("work-notes.html")!!.bufferedReader().use { it.readText() }
+        val chapters=ArchiveParser.chapters(html)
+        assertEquals(2,chapters.size)
+        assertTrue(chapters[0].notesBefore.contains("Work opening & 世界."))
+        assertTrue(chapters[0].notesBefore.contains("Nested opening paragraph."))
+        assertTrue(chapters[0].notesBefore.contains("Chapter one opening."))
+        assertFalse(chapters[0].notesBefore.contains("See the end"))
+        assertFalse(chapters[0].notesBefore.contains("summary"))
+        assertTrue(chapters[0].notesAfter.contains("Chapter one ending."))
+        assertTrue(chapters[0].notesAfter.contains("A nested quotation."))
+        assertFalse(chapters[0].notesAfter.contains("Work ending."))
+        assertEquals("",chapters[1].notesBefore)
+        assertTrue(chapters[1].notesAfter.contains("Chapter two ending."))
+        assertTrue(chapters[1].notesAfter.contains("Work ending."))
+        assertFalse(chapters[0].text.contains("opening"))
+        assertTrue(chapters[0].text.contains("A story heading"))
+    }
     @Test fun fullWorkKeepsFiveDistinctChaptersAndTitles() {
         val html = "<div id='chapters'>" + (1..5).joinToString("") { i ->
             """<div id="chapter-$i" class="chapter"><div class="chapter preface group"><h3 class="title">Chapter $i: Title $i</h3><div class="summary module"><blockquote class="userstuff">Summary $i</blockquote></div></div><div class="userstuff module" role="article"><h3 class="landmark">Chapter Text</h3><p>Unique story $i.</p></div><div class="end notes module"><blockquote class="userstuff">Notes $i</blockquote></div></div>"""

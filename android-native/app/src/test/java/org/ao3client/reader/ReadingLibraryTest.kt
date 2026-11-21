@@ -11,7 +11,7 @@ class ReadingLibraryTest {
     private val fic = Fic("123", "Title 世界", "Author", summary = "Summary")
     @Test fun offlineCopySurvivesNewInstanceAndKeepsOriginalChapters() {
         val root = directory.newFolder(); val library = ReadingLibrary(root)
-        val chapters = listOf(Chapter("First", "Bonjour 世界 😀"), Chapter("Second", "Original text"))
+        val chapters = listOf(Chapter("First", "Bonjour 世界 😀", "Before 世界", "After notes"), Chapter("Second", "Original text"))
         library.saveOffline(fic, chapters)
         val reopened = ReadingLibrary(root)
         assertEquals(chapters, reopened.load("123"))

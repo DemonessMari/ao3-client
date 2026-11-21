@@ -15,6 +15,57 @@ QStringList classes(const QString &html)
 {
     return attribute(html, QStringLiteral("class")).split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
 }
+
+void attachNotes(const QString &html, QVector<WorkChapter> &chapters, const QVector<QPair<int,int>> &bodies)
+{
+    struct Node { QString tag; QStringList names; int parent, start, end = -1; };
+    QVector<Node> nodes;
+    QVector<int> stack;
+    const QRegularExpression elements(QStringLiteral("<!--.*?-->|<(/?)(div|blockquote)\\b([^>]*)>"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    auto matches = elements.globalMatch(html);
+    while (matches.hasNext()) {
+        const auto tag = matches.next();
+        if (tag.captured().startsWith(QStringLiteral("<!--"))) continue;
+        if (tag.captured(1).isEmpty()) {
+            nodes.append({tag.captured(2).toLower(), classes(tag.captured(3)),
+                stack.isEmpty() ? -1 : stack.last(), int(tag.capturedEnd())});
+            stack.append(nodes.size() - 1);
+        } else if (!stack.isEmpty() && nodes[stack.last()].tag == tag.captured(2).toLower()) {
+            nodes[stack.takeLast()].end = tag.capturedStart();
+        }
+    }
+    for (int i = 0; i < nodes.size(); ++i) {
+        const auto &node = nodes[i];
+        if (node.end < 0 || !node.names.contains("userstuff")) continue;
+        int notes = -1, chapter = -1;
+        bool nested = false;
+        for (int parent = node.parent; parent >= 0; parent = nodes[parent].parent) {
+            const auto &ancestor = nodes[parent];
+            if (ancestor.names.contains("userstuff")) nested = true;
+            if (notes < 0 && ancestor.names.contains("notes")) notes = parent;
+            if (chapter < 0 && ancestor.names.contains("chapter") && !ancestor.names.contains("preface")) chapter = parent;
+        }
+        if (nested || notes < 0) continue;
+        int target = -1;
+        for (int c = 0; c < bodies.size(); ++c) {
+            if (node.start >= bodies[c].first && node.start < bodies[c].second) { target = -2; break; }
+            if (chapter >= 0 && bodies[c].first >= nodes[chapter].start && bodies[c].second <= nodes[chapter].end) target = c;
+        }
+        if (target == -2) continue;
+        if (target < 0) {
+            if (chapter >= 0) continue;
+            target = node.start < bodies.first().first ? 0 : chapters.size() - 1;
+        }
+        QTextDocument document;
+        document.setHtml(html.mid(node.start, node.end - node.start));
+        const auto text = document.toPlainText().trimmed();
+        if (text.isEmpty()) continue;
+        QString &destination = node.start < bodies[target].first ? chapters[target].notesBefore : chapters[target].notesAfter;
+        if (!destination.isEmpty()) destination += QStringLiteral("\n\n");
+        destination += text;
+    }
+}
 }
 
 QVector<WorkChapter> extractWorkChapters(const QString &html)
@@ -22,6 +73,7 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
     const QRegularExpression divs(QStringLiteral("<!--.*?-->|<(/?)div\\b([^>]*)>"),
         QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
     QVector<WorkChapter> chapters;
+    QVector<QPair<int,int>> bodies;
     int previousBodyEnd = 0;
     QVector<bool> excluded;
     int chaptersDepth = -1;
@@ -80,6 +132,7 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                     }
                     if (title.isEmpty()) title = QStringLiteral("Chapter %1").arg(chapters.size() + 1);
                     chapters.append({title, text});
+                    bodies.append({bodyStart, int(tag.capturedStart())});
                 }
                 previousBodyEnd = tag.capturedEnd();
                 bodyStart = -1;
@@ -88,6 +141,7 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
             if (!excluded.isEmpty()) excluded.removeLast();
         }
     }
+    if (!chapters.isEmpty()) attachNotes(html, chapters, bodies);
     return chapters;
 }
 

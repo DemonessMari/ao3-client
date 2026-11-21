@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
     var tools by remember { mutableStateOf(false) }
     var translationConsent by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(false) }
+    var notes by remember(vm.chapter) { mutableStateOf(false) }
+    val currentChapter = vm.chapters[vm.chapter]
     var chaptersMenu by remember { mutableStateOf(false) }
     var bookmarksMenu by remember { mutableStateOf(false) }
     var bookmarkDialog by remember { mutableStateOf(false) }
@@ -48,7 +50,7 @@ import kotlinx.coroutines.launch
     val ioScope=rememberCoroutineScope()
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         uri?.let { ioScope.launch { try {
-            val content = fic.title + "\nby " + fic.author + "\n\n" + vm.chapters.joinToString("\n\n") { it.title + "\n\n" + it.text }
+            val content = fic.title + "\nby " + fic.author + "\n\n" + vm.chapters.joinToString("\n\n") { it.exportText() }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { context.contentResolver.openOutputStream(it)?.bufferedWriter()?.use { writer -> writer.write(content) } ?: error("Unable to open file") }
         } catch (e: Exception) { vm.error = e.message } } }
     }
@@ -62,7 +64,7 @@ import kotlinx.coroutines.launch
     LaunchedEffect(scroll, chapterIndex, vm.translation, vm.bookMode) {
         snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; vm.saveProgress() } }
     }
-    BackHandler { when { appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
+    BackHandler { when { notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
     Scaffold(
         topBar = { if(!hideChrome) TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } }) },
         bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
@@ -80,7 +82,10 @@ import kotlinx.coroutines.launch
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
                 if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
-                if(!vm.textOnly) Text(vm.chapters[vm.chapter].title, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+                if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(currentChapter.title,Modifier.weight(1f).padding(vertical=6.dp),style=MaterialTheme.typography.labelLarge)
+                    if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) TextButton(onClick={notes=true}) { Text("Author notes") }
+                }
                 if(!vm.textOnly) vm.error?.let { ErrorCard(it) { vm.error = null } }
                 if(vm.translating && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.translationProgress, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium) }
                 if(vm.translation != null && !vm.textOnly) Text("Machine translation · ${vm.preferences.language}", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
@@ -111,6 +116,7 @@ import kotlinx.coroutines.launch
             Text("Reading options", style = MaterialTheme.typography.titleLarge)
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
             MenuRow("Comments",onClick={tools=false;vm.showComments(fic.id)})
+            if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) MenuRow("Author notes",onClick={tools=false;notes=true})
             MenuRow("Add bookmark", onClick = { tools = false; bookmarkName = vm.chapters[vm.chapter].title; bookmarkDialog = true })
             MenuRow("Bookmarks · ${vm.bookmarks.size}", onClick = { tools = false; bookmarksMenu = true })
             MenuRow("Reading appearance", supportingText = "Theme, font, text size and line spacing · applies immediately", onClick = { tools = false; appearance = true })
@@ -129,6 +135,18 @@ import kotlinx.coroutines.launch
             HorizontalDivider()
             Ao3WorkLinks(fic.id)
             MenuRow("Start from the beginning", onClick = { tools = false; vm.restart() })
+        }
+    }
+    if(notes) ModalBottomSheet(onDismissRequest={notes=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),shape=RoundedCornerShape(topStart=16.dp,topEnd=16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            Text("Author notes",style=MaterialTheme.typography.titleLarge)
+            SelectionContainer {
+                Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    if(currentChapter.notesBefore.isNotBlank()) { Text("Before chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesBefore,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
+                    if(currentChapter.notesAfter.isNotBlank()) { Text("After chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesAfter,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
+                }
+            }
+            Button(onClick={notes=false},modifier=Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
     if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("Chapter text will be sent to your translation service.")},confirmButton={TextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={TextButton(onClick={translationConsent=false}) { Text("Cancel") }})

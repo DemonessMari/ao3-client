@@ -9,6 +9,15 @@ import java.io.File
 class LibraryBackupTest {
     @get:Rule val directory=TemporaryFolder()
     private fun fixture()=JSONObject(javaClass.classLoader!!.getResourceAsStream("library-backup-v1.json")!!.bufferedReader().use { it.readText() })
+    @Test fun notesSurviveBackupAndLegacyCopiesStillLoad() {
+        val source=ReadingLibrary(directory.newFolder()); val destination=ReadingLibrary(directory.newFolder())
+        val chapters=listOf(Chapter("One","Story text","Before 世界","After chapter"))
+        source.saveOffline(Fic("442211","Notes","Writer"),chapters)
+        LibraryBackup.merge(LibraryBackup.snapshot(source,MemoryPreferences()),destination,MemoryPreferences())
+        assertEquals(chapters,destination.load("442211"))
+        val old=Chapter.fromJson(JSONObject().put("title","Old").put("text","Old copy"))
+        assertEquals("",old.notesBefore); assertEquals("",old.notesAfter)
+    }
     @Test fun desktopFixtureImportsAndRepeatedMergesKeepOneBookmark() {
         val library=ReadingLibrary(directory.newFolder()); val prefs=MemoryPreferences()
         prefs.edit().putString("cookies","PRIVATE_COOKIE").putString("apiKey","PRIVATE_KEY").apply()
