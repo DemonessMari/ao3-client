@@ -4,6 +4,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include "workmodel.h"
+#include "commentpage.h"
 #include "searchfilters.h"
 #include "loginmanager.h"
 
@@ -23,6 +24,9 @@ public:
     void checkSession();
     void logout();
     void fetchDashboard();
+    void fetchCommentForm(const QString &workId,const QString &replyId={});
+    void submitComment(const QString &workId,const CommentForm &form,const QString &text,const QString &pseud={},const QString &guestName={},const QString &guestEmail={});
+    void fetchComments(const QString &workId,int page=1);
     void fetchUserWorks(int page = 1);
     void fetchAuthorProfile(const QString &username);
     void fetchAuthorWorks(const QString &username, int page = 1, bool bookmarks = false);
@@ -37,6 +41,9 @@ signals:
     void workChaptersFetched(const QString &workId, const QString &title, const QVector<WorkChapter> &chapters);
     void workContentFetched(const QString &workId, const QString &title, const QString &contentHtml);
     void workDownloaded(const QString &workId, const QString &fullHtml);
+    void commentFormFetched(const QString &workId,const CommentForm &form);
+    void commentSubmitted(const QString &workId,const CommentSubmission &result);
+    void commentsFetched(const QString &workId,const CommentPage &page);
     void errorOccurred(const QString &error);
     void loginSuccessful(const UserInfo &user);
     void loginFailed(const QString &reason);
@@ -57,6 +64,8 @@ private:
     QNetworkAccessManager *m_manager;
     LoginManager *m_loginManager;
     QString m_userAgent;
+    quint64 m_commentsGeneration = 0;
+    quint64 m_commentFormGeneration = 0;
     quint64 m_profileGeneration = 0;
     quint64 m_authGeneration = 0;
     quint64 m_listingGeneration = 0;

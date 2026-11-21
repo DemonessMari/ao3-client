@@ -144,6 +144,8 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_browser->viewport()->installEventFilter(this);
     page->addWidget(m_browser, 1); page->addStretch(); layout->addLayout(page, 1);
     QPushButton *desktopOnline=nullptr;
+    auto *comments = new QPushButton("Comments",this); comments->setObjectName("readerComments"); layout->addWidget(comments);
+    connect(comments,&QPushButton::clicked,this,[this] {saveProgress();if(!m_work.id.isEmpty())emit commentsRequested(m_work.id);});
     if(!mobileUi()) { auto *online=new QPushButton("Open on AO3 (browser)",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_work.id+"?show_comments=true#comments")); }); }
     auto *bottom = new QHBoxLayout;
     m_bottomPrevious = new QPushButton(QStringLiteral("Previous chapter"), this);

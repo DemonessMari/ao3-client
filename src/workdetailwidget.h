@@ -19,6 +19,7 @@ public:
     Work currentWork() const { return m_currentWork; }
 
 signals:
+    void commentsRequested(const QString &workId);
     void readRequested(const QString &workId);
     void profileRequested(const QString &authorUrl);
     void downloadRequested(const Work &work);

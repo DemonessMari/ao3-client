@@ -110,6 +110,7 @@ import kotlinx.coroutines.launch
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Reading options", style = MaterialTheme.typography.titleLarge)
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
+            MenuRow("Comments",onClick={tools=false;vm.showComments(fic.id)})
             MenuRow("Add bookmark", onClick = { tools = false; bookmarkName = vm.chapters[vm.chapter].title; bookmarkDialog = true })
             MenuRow("Bookmarks · ${vm.bookmarks.size}", onClick = { tools = false; bookmarksMenu = true })
             MenuRow("Reading appearance", supportingText = "Theme, font, text size and line spacing · applies immediately", onClick = { tools = false; appearance = true })

@@ -37,6 +37,7 @@ protected:
     bool eventFilter(QObject *, QEvent *) override;
 signals:
     void backRequested();
+    void commentsRequested(const QString &workId);
     void fullscreenRequested();
     void preferencesChanged();
 private:

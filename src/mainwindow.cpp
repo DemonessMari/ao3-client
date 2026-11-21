@@ -547,6 +547,60 @@ void MainWindow::setupUI()
     profileActions->addWidget(authorWorks); profileActions->addWidget(authorBookmarks); profileLayout->addLayout(profileActions);
     m_profileText = new QTextBrowser(m_profilePage); profileLayout->addWidget(m_profileText, 1); m_contentStack->addWidget(m_profilePage);
     connect(authorWorks, &QPushButton::clicked, this, [this] { showAuthorListing(false); }); connect(authorBookmarks, &QPushButton::clicked, this, [this] { showAuthorListing(true); });
+    m_commentsPage=new QWidget(m_contentStack); auto *commentsLayout=new QVBoxLayout(m_commentsPage);
+    auto *commentsNavigation=new QHBoxLayout; auto *commentsBack=new QPushButton("Back",m_commentsPage); commentsNavigation->addWidget(commentsBack);
+    commentsNavigation->addWidget(new QLabel("Comments",m_commentsPage),1);
+    auto *commentsRefresh=new QPushButton("Refresh",m_commentsPage); commentsNavigation->addWidget(commentsRefresh); commentsLayout->addLayout(commentsNavigation);
+    m_commentsText=new QTextBrowser(m_commentsPage); m_commentsText->setObjectName("commentsText"); m_commentsText->setOpenLinks(false); commentsLayout->addWidget(m_commentsText,1);
+    auto *commentPages=new QHBoxLayout; m_commentsPrevious=new QPushButton("Previous",m_commentsPage);m_commentsNext=new QPushButton("Next",m_commentsPage);m_commentsNumber=new QLabel(m_commentsPage);
+    commentPages->addWidget(m_commentsPrevious);commentPages->addWidget(m_commentsNumber,1,Qt::AlignCenter);commentPages->addWidget(m_commentsNext);commentsLayout->addLayout(commentPages);m_contentStack->addWidget(m_commentsPage);
+    m_commentNew=new QPushButton("Add comment",m_commentsPage);commentsNavigation->addWidget(m_commentNew);
+    m_commentEditor=new QWidget(m_commentsPage);auto *editorLayout=new QVBoxLayout(m_commentEditor);
+    m_commentNotice=new QLabel(m_commentEditor);m_commentNotice->setWordWrap(true);editorLayout->addWidget(m_commentNotice);
+    m_commentPseud=new QComboBox(m_commentEditor);editorLayout->addWidget(m_commentPseud);
+    m_commentName=new QLineEdit(m_commentEditor);m_commentName->setPlaceholderText("Name");editorLayout->addWidget(m_commentName);
+    m_commentEmail=new QLineEdit(m_commentEditor);m_commentEmail->setPlaceholderText("Email (not displayed)");editorLayout->addWidget(m_commentEmail);
+    m_commentDraft=new QTextEdit(m_commentEditor);m_commentDraft->setAcceptRichText(false);m_commentDraft->setPlaceholderText("Comment");m_commentDraft->setMaximumHeight(160);editorLayout->addWidget(m_commentDraft);
+    auto *editorActions=new QHBoxLayout;m_commentPost=new QPushButton("Post",m_commentEditor);m_commentClose=new QPushButton("Close",m_commentEditor);editorActions->addWidget(m_commentPost);editorActions->addWidget(m_commentClose);editorLayout->addLayout(editorActions);
+    commentsLayout->insertWidget(1,m_commentEditor);m_commentEditor->hide();
+    connect(m_commentNew,&QPushButton::clicked,this,[this] {composeComment();});
+    connect(m_commentClose,&QPushButton::clicked,this,[this] {if(!m_commentSending)m_commentEditor->hide();});
+    connect(m_commentsText,&QTextBrowser::anchorClicked,this,[this](const QUrl &url) {if(url.scheme()=="reply")composeComment(url.path());});
+    connect(m_client,&AO3Client::commentFormFetched,this,[this](const QString &id,const CommentForm &form) {
+        if(id!=m_commentsWork || form.context!=m_commentContext)return;
+        if(!form.error.isEmpty()) {onError(form.error);return;}
+        m_commentForm=form;m_commentNotice->setText((form.context.isEmpty()?QString("New comment"):QString("Reply to comment #%1").arg(form.context))+"\n"+form.notice);m_commentPseud->clear();
+        for(const auto &p:form.pseuds)m_commentPseud->addItem(p.second,p.first);
+        m_commentPseud->setCurrentIndex(qMax(0,m_commentPseud->findData(form.hidden.value("comment[pseud_id]"))));m_commentPseud->setVisible(form.pseuds.size()>1);
+        m_commentName->setVisible(form.guest);m_commentEmail->setVisible(form.guest);m_commentPost->setEnabled(!m_commentUncertain);
+        m_commentEditor->show();m_commentDraft->setFocus();
+    });
+    connect(m_commentPost,&QPushButton::clicked,this,[this] {
+        if(m_commentSending || m_commentUncertain || m_commentDraft->toPlainText().trimmed().isEmpty())return;
+        m_commentSending=true;m_commentEditor->setEnabled(false);m_commentNew->setEnabled(false);
+        m_client->submitComment(m_commentsWork,m_commentForm,m_commentDraft->toPlainText(),m_commentPseud->currentData().toString(),m_commentName->text(),m_commentEmail->text());
+    });
+    connect(m_client,&AO3Client::commentSubmitted,this,[this](const QString &id,const CommentSubmission &result) {
+        if(id!=m_commentsWork)return;
+        m_commentSending=false;m_commentEditor->setEnabled(true);m_commentUncertain=result.uncertain;m_commentPost->setEnabled(!m_commentUncertain);m_commentNew->setEnabled(!m_commentUncertain);
+        if(!result.error.isEmpty()) {m_commentNotice->setText(result.error);return;}
+        m_commentDraft->clear();m_commentEditor->hide();statusBar()->showMessage(result.notice);if(m_contentStack->currentWidget()==m_commentsPage)showComments(id,m_commentsCurrent);
+    });
+    connect(commentsBack,&QPushButton::clicked,this,[this] {m_contentStack->setCurrentIndex(m_commentsReturn);});
+    connect(commentsRefresh,&QPushButton::clicked,this,[this] {showComments(m_commentsWork,m_commentsCurrent);});
+    connect(m_commentsPrevious,&QPushButton::clicked,this,[this] {showComments(m_commentsWork,m_commentsCurrent-1);});
+    connect(m_commentsNext,&QPushButton::clicked,this,[this] {showComments(m_commentsWork,m_commentsCurrent+1);});
+    connect(m_detailWidget,&WorkDetailWidget::commentsRequested,this,[this](const QString &id){showComments(id);});
+    connect(m_reader,&ReaderWidget::commentsRequested,this,[this](const QString &id){showComments(id);});
+    connect(m_client,&AO3Client::commentsFetched,this,[this](const QString &id,const CommentPage &page) {
+        if(id!=m_commentsWork)return;
+        m_commentUncertain=false;m_commentPost->setEnabled(true);m_commentNew->setEnabled(!m_commentSending);
+        m_commentsCurrent=page.page;m_commentsNumber->setText(QString("%1 / %2").arg(page.page).arg(page.pages));
+        m_commentsPrevious->setEnabled(page.page>1);m_commentsNext->setEnabled(page.page<page.pages);
+        QString html;
+        for(const auto &comment:page.comments) html+=QString("<div style='margin-left:%1px'><h3>%2</h3><p>%3</p><p>%4</p><a href=\"reply:%5\">Reply</a></div><hr>").arg(qMin(comment.depth,4)*16).arg(comment.author.toHtmlEscaped(),comment.date.toHtmlEscaped(),QString(comment.text).toHtmlEscaped().replace("\n","<br>"),comment.id);
+        m_commentsText->setHtml(html.isEmpty()?"No comments.":html);
+    });
     mainLayout->addWidget(m_contentStack, 1);
     if (mobileUi()) {
         m_mobileStatus = new QLabel(centralWidget); m_mobileStatus->setWordWrap(true);
@@ -646,6 +700,7 @@ void MainWindow::onWorkSelected(int index)
 void MainWindow::onError(const QString &error)
 {
     statusBar()->showMessage(QStringLiteral("Error: %1").arg(error));
+    if(m_commentsText && m_contentStack->currentWidget()==m_commentsPage && m_commentsText->toPlainText()=="Loading comments...")m_commentsText->setPlainText(error);
 }
 
 void MainWindow::onLoginClicked()
@@ -702,6 +757,7 @@ void MainWindow::onLogout()
     if (m_contentStack->currentWidget() == m_reader) closeReader();
     m_reader->clear();
     m_client->logout();
+    m_commentSending=false;m_commentUncertain=false;m_commentEditor->setEnabled(true);m_commentEditor->hide();m_commentDraft->clear();m_commentEmail->clear();m_commentsWork.clear();
     m_showingUserWorks = false;
     m_currentResult = SearchResult();
     m_workList->clear();
@@ -874,6 +930,7 @@ bool MainWindow::navigateBack()
 {
     m_pendingReadId.clear();
     QGuiApplication::inputMethod()->hide();
+    if (m_contentStack->currentWidget() == m_commentsPage) {m_contentStack->setCurrentIndex(m_commentsReturn);return true;}
     if (m_contentStack->currentWidget() == m_reader && m_reader->closeOptions()) return true;
     if (m_contentStack->currentWidget() == m_reader && isFullScreen()) {
         showNormal(); m_reader->setFullscreen(false); return true;
@@ -938,4 +995,18 @@ void MainWindow::showAuthorListing(bool bookmarks)
     m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
     m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
     statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
+}
+
+void MainWindow::showComments(const QString &workId,int page) {
+    if(m_contentStack->currentWidget()!=m_commentsPage)m_commentsReturn=m_contentStack->currentIndex();
+    if(m_commentSending)return;
+    if(workId!=m_commentsWork) {m_commentDraft->clear();m_commentEditor->hide();m_commentUncertain=false;}
+    m_commentsWork=workId;m_commentsCurrent=qMax(1,page);
+    m_commentsPrevious->setEnabled(false);m_commentsNext->setEnabled(false);m_commentsText->setPlainText("Loading comments...");
+    m_contentStack->setCurrentWidget(m_commentsPage);m_client->fetchComments(workId,m_commentsCurrent);
+}
+
+void MainWindow::composeComment(const QString &replyId) {
+    if(m_commentSending || m_commentUncertain)return;
+    m_commentContext=replyId;m_client->fetchCommentForm(m_commentsWork,replyId);
 }

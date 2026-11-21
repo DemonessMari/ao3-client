@@ -184,6 +184,23 @@ class Archive(private val prefs: SharedPreferences) {
     fun rememberedUsername(): String? = synchronized(cookieLock) {
         prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
     }
+    fun commentForm(workId:String,replyId:String=""):CommentForm {
+        require(workId.matches(Regex("\\d+")) && (replyId.isEmpty() || replyId.matches(Regex("\\d+"))))
+        val path=if(replyId.isEmpty()) "/works/$workId/comments/new" else "/comments/$replyId/comments/new"
+        return parseCommentForm(request(path)).copy(context=replyId)
+    }
+    fun postComment(form:CommentForm,text:String,pseud:String="",guestName:String="",guestEmail:String=""):CommentSubmission {
+        require(validCommentAction(form.action) && text.isNotBlank() && !form.hidden["authenticity_token"].isNullOrBlank())
+        val fields=form.hidden.toMutableMap();fields["comment[comment_content]"]=text
+        if(pseud.isNotBlank()) { require(form.pseuds.any { it.first==pseud });fields["comment[pseud_id]"]=pseud }
+        if(form.guest) { require(guestName.isNotBlank() && guestEmail.isNotBlank());fields["comment[name]"]=guestName.trim();fields["comment[email]"]=guestEmail.trim() }
+        val uri=URI(BASE).resolve(form.action);val path=uri.rawPath+(uri.rawQuery?.let { "?$it" } ?: "")
+        return parseCommentSubmission(request(path,fields))
+    }
+    fun comments(workId:String,page:Int=1):CommentPage {
+        require(workId.matches(Regex("\\d+")) && page>0)
+        return CommentParser.parse(request("/works/$workId/comments?page=$page"),page)
+    }
     fun session(): String? {
         val generation = cookieGeneration
         val user = ArchiveParser.sessionIdentity(request("/"))

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QTextEdit>
 #include <QDockWidget>
 #include <QLineEdit>
 #include <QPushButton>
@@ -48,6 +49,24 @@ private slots:
 
 private:
     void setupUI();
+    void showComments(const QString &workId,int page=1);
+    void composeComment(const QString &replyId={});
+    QWidget *m_commentEditor=nullptr;
+    QTextEdit *m_commentDraft=nullptr;
+    QLineEdit *m_commentName=nullptr,*m_commentEmail=nullptr;
+    QComboBox *m_commentPseud=nullptr;
+    QPushButton *m_commentPost=nullptr,*m_commentClose=nullptr,*m_commentNew=nullptr;
+    QLabel *m_commentNotice=nullptr;
+    CommentForm m_commentForm;
+    QString m_commentContext;
+    bool m_commentSending=false,m_commentUncertain=false;
+    QWidget *m_commentsPage=nullptr;
+    QTextBrowser *m_commentsText=nullptr;
+    QPushButton *m_commentsPrevious=nullptr,*m_commentsNext=nullptr;
+    QLabel *m_commentsNumber=nullptr;
+    QString m_commentsWork;
+    int m_commentsCurrent=1,m_commentsReturn=0;
+
     bool navigateBack();
     void showLibrary();
     void showProfile(const QString &authorUrl);

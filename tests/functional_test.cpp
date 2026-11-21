@@ -88,6 +88,54 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void commentFormsAndPosting() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/comment-form.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=fixture.readAll();
+        const auto form=parseCommentForm(QString::fromUtf8(html));QVERIFY2(form.error.isEmpty(),qPrintable(form.error));
+        QCOMPARE(form.hidden.value("authenticity_token"),QString("csrf+&=token"));QCOMPARE(form.hidden.value("comment[pseud_id]"),QString("12"));
+        QCOMPARE(form.pseuds.size(),2);QVERIFY(form.notice.contains("moderated"));QVERIFY(!form.guest);
+        QVERIFY(!validCommentAction("https://example.invalid/comments"));QVERIFY(!validCommentAction("//example.invalid/comments"));
+        QVERIFY(!parseCommentForm(QString::fromUtf8(html).replace("/works/123/comments","https://example.invalid/comments")).error.isEmpty());
+        QVERIFY(parseCommentSubmission("<p id='comment_notice'>Comment awaiting moderation.</p>").notice.contains("moderation"));
+        QVERIFY(!parseCommentSubmission("<div id='errorExplanation'>Comment is too long.</div>").uncertain);
+        QVERIFY(parseCommentSubmission("<h1>Maintenance</h1>").uncertain);
+        MainWindow window;window.show();auto *network=installNetwork(window);QTest::qWait(30);network->page=html;
+        window.m_commentsWork="123";window.m_contentStack->setCurrentWidget(window.m_commentsPage);window.composeComment();
+        QTRY_VERIFY(!window.m_commentForm.action.isEmpty());QCOMPARE(network->operations.last(),QNetworkAccessManager::GetOperation);
+        QCOMPARE(network->requests.last().path(),QString("/works/123/comments/new"));
+        window.m_commentDraft->setPlainText("A+B & 世界 %2B=100%\nSecond line");network->page="<p id='comment_notice'>Comment awaiting moderation.</p>";
+        const int before=network->requests.size();window.m_commentPost->click();window.m_commentPost->click();
+        QTRY_VERIFY(!window.m_commentSending);QVERIFY(window.m_commentDraft->toPlainText().isEmpty());
+        int posts=0;for(int i=before;i<network->operations.size();++i)if(network->operations[i]==QNetworkAccessManager::PostOperation) {
+            ++posts;QMap<QString,QString> body;for(const auto &pair:network->bodies[i].split('&')) {const int eq=pair.indexOf('=');body[QUrl::fromPercentEncoding(pair.left(eq))]=QUrl::fromPercentEncoding(pair.mid(eq+1));}
+            QCOMPARE(body.value("comment[comment_content]"),QString("A+B & 世界 %2B=100%\nSecond line"));QCOMPARE(body.value("authenticity_token"),QString("csrf+&=token"));
+        }
+        QCOMPARE(posts,1);
+        network->page=html;window.composeComment();QTRY_VERIFY(window.m_commentEditor->isVisible());window.m_commentDraft->setPlainText("Keep this draft");
+        network->fail=true;window.m_commentPost->click();QTRY_VERIFY(!window.m_commentSending);
+        QVERIFY(window.m_commentUncertain);QCOMPARE(window.m_commentDraft->toPlainText(),QString("Keep this draft"));QVERIFY(!window.m_commentPost->isEnabled());
+        const int failedCount=network->requests.size();window.m_commentPost->click();QCOMPARE(network->requests.size(),failedCount);
+
+    }
+    void commentsParsingAndNavigation() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/comments-page.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(fixture.readAll());
+        const auto parsed=parseCommentPage(html);
+        QVERIFY(parsed.error.isEmpty());QCOMPARE(parsed.comments.size(),3);QCOMPARE(parsed.pages,4);
+        QCOMPARE(parsed.comments[0].id,QString("101"));QCOMPARE(parsed.comments[0].author,QString("Pen"));
+        QVERIFY(parsed.comments[0].text.contains("Hello & 世界."));QVERIFY(parsed.comments[0].text.contains("A quoted line."));
+        QVERIFY(!parsed.comments[0].text.contains("private@example.invalid"));QVERIFY(!parsed.comments[0].text.contains("192.0.2.1"));
+        QCOMPARE(parsed.comments[1].depth,1);QCOMPARE(parsed.comments[1].author,QString("Guest"));QCOMPARE(parsed.comments[1].text,QString("Reply text."));
+        QVERIFY(parsed.comments[2].text.contains("deleted"));
+        QVERIFY(!parseCommentPage("<h1>Maintenance</h1>").error.isEmpty());
+        QVERIFY(parseCommentPage("<div id='comments_placeholder'></div>").comments.isEmpty());
+        MainWindow window;window.show();auto *network=installNetwork(window);QTest::qWait(30);network->page=html.toUtf8();
+        window.showComments("123");
+        QTRY_VERIFY(window.m_commentsText->toPlainText().contains("Hello & 世界."));
+        QCOMPARE(network->requests.last().path(),QString("/works/123/comments"));
+        QCOMPARE(window.m_contentStack->currentWidget(),window.m_commentsPage);QVERIFY(window.m_commentsNext->isEnabled());
+        QTest::mouseClick(window.m_commentsNext,Qt::LeftButton);
+        QTRY_COMPARE(window.m_commentsCurrent,2);QCOMPARE(QUrlQuery(network->requests.last()).queryItemValue("page"),QString("2"));
+        QVERIFY(window.navigateBack());QVERIFY(window.m_contentStack->currentWidget()!=window.m_commentsPage);
+    }
     void initTestCase() {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         QStandardPaths::setTestModeEnabled(true);

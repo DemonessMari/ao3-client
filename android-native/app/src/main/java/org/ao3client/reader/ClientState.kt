@@ -39,6 +39,53 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var translation by mutableStateOf<String?>(null)
     var translating by mutableStateOf(false)
     var translationProgress by mutableStateOf("")
+    var commentsPage by mutableStateOf<CommentPage?>(null)
+    var commentsWork=""
+    var commentsReturn="details"
+    fun showComments(workId:String,page:Int=1) {
+        if(commentSending && workId!=commentsWork)return
+        if(screen!="comments") { commentsReturn=screen;commentsPage=null; }
+        if(commentsWork!=workId) { commentForm=null;commentDraft="";commentUncertain=false;++commentFormRevision }
+        commentsWork=workId; navigate("comments")
+        load { commentsPage=withContext(Dispatchers.IO) { archive.comments(workId,page) };commentUncertain=false }
+    }
+    var commentForm by mutableStateOf<CommentForm?>(null)
+    var commentDraft by mutableStateOf("")
+    var commentName by mutableStateOf("")
+    var commentEmail by mutableStateOf("")
+    var commentPseud by mutableStateOf("")
+    var commentSending by mutableStateOf(false)
+    var commentUncertain by mutableStateOf(false)
+    private var commentFormRevision=0
+    fun composeComment(replyId:String="") {
+        if(commentSending || commentUncertain) return
+        val revision=++commentFormRevision;val work=commentsWork
+        load {
+            val form=withContext(Dispatchers.IO) { archive.commentForm(work,replyId) }
+            if(revision==commentFormRevision && work==commentsWork) {
+                commentForm=form;commentPseud=form.hidden["comment[pseud_id]"].orEmpty()
+            }
+        }
+    }
+    fun closeComment() { if(!commentSending) { ++commentFormRevision;commentForm=null } }
+    fun sendComment() {
+        val form=commentForm ?: return
+        if(commentSending || commentUncertain || commentDraft.isBlank()) return
+        val work=commentsWork;val text=commentDraft;val pseud=commentPseud;val name=commentName;val email=commentEmail
+        commentSending=true;error=null
+        viewModelScope.launch {
+            try {
+                val result=withContext(Dispatchers.IO) { archive.postComment(form,text,pseud,name,email) }
+                if(work==commentsWork) {
+                    commentUncertain=result.uncertain
+                    if(result.error.isNotBlank()) error=result.error
+                    else { notice=result.notice;commentDraft="";commentForm=null;if(screen=="comments")showComments(work,commentsPage?.page ?: 1) }
+                }
+            } catch(_:Exception) {
+                if(work==commentsWork) { commentUncertain=true;error="Could not confirm whether the comment was posted. Refresh comments before trying again." }
+            } finally { commentSending=false }
+        }
+    }
     var username by mutableStateOf<String?>(archive.rememberedUsername())
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -196,7 +243,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         username = withContext(Dispatchers.IO) { archive.login(name.trim(), password) }
         screen = "home"
     }
-    fun logout() { sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()

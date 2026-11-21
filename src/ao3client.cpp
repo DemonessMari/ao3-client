@@ -116,6 +116,7 @@ void AO3Client::checkSession()
 
 void AO3Client::logout()
 {
+    ++m_commentsGeneration;
     ++m_authGeneration;
     ++m_listingGeneration;
     for (auto *reply : m_manager->findChildren<QNetworkReply *>()) {
@@ -698,5 +699,45 @@ void AO3Client::fetchAuthorWorks(const QString &username, int page, bool bookmar
         reply->deleteLater(); if (generation != m_listingGeneration) return;
         SearchResult result; if(ao3RequestFailed(reply)) result.errorMessage = ao3NetworkError(reply); else result = parseSearchResults(QString::fromUtf8(reply->readAll()), {}, page);
         emit authorWorksFetched(username, bookmarks, result);
+    });
+}
+
+void AO3Client::fetchComments(const QString &workId,int page) {
+    if(!QRegularExpression("^\\d+$").match(workId).hasMatch() || page<1) {emit errorOccurred("Invalid comments request");return;}
+    const auto generation=m_authGeneration; const auto revision=++m_commentsGeneration;
+    auto *reply=m_manager->get(makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/works/%1/comments?page=%2").arg(workId).arg(page))));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,page,generation,revision] {
+        reply->deleteLater(); if(generation!=m_authGeneration || revision!=m_commentsGeneration)return;
+        if(ao3RequestFailed(reply)) {emit errorOccurred(ao3NetworkError(reply));return;}
+        const auto result=parseCommentPage(QString::fromUtf8(reply->readAll()),page);
+        if(!result.error.isEmpty())emit errorOccurred(result.error);else emit commentsFetched(workId,result);
+    });
+}
+
+void AO3Client::fetchCommentForm(const QString &workId,const QString &replyId) {
+    if(!QRegularExpression("^\\d+$").match(workId).hasMatch() || (!replyId.isEmpty() && !QRegularExpression("^\\d+$").match(replyId).hasMatch())) {emit errorOccurred("Invalid comment target");return;}
+    const auto generation=m_authGeneration;const auto revision=++m_commentFormGeneration;
+    const auto path=replyId.isEmpty()?QString("/works/%1/comments/new").arg(workId):QString("/comments/%1/comments/new").arg(replyId);
+    const auto url=QUrl("https://archiveofourown.org"+path);auto *reply=m_manager->get(makeRequest(url));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,replyId,generation,url,revision] {
+        reply->deleteLater();if(generation!=m_authGeneration || revision!=m_commentFormGeneration)return;
+        CommentForm form;form.context=replyId;
+        if(ao3RequestFailed(reply))form.error=ao3NetworkError(reply);
+        else {form=parseCommentForm(QString::fromUtf8(reply->readAll()));form.context=replyId;form.source=url.toString();}
+        emit commentFormFetched(workId,form);
+    });
+}
+void AO3Client::submitComment(const QString &workId,const CommentForm &form,const QString &text,const QString &pseud,const QString &guestName,const QString &guestEmail) {
+    if(!validCommentAction(form.action) || form.hidden.value("authenticity_token").isEmpty() || !form.error.isEmpty() || text.trimmed().isEmpty() || (form.guest && (guestName.trimmed().isEmpty() || guestEmail.trimmed().isEmpty()))) {emit commentSubmitted(workId,{{},"Complete the comment form",false});return;}
+    auto fields=form.hidden;fields["comment[comment_content]"]=text;
+    if(!pseud.isEmpty()) {bool allowed=false;for(const auto &p:form.pseuds)if(p.first==pseud)allowed=true;if(!allowed){emit commentSubmitted(workId,{{},"Choose a pseud from the form",false});return;}fields["comment[pseud_id]"]=pseud;}
+    if(form.guest) {fields["comment[name]"]=guestName.trimmed();fields["comment[email]"]=guestEmail.trimmed();}
+    QByteArray body;for(auto it=fields.cbegin();it!=fields.cend();++it) {if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+    auto request=makeRequest(QUrl("https://archiveofourown.org").resolved(QUrl(form.action)));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",form.source.toUtf8());
+    const auto generation=m_authGeneration;auto *reply=m_manager->post(request,body);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,generation] {
+        reply->deleteLater();if(generation!=m_authGeneration)return;
+        if(ao3RequestFailed(reply))emit commentSubmitted(workId,{{},"Could not confirm whether the comment was posted. Refresh comments before trying again.",true});
+        else emit commentSubmitted(workId,parseCommentSubmission(QString::fromUtf8(reply->readAll())));
     });
 }

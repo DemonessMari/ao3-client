@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable fun ClientApp(vm: ClientState) {
-    if(vm.notice!=null) AlertDialog(onDismissRequest={vm.notice=null},title={Text("Library")},text={Text(vm.notice.orEmpty())},confirmButton={TextButton(onClick={vm.notice=null}) { Text("OK") }})
+    if(vm.notice!=null) AlertDialog(onDismissRequest={vm.notice=null},title={Text("AO3 Client")},text={Text(vm.notice.orEmpty())},confirmButton={TextButton(onClick={vm.notice=null}) { Text("OK") }})
     if(vm.settingsConfirmation) AlertDialog(
         onDismissRequest = { vm.settingsConfirmation = false },
         title = { Text("Settings saved") },
@@ -70,12 +70,12 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "settings" -> vm.settingsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "settings" -> vm.settingsReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(when(vm.screen) { "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            navigationIcon = { if (vm.screen in listOf("filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        topBar = { TopAppBar(title = { Text(when(vm.screen) { "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            navigationIcon = { if (vm.screen in listOf("comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             actions = { if(vm.screen !in listOf("login", "settings")) TextButton(onClick = { vm.navigate(if (vm.username == null) "login" else "account") }) { Text(if(vm.username == null) "Sign in" else "Account") } }) },
         bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
             NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 }
                 "search" -> SearchScreen(vm)
                 "library" -> LibraryScreen(vm)
+                "comments" -> CommentsScreen(vm)
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
                 "details" -> DetailScreen(vm)
@@ -230,6 +231,7 @@ class MainActivity : ComponentActivity() {
         if(fic.stats.isNotBlank()) Text(fic.stats, style = MaterialTheme.typography.bodyMedium)
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
+        OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
         Ao3WorkLinks(fic.id)
 
     }
