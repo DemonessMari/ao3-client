@@ -19,7 +19,7 @@ class RichTextTest {
         assertTrue(rich.spanStyles.any { index in it.start until it.end && it.item.fontWeight==FontWeight.Bold })
         assertTrue(rich.spanStyles.any { index in it.start until it.end && it.item.fontStyle==FontStyle.Italic })
         val urls=rich.getLinkAnnotations(0,rich.length).map { (it.item as androidx.compose.ui.text.LinkAnnotation.Url).url }
-        assertEquals(listOf("https://archiveofourown.org/works/123","https://example.org/story","https://archiveofourown.org/works/778899#footnote"),urls)
+        assertEquals(listOf("https://archiveofourown.org/works/123","https://example.org/story","https://archiveofourown.org/works/778899?view_full_work=true#footnote"),urls)
         assertNull(readingLink("javascript:alert(1)")); assertNull(readingLink("file:///etc/passwd")); assertNull(readingLink("https://user:password@example.org/"))
     }
     @Test fun stylingSurvivesSerializationAndRejectsInvalidRanges() {

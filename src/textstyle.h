@@ -9,7 +9,7 @@ struct TextStyleSpan {
 };
 inline QString readingLink(const QString &target, const QString &workId = {}) {
     if (target.trimmed().isEmpty()) return {};
-    const QUrl base("https://archiveofourown.org/" + (workId.isEmpty() ? QString() : "works/" + workId));
+    const QUrl base("https://archiveofourown.org/" + (workId.isEmpty() ? QString() : "works/" + workId + "?view_full_work=true"));
     const auto url = base.resolved(QUrl(target.trimmed()));
     if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http") || url.host().isEmpty() || !url.userInfo().isEmpty()) return {};
     return url.toString();

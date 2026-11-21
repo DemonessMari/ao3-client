@@ -994,8 +994,8 @@ private slots:
         QVERIFY(format("deleted",reader.m_browser->document()).fontStrikeOut());
         QCOMPARE(format("monospace",reader.m_browser->document()).fontFamilies().toStringList(),QStringList{"monospace"});
         QCOMPARE(format("AO3 link",reader.m_browser->document()).anchorHref(),QString("https://archiveofourown.org/works/123"));
-        QCOMPARE(format("footnote",reader.m_browser->document()).anchorHref(),QString("https://archiveofourown.org/works/778899#footnote"));
-        for(const auto &word:QStringList{"unsafe","local file","credentials"}) QVERIFY(!format(word,reader.m_browser->document()).isAnchor());
+        QCOMPARE(format("footnote",reader.m_browser->document()).anchorHref(),QString("https://archiveofourown.org/works/778899?view_full_work=true#footnote"));
+        for(const auto &word:QStringList{"unsafe","local file","credentials"}) { QVERIFY(!format(word,reader.m_browser->document()).isAnchor()); QVERIFY(!format(word,reader.m_browser->document()).fontUnderline()); }
         reader.setBookMode(true); QTRY_VERIFY(reader.m_book->doc);
         QVERIFY(format("bolditalic",reader.m_book->doc).fontItalic());
         QTemporaryDir directory; ReadingLibrary library(directory.path()); QVERIFY(library.saveOffline(work,{chapter}));
@@ -1008,6 +1008,11 @@ private slots:
         reader.setBookMode(false); reader.renderText("Translated text without source positions");
         QVERIFY(reader.m_browser->document()->toPlainText().startsWith("Translated"));
         QVERIFY(!format("Translated",reader.m_browser->document()).fontItalic());
+        TextStyleSpan emphasis; emphasis.start=0; emphasis.end=4; emphasis.bold=true; emphasis.italic=true;
+        reader.openWork(work,{{"Bold","BOLD",{},{},{emphasis}},{"Plain","Plain chapter"}});
+        reader.showChapter(0); reader.showChapter(1);
+        QVERIFY(!format("Plain",reader.m_browser->document()).fontItalic());
+        QVERIFY(format("Plain",reader.m_browser->document()).fontWeight()<QFont::Bold);
     }
     void chapterNotesStaySeparateAndSurviveOfflineBackup() {
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/work-notes.html")); QVERIFY(fixture.open(QIODevice::ReadOnly));
@@ -1038,12 +1043,14 @@ private slots:
         ReaderWidget reader; reader.openWork(work,chapters);
         QVERIFY(!reader.m_notes->isHidden());
         const auto body=reader.m_browser->toPlainText();
-        QTimer::singleShot(0,[] {
+        QTimer::singleShot(0,[&reader] {
             auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());
             QVERIFY(dialog);
+            const auto close=qScopeGuard([dialog] {dialog->reject();});
             auto *notes=dialog->findChild<QTextBrowser *>("authorNotesText");
             QVERIFY(notes); QVERIFY(notes->toPlainText().contains("Chapter one ending."));
-            dialog->reject();
+            QCOMPARE(notes->styleSheet(),reader.m_browser->styleSheet());
+            QCOMPARE(notes->document()->begin().blockFormat().lineHeight(),reader.m_browser->document()->begin().blockFormat().lineHeight());
         });
         reader.showNotes();
         QCOMPARE(reader.m_browser->toPlainText(),body);

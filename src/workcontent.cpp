@@ -142,7 +142,7 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                             TextStyleSpan span;
                             span.start = qMax(0,fragment.position()-trim); span.end = qMin(int(text.size()),fragment.position()+fragment.length()-trim);
                             span.bold = format.fontWeight() >= QFont::Bold; span.italic = format.fontItalic();
-                            span.underline = format.fontUnderline(); span.strike = format.fontStrikeOut();
+                            span.underline = format.fontUnderline() && (!format.isAnchor() || !readingLink(format.anchorHref()).isEmpty()); span.strike = format.fontStrikeOut();
                             span.code = format.fontFixedPitch() || format.fontFamilies().toStringList().contains("monospace");
                             if (!readingLink(format.anchorHref()).isEmpty()) span.url = format.anchorHref();
                             if (span.end>span.start && (span.bold || span.italic || span.underline || span.strike || span.code || !span.url.isEmpty())) chapter.styles.append(span);

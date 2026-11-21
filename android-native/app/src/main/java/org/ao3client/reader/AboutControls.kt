@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 @Composable fun AboutControls() {
     val context=LocalContext.current; var file by remember { mutableStateOf<String?>(null) }; var text by remember { mutableStateOf("") }
-    Text("AO3 Client 3.0.1 · unofficial",style=MaterialTheme.typography.bodySmall)
+    Text("AO3 Client 3.1.0 · unofficial",style=MaterialTheme.typography.bodySmall)
     TextButton(onClick={file="PRIVACY.md"}) { Text("Privacy") }
     TextButton(onClick={file="THIRD-PARTY-NOTICES.txt"}) { Text("Third-party notices and licenses") }
     LaunchedEffect(file) { file?.let { name -> text=withContext(Dispatchers.IO) {

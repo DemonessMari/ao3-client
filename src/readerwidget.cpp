@@ -326,6 +326,7 @@ void ReaderWidget::renderText(const QString &text, double fraction)
     font.setPointSize(m_fontSize->value());
     m_browser->document()->setDefaultFont(font);
     m_browser->setPlainText(text);
+    QTextCursor reset(m_browser->document()); reset.select(QTextCursor::Document); reset.setCharFormat(QTextCharFormat{});
     if (m_index>=0 && m_index<m_chapters.size() && text==m_chapters[m_index].text) {
         for (const auto &span:m_chapters[m_index].styles) {
             if (span.start<0 || span.end<=span.start || span.end>text.size()) continue;
@@ -361,10 +362,14 @@ void ReaderWidget::showNotes()
     auto *layout = new QVBoxLayout(&dialog);
     auto *text = new QTextBrowser(&dialog); text->setObjectName("authorNotesText");
     text->setFont(m_browser->document()->defaultFont());
+    text->setStyleSheet(m_browser->styleSheet());
     QStringList sections;
     if (!chapter.notesBefore.isEmpty()) sections << "Before chapter\n\n" + chapter.notesBefore;
     if (!chapter.notesAfter.isEmpty()) sections << "After chapter\n\n" + chapter.notesAfter;
-    text->setPlainText(sections.join("\n\n")); layout->addWidget(text);
+    text->setPlainText(sections.join("\n\n"));
+    QTextCursor format(text->document()); format.select(QTextCursor::Document);
+    format.mergeBlockFormat(m_browser->document()->begin().blockFormat());
+    layout->addWidget(text);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close,&dialog); layout->addWidget(buttons);
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     dialog.exec();

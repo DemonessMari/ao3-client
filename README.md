@@ -6,7 +6,7 @@ Both editions support search and filters, tag suggestions, sign-in, profiles, of
 
 Comments, kudos, account bookmarks, subscriptions, series, collections and account settings open in a browser with a separate sign-in. Public bookmark lists show AO3 works only.
 
-3.0.1 is a prerelease. Phone rendering and long-session testing remain pending. See [verification](VERIFICATION.md).
+3.1.0 is a prerelease. Phone rendering and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 ## Install
 

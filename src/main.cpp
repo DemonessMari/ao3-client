@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
 #endif
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AO3 Client"));
-    app.setApplicationVersion(QStringLiteral("3.0.1"));
+    app.setApplicationVersion(QStringLiteral("3.1.0"));
     QCommandLineParser parser; parser.setApplicationDescription("Unofficial AO3 reader"); parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"smoke-test","Open the main window briefly and exit (installation check)."}); parser.process(app);
     app.setOrganizationName(QStringLiteral("AO3Client"));

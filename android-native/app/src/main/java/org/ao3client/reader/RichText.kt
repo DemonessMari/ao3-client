@@ -25,7 +25,7 @@ data class TextStyleSpan(val start:Int,val end:Int,val bold:Boolean=false,val it
 }
 internal fun readingLink(target:String,workId:String=""):String? = runCatching {
     if(target.isBlank()) return null
-    val url=URI("https://archiveofourown.org/"+if(workId.isEmpty()) "" else "works/$workId").resolve(target.trim())
+    val url=URI("https://archiveofourown.org/"+if(workId.isEmpty()) "" else "works/$workId?view_full_work=true").resolve(target.trim())
     url.takeIf { it.scheme?.lowercase() in listOf("https","http") && !it.host.isNullOrEmpty() && it.rawUserInfo==null }?.toASCIIString()
 }.getOrNull()
 

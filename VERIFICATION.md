@@ -1,13 +1,12 @@
 # Verification
 
-2026-11-21, version 3.0.0.
+2026-11-21, version 3.1.0.
 
-- Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All 3 CTest suites passed.
-- Android: JDK 17, Gradle 8.11.1, AGP 8.10.1, API 36. 33 JVM tests passed; live test skipped. Lint: 0 errors, 22 warnings.
-- Release APK/AAB signatures, package metadata and 16 KB alignment checked.
-- Desktop installation and launcher tested outside the source folder, including paths with spaces and special characters.
-- Coverage includes parsing, filters, navigation, appearance, offline data, backups, progress, cancellation and corruption recovery. Desktop curl frames were inspected offscreen.
+- Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All three CTest suites passed.
+- Android release: 47 fixture/unit tests passed; one live test skipped in the standard suite. Lint: zero errors, 23 warnings.
+- The separate live test passed: two searches returned distinct result sets and a work opened with readable chapter text.
+- APK/AAB signatures verified; the APK matches the 3.0.1 signing certificate. Version code 15; 16 KB alignment passed.
+- Desktop 3.1.0 installed under `~/Applications/ao3-client`. Startup and the existing launcher passed checks outside the source folder.
+- Notes, emphasis, links, book mode and offline/backup preservation tested. Desktop notes inspected in light and dark themes.
 
-The separate live AO3 test timed out. Search, sign-in and translation need live verification. No physical Android device was connected for rendering, accessibility, process-death, migration or long-session checks.
-
-See [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).
+No live comment was posted during testing. Phone rendering, real sign-in/comment submission, translation and long-session testing remain pending. Account actions, images and work skins are incomplete.

@@ -2,7 +2,7 @@
 
 AO3 Client is unofficial and is not affiliated with AO3 or OTW.
 
-Search, suggestions, profiles, works and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Session cookies are stored locally; signing out removes them. Browser sessions are separate.
+Search, suggestions, profiles, works, comments and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Session cookies are stored locally; signing out removes them. Browser sessions are separate.
 
 There are no ads, analytics, crash-reporting SDKs or developer-operated servers.
 
