@@ -185,8 +185,10 @@ class Archive(private val prefs: SharedPreferences) {
         prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
     }
     fun session(): String? {
+        val generation = cookieGeneration
         val user = ArchiveParser.sessionIdentity(request("/"))
         synchronized(cookieLock) {
+            if (generation != cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
             if (user == null) prefs.edit().remove("sessionUsername").apply()
             else prefs.edit().putString("sessionUsername", user).apply()
         }
