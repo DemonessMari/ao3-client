@@ -1,14 +1,10 @@
-# 3.0.0 release candidate
+# 3.0.1 release candidate
 
-- Linux and Android: search, profiles, offline library, bookmarks and backup import/export.
-- In-reader appearance controls, text-only mode, paged reading and chapter navigation.
-- Updated page-curl rendering and Android progress recovery.
-- Optional LibreTranslate support; chapter text is sent only with consent.
+- Removed decorative wording and repeated instructions from both apps.
+- Shortened documentation and notices.
 
-Account actions such as comments, kudos and subscriptions open in a browser.
+Android: install the APK over the production-signed 3.0.0 app. Development-signed installs still require backup and migration before switching keys.
 
-Linux: extract the archive and run `./install.sh`. System Qt is required; see `BUILD-INFO.txt`.
+Linux: extract the archive and run `./install.sh`. Requires system Qt; see `BUILD-INFO.txt`.
 
-Android: install the APK. Older development builds use a different signing key. Install the local debug migration build and export your library before uninstalling, then install the release and import.
-
-Automated checks passed. Live AO3 verification timed out; phone rendering and long-session tests remain pending. See [VERIFICATION.md](VERIFICATION.md).
+Phone rendering and long-session testing remain pending.
