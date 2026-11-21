@@ -7,6 +7,7 @@
 #include "commentpage.h"
 #include "searchfilters.h"
 #include "loginmanager.h"
+#include "officialdownload.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -20,6 +21,8 @@ public:
     void fetchWorkDetails(const QString &workId);
     void fetchWorkContent(const QString &workId);
     void downloadWork(const QString &workId);
+    void fetchOfficialDownloads(const QString &workId);
+    void saveOfficialDownload(const QString &workId, const QUrl &url, const QString &path);
     void login(const QString &login, const QString &password);
     void checkSession();
     void logout();
@@ -34,6 +37,8 @@ public:
     LoginManager *loginManager() const;
 
 signals:
+    void officialDownloadsFetched(const QString &workId, const QVector<OfficialDownload> &downloads);
+    void officialDownloadSaved(const QString &path);
     void tagSuggestionsFetched(const QString &field, quint64 revision, const QStringList &suggestions, const QString &error);
     void searchOptionsFetched(const SearchOptions &options);
     void searchCompleted(const SearchResult &result);

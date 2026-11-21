@@ -34,6 +34,20 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var profileReturn = "details"
     var ownWorks by mutableStateOf(false)
     var selected by mutableStateOf<Fic?>(null)
+    var officialDownloads by mutableStateOf<List<OfficialDownload>?>(null)
+    fun fetchOfficialDownloads(id:String)=load {
+        val formats=withContext(Dispatchers.IO) { archive.downloads(id) }
+        if(selected?.id==id) officialDownloads=formats
+    }
+    fun saveOfficialDownload(id:String,item:OfficialDownload,uri:android.net.Uri)=load {
+        officialDownloads=null
+        withContext(Dispatchers.IO) {
+            val bytes=OfficialDownloads.fetch(item,id)
+            ensureActive()
+            getApplication<Application>().contentResolver.openOutputStream(uri,"w")?.use { it.write(bytes) } ?: error("Cannot save download")
+        }
+        notice="Saved ${item.filename}"
+    }
     var chapters by mutableStateOf<List<Chapter>>(emptyList())
     var chapter by mutableIntStateOf(0)
     var translation by mutableStateOf<String?>(null)
@@ -124,6 +138,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun cancelLoad() { ++requestRevision; loadJob?.cancel(); loading=false }
     fun navigate(destination: String) {
         if (screen == "reader") saveProgress()
+        if (destination != "details") officialDownloads=null
         if (destination != "reader") { ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
         error = null
         if (destination == "filters" && screen != "filters") filterDraft = filters
@@ -161,7 +176,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if (username == null) { navigate("login"); return }
         ownWorks = true; search(1, false)
     }
-    fun showDetails(fic: Fic) { detailsReturn = screen; readerReturn = "details"; if(selected?.id != fic.id) chapters = emptyList(); selected = fic; navigate("details") }
+    fun showDetails(fic: Fic) { officialDownloads=null; detailsReturn = screen; readerReturn = "details"; if(selected?.id != fic.id) chapters = emptyList(); selected = fic; navigate("details") }
     fun read() {
         val fic = selected ?: return
         load {

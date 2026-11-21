@@ -9,6 +9,37 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSaveFile>
+
+void AO3Client::fetchOfficialDownloads(const QString &workId) {
+    if (!QRegularExpression("^[0-9]+$").match(workId).hasMatch()) return;
+    auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org/works/"+workId+"?view_adult=true")));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId] {
+        reply->deleteLater();
+        if(reply->error()!=QNetworkReply::NoError) { emit errorOccurred("Could not fetch download formats: "+reply->errorString()); return; }
+        emit officialDownloadsFetched(workId,officialDownloads(QString::fromUtf8(reply->readAll()),workId));
+    });
+}
+
+void AO3Client::saveOfficialDownload(const QString &workId,const QUrl &url,const QString &path) {
+    const auto format=officialDownloadFormat(url,workId);
+    if(format.isEmpty()) { emit errorOccurred("Invalid AO3 download link"); return; }
+    auto request=makeRequest(url); request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);
+    auto *reply=m_manager->get(request);
+    connect(reply,&QNetworkReply::downloadProgress,this,[reply](qint64 received,qint64 total) { if(received>64*1024*1024 || total>64*1024*1024) { reply->setProperty("oversized",true); reply->abort(); } });
+    connect(reply,&QNetworkReply::finished,this,[this,reply,path,format] {
+        reply->deleteLater(); const auto data=reply->readAll(); const int status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto type=reply->header(QNetworkRequest::ContentTypeHeader).toString();
+        if(reply->error()!=QNetworkReply::NoError || status!=200 || data.isEmpty() || data.size()>64*1024*1024 || (format!="html" && type.contains("text/html"))) {
+            emit errorOccurred(reply->property("oversized").toBool()?"Download exceeds 64 MB":"AO3 did not return the requested file. Try again later."); return;
+        }
+        if(format=="html" && !QRegularExpression(QStringLiteral("<div[^>]*\\bid\\s*=\\s*['\"]chapters['\"]"),QRegularExpression::CaseInsensitiveOption).match(QString::fromUtf8(data)).hasMatch()) { emit errorOccurred("AO3 did not return an HTML download"); return; }
+        if((format=="pdf" && !data.startsWith("%PDF-")) || (format=="epub" && !data.startsWith("PK")) || ((format=="mobi" || format=="azw3") && data.mid(60,8)!="BOOKMOBI")) { emit errorOccurred("AO3 returned an invalid download"); return; }
+        QSaveFile file(path);
+        if(!file.open(QIODevice::WriteOnly) || file.write(data)!=data.size() || !file.commit()) { emit errorOccurred("Could not save download"); return; }
+        emit officialDownloadSaved(path);
+    });
+}
 
 namespace {
 QString ao3NetworkError(QNetworkReply *reply)

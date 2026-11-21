@@ -220,6 +220,17 @@ class MainActivity : ComponentActivity() {
 }
 @Composable fun DetailScreen(vm: ClientState) {
     val fic = vm.selected ?: return
+    var downloadUrl by rememberSaveable { mutableStateOf("") }
+    var downloadWorkId by rememberSaveable { mutableStateOf("") }
+    var downloadFormat by rememberSaveable { mutableStateOf("") }
+    val saveDownload=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if(uri!=null) vm.saveOfficialDownload(downloadWorkId,OfficialDownload(downloadFormat,downloadUrl),uri)
+    }
+    vm.officialDownloads?.let { formats -> AlertDialog(onDismissRequest={vm.officialDownloads=null},title={Text("Download")},text={
+        Column { if(formats.isEmpty()) Text("AO3 has no download formats available for this work.")
+            formats.forEach { item -> TextButton(onClick={downloadWorkId=fic.id;downloadUrl=item.url;downloadFormat=item.format;vm.officialDownloads=null;saveDownload.launch(item.filename)}) { Text(item.format.uppercase()) } }
+        }
+    },confirmButton={TextButton(onClick={vm.officialDownloads=null}) { Text("Close") }}) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(fic.title, style = MaterialTheme.typography.headlineMedium)
         Text("by ${fic.author}", style = MaterialTheme.typography.titleMedium)
@@ -232,6 +243,7 @@ class MainActivity : ComponentActivity() {
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
         OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
+        OutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
         Ao3WorkLinks(fic.id)
 
     }

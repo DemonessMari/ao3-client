@@ -205,6 +205,10 @@ class Archive(private val prefs: SharedPreferences) {
         val html = request("/works/$id?view_adult=true&view_full_work=true")
         return ArchiveParser.chapters(html) to html
     }
+    fun downloads(id:String):List<OfficialDownload> {
+        require(id.matches(Regex("[0-9]+")))
+        return OfficialDownloads.parse(request("/works/$id?view_adult=true"),id)
+    }
     fun rememberedUsername(): String? = synchronized(cookieLock) {
         prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
     }

@@ -2,6 +2,8 @@
 #include "readinglibrary.h"
 #include "librarybackup.h"
 #include <QSaveFile>
+#include <QInputDialog>
+#include <QStandardPaths>
 #include <QMessageBox>
 #include <QDesktopServices>
 #include <QComboBox>
@@ -147,9 +149,23 @@ MainWindow::MainWindow(QWidget *parent)
         if(username == m_listingAuthor && bookmarks == m_listingBookmarks) onSearchCompleted(result);
     });
     connect(m_detailWidget, &WorkDetailWidget::downloadRequested, this, [this](const Work &work) {
-        statusBar()->showMessage(QStringLiteral("Downloading..."));
-        m_client->downloadWork(work.id);
+        statusBar()->showMessage(QStringLiteral("Fetching download formats…"));
+        m_client->fetchOfficialDownloads(work.id);
     });
+    connect(m_client,&AO3Client::officialDownloadsFetched,this,[this](const QString &id,const QVector<OfficialDownload> &downloads) {
+        if(m_detailWidget->currentWork().id!=id) return;
+        QStringList choices; for(const auto &item:downloads) choices << item.format.toUpper();
+        choices << "Text export (client)";
+        bool ok=false; const auto choice=QInputDialog::getItem(this,"Download","Format",choices,0,false,&ok);
+        if(!ok) { statusBar()->clearMessage(); return; }
+        const int index=choices.indexOf(choice);
+        if(index==downloads.size()) { m_client->downloadWork(id); return; }
+        const auto item=downloads[index];
+        const auto path=QFileDialog::getSaveFileName(this,"Save AO3 download",QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)+"/"+item.url.fileName(),"*."+item.format);
+        if(path.isEmpty()) return;
+        statusBar()->showMessage("Downloading…"); m_client->saveOfficialDownload(id,item.url,path);
+    });
+    connect(m_client,&AO3Client::officialDownloadSaved,this,[this](const QString &path) { statusBar()->showMessage("Saved to "+path); });
 
     connect(m_searchInput, &QLineEdit::returnPressed, this, &MainWindow::performSearch);
 

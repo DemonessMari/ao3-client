@@ -88,6 +88,36 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void officialDownloadsSaveFilesAndPreserveOnFailure() {
+        MainWindow window; auto *network=installNetwork(window);
+        QTest::qWait(50);
+        QTemporaryDir dir; const QString path=dir.filePath("story.pdf");
+        QSignalSpy saved(window.m_client,&AO3Client::officialDownloadSaved);
+        QSignalSpy errors(window.m_client,&AO3Client::errorOccurred);
+        network->page="%PDF-1.4 fixture bytes";
+        window.m_client->saveOfficialDownload("123",QUrl("https://archiveofourown.org/downloads/123/A.pdf"),path);
+        QTRY_COMPARE(saved.count(),1);
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto original=file.readAll();file.close(); QCOMPARE(original,network->page);
+        network->page="<html>Service unavailable</html>";
+        window.m_client->saveOfficialDownload("123",QUrl("https://archiveofourown.org/downloads/123/A.pdf"),path);
+        QTRY_COMPARE(errors.count(),1); QCOMPARE(saved.count(),1);
+        QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(),original);file.close();
+        network->status=302;
+        window.m_client->saveOfficialDownload("123",QUrl("https://archiveofourown.org/downloads/123/A.pdf"),path);
+        QTRY_COMPARE(errors.count(),2);
+        const int requests=network->requests.size();
+        window.m_client->saveOfficialDownload("123",QUrl("https://evil.example/downloads/123/A.pdf"),path);
+        QCOMPARE(network->requests.size(),requests); QCOMPARE(errors.count(),3);
+    }
+    void officialDownloadLinks() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/official-downloads.html")); QVERIFY(fixture.open(QIODevice::ReadOnly));
+        const auto links=officialDownloads(QString::fromUtf8(fixture.readAll()),"123");
+        QCOMPARE(links.size(),5); QCOMPARE(links[0].format,QString("epub"));
+        QVERIFY(links[0].url.query().contains("x=1"));
+        QCOMPARE(officialDownloads("<p>Downloads disabled</p>","123").size(),0);
+        QVERIFY(officialDownloadFormat(QUrl("https://archiveofourown.org:444/downloads/123/A.pdf"),"123").isEmpty());
+    }
+
     void commentFormsAndPosting() {
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/comment-form.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=fixture.readAll();
         const auto form=parseCommentForm(QString::fromUtf8(html));QVERIFY2(form.error.isEmpty(),qPrintable(form.error));
