@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
     if(vm.settingsConfirmation) AlertDialog(
         onDismissRequest = { vm.settingsConfirmation = false },
         title = { Text("Settings saved") },
-        text = { Text("Your language and translation settings have been saved on this device.") },
+        text = { Text("Language and translation settings saved.") },
         confirmButton = { TextButton(onClick = { vm.settingsConfirmation = false }) { Text("OK") } }
     )
     val keyboard = LocalSoftwareKeyboardController.current
@@ -114,10 +114,8 @@ class MainActivity : ComponentActivity() {
 }
 @Composable fun HomeScreen(browse: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Text("Your reading space", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp)); Text("Find stories on Archive of Our Own. Choose your tags, pick a fic, and read at your own pace.", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(28.dp)); Button(onClick = browse, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.Search, null); Spacer(Modifier.width(8.dp)); Text("Browse stories") }
-        Spacer(Modifier.height(16.dp)); Text("An independent AO3 client. Filters are available offline; searches and fic content need a connection.", style = MaterialTheme.typography.bodySmall)
+        Text("AO3 Client", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(28.dp)); Button(onClick = browse, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.Search, null); Spacer(Modifier.width(8.dp)); Text("Search") }
     }
 }
 @Composable fun SearchScreen(vm: ClientState) {
@@ -131,15 +129,15 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = { keyboard?.hide(); vm.search() }, enabled = !vm.loading) { Icon(Icons.Default.Search, "Search AO3") }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Find your next read", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text("Search", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 FilterChip(selected = vm.filters.isNotEmpty(), onClick = { keyboard?.hide(); vm.navigate("filters") }, label = { Text("Filters${if(vm.filters.isEmpty()) "" else " · ${vm.filters.size}"}") })
             }
         } else Text("My works", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
         val result = vm.listing
-        if (result == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Search by keywords or choose filters to begin.", Modifier.padding(24.dp)) }
+        if (result == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Enter a search.", Modifier.padding(24.dp)) }
         else LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (result.total.isNotBlank()) item { Text(result.total, style = MaterialTheme.typography.labelLarge) }
-            if (result.works.isEmpty()) item { Text("No works found. Try different words or filters.") }
+            if (result.works.isEmpty()) item { Text("No works found.") }
             items(result.works, key = { it.id }) { fic ->
                 Card(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -166,7 +164,6 @@ class MainActivity : ComponentActivity() {
     val draft = vm.filterDraft
     Column(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            item { Text("All filters work offline. Tag suggestions appear when AO3 is available.", style = MaterialTheme.typography.bodyMedium) }
             items(Catalogue.fields, key = { it.key }) { field -> FilterControl(field, draft[field.key].orEmpty(), { values -> vm.filterDraft = if(values.isEmpty()) vm.filterDraft - field.key else vm.filterDraft + (field.key to values) }, vm) }
         }
         Surface(tonalElevation = 3.dp) {
@@ -234,7 +231,6 @@ class MainActivity : ComponentActivity() {
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
         Ao3WorkLinks(fic.id)
-        Text("Open the fic to save its full text from the reader menu.", style = MaterialTheme.typography.bodySmall)
 
     }
 }
@@ -246,13 +242,12 @@ class MainActivity : ComponentActivity() {
         OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Username or email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.login(name, password); password = "" }))
         Button(onClick = { keyboard?.hide(); vm.login(name, password); password = "" }, enabled = name.isNotBlank() && password.isNotEmpty() && !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
-        Text("Your password is sent only to AO3 and is not saved on this device.", style = MaterialTheme.typography.bodySmall)
     }
 }
 @Composable fun ReadingAppearanceControls(vm: ClientState) {
     val prefs = vm.preferences
     Text("Reading appearance", style = MaterialTheme.typography.titleLarge)
-    Text("Changes apply immediately and are saved automatically.", style = MaterialTheme.typography.bodySmall)
+    Text("Changes save automatically.", style = MaterialTheme.typography.bodySmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
             FilterChip(selected = prefs.theme == value, onClick = { vm.appearance(theme = value) }, label = { Text(title) })
@@ -267,7 +262,7 @@ class MainActivity : ComponentActivity() {
     Slider(value = prefs.fontSize.toFloat(), onValueChange = { vm.fontSize(it.toInt()) }, valueRange = 14f..32f, steps = 17)
     Text("Line spacing · ${"%.1f".format(prefs.lineSpacing)}")
     Slider(value = prefs.lineSpacing, onValueChange = { vm.appearance(spacing = it) }, valueRange = 1.2f..2.2f, steps = 9)
-    Text("The story continues across the page. Adjust these controls to choose a comfortable reading style.",
+    Text("Text preview.\nSecond line of text.",
         fontFamily = if(prefs.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif,
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize * prefs.lineSpacing).sp)
 }
@@ -289,7 +284,6 @@ class MainActivity : ComponentActivity() {
         HorizontalDivider(); Text("Translation service", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(service, { service = it }, Modifier.fillMaxWidth(), label = { Text("LibreTranslate URL") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
         OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key (optional)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        Text("Only Translate sends chapter text to this service. Public services may be unavailable or limit requests. AO3 login cookies are never sent to it.", style = MaterialTheme.typography.bodyMedium)
         Button(onClick = { vm.savePreferences(vm.preferences.copy(language = language, filterLanguage = filter, service = service, apiKey = apiKey)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save language and translation") }
     }
 }
@@ -301,12 +295,12 @@ class MainActivity : ComponentActivity() {
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { try { vm.exportLibrary(context.contentResolver.openOutputStream(it) ?: error("Cannot create backup"),includeDownloads) } catch(e:Exception) { vm.error=e.message } } }
     val restore=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { confirm=it }
     Text("Library backup",style=MaterialTheme.typography.titleLarge)
-    Text("Includes downloaded originals, favorites, history, bookmarks and reading positions. Excludes passwords, login cookies and translation keys. Imports merge without replacing existing downloads or progress.",style=MaterialTheme.typography.bodySmall)
+    Text("Backups contain reading data, not credentials. Files are not encrypted.",style=MaterialTheme.typography.bodySmall)
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Checkbox(includeDownloads,{includeDownloads=it}); Text("Include downloaded chapter text",Modifier.weight(1f)) }
-    Text("Maximum backup size: 100 MB. Turn off downloaded text for a compact reading-data backup.",style=MaterialTheme.typography.bodySmall)
+    Text("Maximum size: 100 MB.",style=MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick={export.launch("ao3-library-backup.json")},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Export library backup") }
     OutlinedButton(onClick={restore.launch(arrayOf("application/json","text/plain","application/octet-stream"))},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Import library backup") }
-    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept. Only import files you trust.")},confirmButton={TextButton(onClick={ val uri=confirm; confirm=null; try { vm.importLibrary(context.contentResolver.openInputStream(uri!!) ?: error("Cannot read backup")) } catch(e:Exception) { vm.error=e.message } }) { Text("Import") }},dismissButton={TextButton(onClick={confirm=null}) { Text("Cancel") }})
+    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept.")},confirmButton={TextButton(onClick={ val uri=confirm; confirm=null; try { vm.importLibrary(context.contentResolver.openInputStream(uri!!) ?: error("Cannot read backup")) } catch(e:Exception) { vm.error=e.message } }) { Text("Import") }},dismissButton={TextButton(onClick={confirm=null}) { Text("Cancel") }})
 }
 
 @Composable fun LibraryScreen(vm: ClientState) {
@@ -314,11 +308,11 @@ class MainActivity : ComponentActivity() {
     var query by rememberSaveable { mutableStateOf("") }
     val entries = vm.libraryEntries.filter { (filter != "offline" || it.offline) && (filter != "favorites" || it.favorite) && (it.fic.title.contains(query, true) || it.fic.author.contains(query, true)) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search your library") }, singleLine = true) }
+        item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search library") }, singleLine = true) }
         item { FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("recent" to "Recent", "offline" to "Offline", "favorites" to "Favorites").forEach { (value, title) -> FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(title) }) }
         } }
-        if(entries.isEmpty()) item { Text("No fics in this view yet. Open a story to add it to Recent, then use Save offline in the reader to keep a downloaded copy.") }
+        if(entries.isEmpty()) item { Text("No works.") }
         items(entries, key = { it.fic.id }) { entry ->
             Card(onClick = { vm.openLibrary(entry) }, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

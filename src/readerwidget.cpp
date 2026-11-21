@@ -144,7 +144,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_browser->viewport()->installEventFilter(this);
     page->addWidget(m_browser, 1); page->addStretch(); layout->addLayout(page, 1);
     QPushButton *desktopOnline=nullptr;
-    if(!mobileUi()) { auto *online=new QPushButton("Comments, kudos and bookmarks on AO3 · browser",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_work.id+"?show_comments=true#comments")); }); }
+    if(!mobileUi()) { auto *online=new QPushButton("Open on AO3 (browser)",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_work.id+"?show_comments=true#comments")); }); }
     auto *bottom = new QHBoxLayout;
     m_bottomPrevious = new QPushButton(QStringLiteral("Previous chapter"), this);
     m_bottomNext = new QPushButton(QStringLiteral("Next chapter"), this);
@@ -411,11 +411,11 @@ void ReaderWidget::showSettings()
         if(m_index>=0) renderText(m_browser->toPlainText());
         preview->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; padding: 12px; }").arg(theme->currentIndex()==2?"#191b1e":theme->currentIndex()==1?"#f1e3c7":"#faf8f3",theme->currentIndex()==2?"#e7e1d8":"#292723"));
         QFont font(family->currentData().toString()); font.setPointSize(size->value()); preview->document()->setDefaultFont(font);
-        preview->setPlainText("The story continues across the page. Appearance changes apply immediately and are saved automatically.");
+        preview->setPlainText("Text preview.\nSecond line of text.");
         QTextCursor cursor(preview->document()); cursor.select(QTextCursor::Document); QTextBlockFormat block; block.setLineHeight(spacing->value(),QTextBlockFormat::ProportionalHeight); cursor.mergeBlockFormat(block);
     };
     connect(theme,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(family,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(spacing,&QSpinBox::valueChanged,&dialog,liveAppearance); connect(size,&QSpinBox::valueChanged,&dialog,liveAppearance); liveAppearance();
-    auto *note = new QLabel(QStringLiteral("Translate sends the selected chapter to this service only when you press Translate. Choose a trusted HTTPS LibreTranslate service. Text leaves this device only when you press Translate. HTTP is allowed for localhost only."), &dialog);
+    auto *note = new QLabel(QStringLiteral("HTTPS required except on localhost."), &dialog);
     note->setWordWrap(true); note->setMinimumWidth(0);
     note->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); layout->addWidget(note);
     auto *about=new QPushButton("About, privacy and licenses",&dialog); layout->addWidget(about);
@@ -488,7 +488,7 @@ void ReaderWidget::saveText()
 void ReaderWidget::saveOffline()
 {
     if (m_index < 0) return;
-    m_status->setText(ReadingLibrary().saveOffline(m_work, m_chapters) ? QStringLiteral("Saved for offline reading. Open it from Library.") : QStringLiteral("Could not save offline copy. Check available storage."));
+    m_status->setText(ReadingLibrary().saveOffline(m_work, m_chapters) ? QStringLiteral("Saved offline.") : QStringLiteral("Could not save offline copy. Check available storage."));
 }
 void ReaderWidget::addBookmark()
 {

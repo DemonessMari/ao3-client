@@ -1,5 +1,5 @@
-# Security reports
+# Security
 
-Report vulnerabilities privately at https://github.com/DemonessMari/ao3-client/security/advisories/new . Do not post credentials, private fic content or library backups in issues. Never commit signing keys or their passwords.
+Report vulnerabilities through [private security reports](https://github.com/DemonessMari/ao3-client/security/advisories/new). Keep credentials, private works and backups out of public issues.
 
-The current release is the supported development line. The client parses external HTML, relies on AO3 availability and does not bypass access restrictions or rate limits. Translations use a user-configured external service with explicit consent. Both login and remote translation require HTTPS.
+The current release is supported. Sign-in and remote translation require HTTPS. HTTP translation is allowed only on localhost.

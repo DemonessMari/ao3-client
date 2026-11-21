@@ -120,7 +120,7 @@ import kotlinx.coroutines.launch
             Button(onClick = { if(vm.translating || vm.storage.getBoolean("translationConsented",false)) { vm.translate(); tools = false } else translationConsent=true }, Modifier.fillMaxWidth()) { Text(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}") }
             if(vm.translation != null) MenuRow("Show original", onClick = { vm.original(); tools = false })
             MenuRow("Text only", supportingText="Hide all controls. Tap the center or press Back to restore them.", onClick={ tools=false; vm.textOnly=true })
-            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Book mode · swipe between pages",Modifier.weight(1f)); Switch(checked=vm.bookMode,onCheckedChange={vm.readingMode(book=it)}) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Book mode",Modifier.weight(1f)); Switch(checked=vm.bookMode,onCheckedChange={vm.readingMode(book=it)}) }
             Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Animate page turns",Modifier.weight(1f)); Switch(checked=vm.pageAnimation,onCheckedChange={vm.readingMode(animation=it)}) }
             MenuRow("Fullscreen reading", onClick = { tools = false; vm.fullScreen = true })
             MenuRow("Reading and translation settings", onClick = { tools = false; vm.navigate("settings") })
@@ -130,7 +130,7 @@ import kotlinx.coroutines.launch
             MenuRow("Start from the beginning", onClick = { tools = false; vm.restart() })
         }
     }
-    if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("The chapter text will be sent to your configured translation service. AO3 credentials are not sent. Only continue if you trust this service.")},confirmButton={TextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={TextButton(onClick={translationConsent=false}) { Text("Cancel") }})
+    if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("Chapter text will be sent to your translation service.")},confirmButton={TextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={TextButton(onClick={translationConsent=false}) { Text("Cancel") }})
     if(appearance) ModalBottomSheet(
         onDismissRequest = { appearance = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -138,7 +138,7 @@ import kotlinx.coroutines.launch
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             ReadingAppearanceControls(vm)
-            Button(onClick = { appearance = false }, modifier = Modifier.fillMaxWidth()) { Text("Done · return to story") }
+            Button(onClick = { appearance = false }, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
     if(bookmarkDialog) AlertDialog(onDismissRequest = { bookmarkDialog = false }, title = { Text("Add bookmark") }, text = {
@@ -147,7 +147,7 @@ import kotlinx.coroutines.launch
     if(bookmarksMenu) ModalBottomSheet(onDismissRequest = { bookmarksMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item { Text("Bookmarks", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp)) }
-            if(vm.bookmarks.isEmpty()) item { Text("Add a bookmark from Reading options to keep a named place in this fic.", Modifier.padding(16.dp)) }
+            if(vm.bookmarks.isEmpty()) item { Text("No bookmarks.", Modifier.padding(16.dp)) }
             items(vm.bookmarks, key = { it.id }) { bookmark ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { MenuRow(bookmark.title, supportingText = "Chapter ${bookmark.chapter + 1}", onClick = { vm.jumpBookmark(bookmark); bookmarksMenu = false }) }

@@ -374,7 +374,7 @@ void MainWindow::setupUI()
         searchRow->addWidget(m_searchInput, 1); searchRow->addWidget(m_searchButton);
         searchViewLayout->addWidget(searchBar);
         auto *tools = new QHBoxLayout; tools->setContentsMargins(12, 0, 12, 8);
-        auto *heading = new QLabel(QStringLiteral("Find your next read"), searchView);
+        auto *heading = new QLabel(QStringLiteral("Search"), searchView);
         heading->setStyleSheet(QStringLiteral("font-size: 12pt; font-weight: bold; color: #443a34;"));
         tools->addWidget(heading, 1);
         m_filterButton->setParent(searchView); m_filterButton->setMinimumHeight(44);
@@ -503,7 +503,7 @@ void MainWindow::setupUI()
     }
     m_libraryPage = new QWidget(m_contentStack);
     auto *libraryLayout = new QVBoxLayout(m_libraryPage);
-    auto *libraryHeading = new QLabel(QStringLiteral("Your reading library"), m_libraryPage);
+    auto *libraryHeading = new QLabel(QStringLiteral("Library"), m_libraryPage);
     libraryHeading->setStyleSheet(QStringLiteral("font-size: 18pt; font-weight: bold; color: #292723;")); libraryLayout->addWidget(libraryHeading);
     m_libraryFilter = new QComboBox(m_libraryPage); m_libraryFilter->addItems({"Recent reads", "Offline saved", "Favorites"}); libraryLayout->addWidget(m_libraryFilter);
     m_librarySearch=new QLineEdit(m_libraryPage); m_librarySearch->setPlaceholderText("Search library by title or author"); libraryLayout->addWidget(m_librarySearch); connect(m_librarySearch,&QLineEdit::textChanged,this,[this] { refreshLibrary(); });
@@ -517,7 +517,7 @@ void MainWindow::setupUI()
     });
     connect(restore,&QPushButton::clicked,this,[this] {
         const auto path=QFileDialog::getOpenFileName(this,"Import library backup",{},"JSON files (*.json)"); if(path.isEmpty()) return;
-        if(QMessageBox::question(this,"Import library backup?","Merge the backup into your library? Existing downloads and reading positions are kept. Only import files you trust.")!=QMessageBox::Yes) return;
+        if(QMessageBox::question(this,"Import library backup?","Merge the backup into your library? Existing downloads and reading positions are kept.")!=QMessageBox::Yes) return;
         QFile file(path); if(file.size()>100*1024*1024 || !file.open(QIODevice::ReadOnly)) { onError("Could not read backup (maximum 100 MB)"); return; }
         QString error; if(!LibraryBackup::merge(QJsonDocument::fromJson(file.readAll()).object(),&error)) { onError(error); return; }
         refreshLibrary(); statusBar()->showMessage("Library backup imported. Existing downloads and reading positions were kept.");
@@ -771,7 +771,7 @@ void MainWindow::setLoggedInState(bool loggedIn)
 
     if (loggedIn) {
         QString name = m_loginManager->userInfo().username;
-        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : QStringLiteral("Hi, %1").arg(name));
+        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : name);
         m_loginButton->setToolTip(name);
         m_loginButton->setEnabled(mobileUi());
         m_userGreeting->setText(QString());

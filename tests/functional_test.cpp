@@ -185,7 +185,7 @@ private slots:
         QVERIFY(window.m_loginManager->isLoggedIn());
         QCOMPARE(window.m_loginManager->username(), QStringLiteral("MixedCase"));
         QCOMPARE(window.m_loginManager->userInfo().dashboardUrl, QStringLiteral("https://archiveofourown.org/users/MixedCase"));
-        QCOMPARE(window.m_loginButton->text(), QStringLiteral("Hi, MixedCase"));
+        QCOMPARE(window.m_loginButton->text(), QStringLiteral("MixedCase"));
         QVERIFY(!window.m_navWorks->isHidden());
         QCOMPARE(window.m_contentStack->currentIndex(), 0);
         // Restart does not trust stored cookies until a new server verification.
