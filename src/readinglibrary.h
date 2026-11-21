@@ -45,10 +45,21 @@ public:
         return write(m_root + "/index.json", {{"entries", updated}});
     }
     static QJsonObject chapterMetadata(const WorkChapter &chapter) {
-        return {{"title",chapter.title},{"text",chapter.text},{"notesBefore",chapter.notesBefore},{"notesAfter",chapter.notesAfter}};
+        QJsonArray styles;
+        for (const auto &s:chapter.styles) styles.append(QJsonObject{{"start",s.start},{"end",s.end},{"bold",s.bold},{"italic",s.italic},{"underline",s.underline},{"strike",s.strike},{"code",s.code},{"url",s.url}});
+        return {{"title",chapter.title},{"text",chapter.text},{"notesBefore",chapter.notesBefore},{"notesAfter",chapter.notesAfter},{"styles",styles}};
     }
     static WorkChapter readChapter(const QJsonObject &chapter) {
-        return {chapter.value("title").toString(),chapter.value("text").toString(),chapter.value("notesBefore").toString(),chapter.value("notesAfter").toString()};
+        WorkChapter result{chapter.value("title").toString(),chapter.value("text").toString(),chapter.value("notesBefore").toString(),chapter.value("notesAfter").toString()};
+        for (const auto &value:chapter.value("styles").toArray()) {
+            const auto s=value.toObject(); TextStyleSpan span;
+            span.start=s.value("start").toInt(-1); span.end=s.value("end").toInt(-1);
+            if (span.start<0 || span.end<=span.start || span.end>result.text.size()) continue;
+            span.bold=s.value("bold").toBool(); span.italic=s.value("italic").toBool(); span.underline=s.value("underline").toBool(); span.strike=s.value("strike").toBool(); span.code=s.value("code").toBool();
+            if (!readingLink(s.value("url").toString()).isEmpty()) span.url=s.value("url").toString();
+            result.styles.append(span);
+        }
+        return result;
     }
     bool saveOffline(const Work &work, const QVector<WorkChapter> &chapters) {
         if (!valid(work.id) || chapters.isEmpty()) return false;

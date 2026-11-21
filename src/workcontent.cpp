@@ -1,6 +1,8 @@
 #include "workcontent.h"
 #include <QRegularExpression>
 #include <QTextDocument>
+#include <QTextBlock>
+#include <QTextFragment>
 #include <QStringList>
 #include <QVector>
 
@@ -131,7 +133,22 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                         }
                     }
                     if (title.isEmpty()) title = QStringLiteral("Chapter %1").arg(chapters.size() + 1);
-                    chapters.append({title, text});
+                    WorkChapter chapter{title,text};
+                    const int trim = document.toPlainText().indexOf(text);
+                    for (auto block = document.begin(); block.isValid(); block = block.next()) {
+                        for (auto it = block.begin(); !it.atEnd(); ++it) {
+                            const auto fragment = it.fragment(); if (!fragment.isValid()) continue;
+                            const auto format = fragment.charFormat();
+                            TextStyleSpan span;
+                            span.start = qMax(0,fragment.position()-trim); span.end = qMin(int(text.size()),fragment.position()+fragment.length()-trim);
+                            span.bold = format.fontWeight() >= QFont::Bold; span.italic = format.fontItalic();
+                            span.underline = format.fontUnderline(); span.strike = format.fontStrikeOut();
+                            span.code = format.fontFixedPitch() || format.fontFamilies().toStringList().contains("monospace");
+                            if (!readingLink(format.anchorHref()).isEmpty()) span.url = format.anchorHref();
+                            if (span.end>span.start && (span.bold || span.italic || span.underline || span.strike || span.code || !span.url.isEmpty())) chapter.styles.append(span);
+                        }
+                    }
+                    chapters.append(chapter);
                     bodies.append({bodyStart, int(tag.capturedStart())});
                 }
                 previousBodyEnd = tag.capturedEnd();

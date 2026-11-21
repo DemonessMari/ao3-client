@@ -25,6 +25,7 @@ public:
     }
     std::function<void(double)> positionChanged;
     std::function<void()> centerClicked;
+    std::function<void(const QString &)> linkActivated;
     std::function<void(int)> chapterRequested;
     std::function<void()> pageChanged;
     bool animated = true;
@@ -137,7 +138,12 @@ protected:
     }
 
     void wheelEvent(QWheelEvent *e) override { if(e->angleDelta().y()) turn(e->angleDelta().y()<0?1:-1); e->accept(); }
-    void mouseReleaseEvent(QMouseEvent *e) override { if(e->position().x()<width()*.3) turn(-1); else if(e->position().x()>width()*.7) turn(1); else if(centerClicked) centerClicked(); }
+    void mouseReleaseEvent(QMouseEvent *e) override {
+        if (doc && animation.state()==QAbstractAnimation::Stopped && linkActivated) {
+            const auto link=doc->documentLayout()->anchorAt(e->position()+QPointF(0,current*doc->pageSize().height()));
+            if (!link.isEmpty()) { linkActivated(link); return; }
+        }
+        if(e->position().x()<width()*.3) turn(-1); else if(e->position().x()>width()*.7) turn(1); else if(centerClicked) centerClicked(); }
     void keyPressEvent(QKeyEvent *e) override { if(e->key()==Qt::Key_Right || e->key()==Qt::Key_PageDown || e->key()==Qt::Key_Space) turn(1); else if(e->key()==Qt::Key_Left || e->key()==Qt::Key_PageUp) turn(-1); else QWidget::keyPressEvent(e); }
 private:
     friend class FunctionalTest;

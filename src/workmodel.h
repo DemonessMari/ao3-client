@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QDateTime>
 #include <QVector>
+#include "textstyle.h"
 
 struct Work {
     QString id;
@@ -51,6 +52,7 @@ struct WorkChapter {
     QString text;
     QString notesBefore = {};
     QString notesAfter = {};
+    QVector<TextStyleSpan> styles = {};
     QString exportText() const {
         QStringList sections{title};
         if (!notesBefore.isEmpty()) sections << "Author notes\n\n" + notesBefore;

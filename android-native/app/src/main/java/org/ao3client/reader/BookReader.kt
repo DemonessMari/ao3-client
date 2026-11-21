@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -24,20 +25,21 @@ import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
 
 internal data class BookPage(val offset: Int, val text: String)
-internal fun paginateBook(text: String, fit: (String) -> Int): List<BookPage> {
+internal fun paginateBook(text: String, fit: (String) -> Int): List<BookPage> = paginateBookRanges(text) { chunk, _ -> fit(chunk) }
+internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<BookPage> {
     val pages = mutableListOf<BookPage>(); var offset = 0
     while(offset < text.length) {
         var limit = minOf(text.length, offset + 8192)
         if(limit < text.length && text[limit-1].isHighSurrogate()) limit--
         val chunk = text.substring(offset, limit)
-        var count = fit(chunk).coerceIn(1, chunk.length)
+        var count = fit(chunk,offset).coerceIn(1, chunk.length)
         if(count < chunk.length && chunk[count-1].isHighSurrogate()) count = if(count > 1) count-1 else 2
         pages += BookPage(offset, chunk.substring(0,count)); offset += count
     }
     return pages.ifEmpty { listOf(BookPage(0,"")) }
 }
 
-@Composable fun BookReader(vm: ClientState, text: String, paragraphs: List<String>, modifier: Modifier = Modifier) {
+@Composable fun BookReader(vm: ClientState, text: String, paragraphs: List<String>, modifier: Modifier = Modifier, rich: AnnotatedString = AnnotatedString(text)) {
     val chapterIndex=vm.chapter
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
@@ -52,13 +54,13 @@ internal fun paginateBook(text: String, fit: (String) -> Int): List<BookPage> {
             Text("Close the keyboard or enlarge the reading area to show a page.")
             return@BoxWithConstraints
         }
-        val pagination = produceState<List<BookPage>?>(null,text,width,height,style,density.fontScale) {
+        val pagination = produceState<List<BookPage>?>(null,text,rich,width,height,style,density.fontScale) {
             value=null
             value=withContext(Dispatchers.Default) {
             val jobContext=coroutineContext
-            paginateBook(text) { chunk ->
+            paginateBookRanges(text) { chunk,offset ->
                 jobContext.ensureActive()
-                val layout = measurer.measure(chunk, style, constraints = Constraints(maxWidth = width), maxLines = (height/linePixels).toInt()+3)
+                val layout = measurer.measure(rich.subSequence(offset,offset+chunk.length), style, constraints = Constraints(maxWidth = width), maxLines = (height/linePixels).toInt()+3)
                 val line = (0 until layout.lineCount).lastOrNull { layout.getLineBottom(it) <= height } ?: 0
                 layout.getLineEnd(line, visibleEnd = false)
             }
@@ -68,8 +70,8 @@ internal fun paginateBook(text: String, fit: (String) -> Int): List<BookPage> {
         if(pages==null) { Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { CircularProgressIndicator() }; return@BoxWithConstraints }
         val starts = remember(text) { var cursor=0; paragraphs.map { p -> text.indexOf(p,cursor).coerceAtLeast(cursor).also { cursor=it+p.length } } }
         val anchor = if(vm.bookOffset >= 0) vm.bookOffset else starts.getOrElse(vm.positionIndex) { 0 }
-        key(text,width,height,style,vm.readerRevision,vm.chapter) {
-            CurlBookPages(vm,pages,pages.indexOfLast { it.offset <= anchor }.coerceAtLeast(0),style,width) { page ->
+        key(text,rich,width,height,style,vm.readerRevision,vm.chapter) {
+            CurlBookPages(vm,pages,pages.indexOfLast { it.offset <= anchor }.coerceAtLeast(0),style,width,rich) { page ->
                 if(vm.chapter!=chapterIndex) return@CurlBookPages
                 vm.bookOffset=pages[page].offset
                 vm.positionIndex=starts.indexOfLast { it<=vm.bookOffset }.coerceAtLeast(0)

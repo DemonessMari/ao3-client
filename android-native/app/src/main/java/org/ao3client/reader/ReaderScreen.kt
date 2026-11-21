@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,9 @@ import kotlinx.coroutines.launch
     var bookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkName by remember { mutableStateOf("") }
     val text = vm.translation ?: vm.chapters[vm.chapter].text
+    val rich = remember(text,currentChapter.styles,vm.translation,fic.id) { if(vm.translation==null) currentChapter.styledText(fic.id) else AnnotatedString(text) }
     val paragraphs = remember(text) { text.split(Regex("""\n\s*\n""")).filter { it.isNotBlank() }.ifEmpty { listOf(text) } }
+    val paragraphOffsets=remember(text,paragraphs) { var cursor=0; paragraphs.map { p -> text.indexOf(p,cursor).coerceAtLeast(cursor).also { cursor=it+p.length } } }
     val chapterIndex = vm.chapter
     val scroll = key(vm.chapter, vm.readerRevision, vm.bookMode) { rememberLazyListState(vm.positionIndex.coerceIn(paragraphs.indices), vm.positionOffset.coerceAtLeast(0)) }
     val ioScope=rememberCoroutineScope()
@@ -89,10 +92,10 @@ import kotlinx.coroutines.launch
                 if(!vm.textOnly) vm.error?.let { ErrorCard(it) { vm.error = null } }
                 if(vm.translating && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.translationProgress, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium) }
                 if(vm.translation != null && !vm.textOnly) Text("Machine translation · ${vm.preferences.language}", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
-                if(vm.bookMode) BookReader(vm,text,paragraphs,Modifier.weight(1f).fillMaxWidth())
+                if(vm.bookMode) BookReader(vm,text,paragraphs,Modifier.weight(1f).fillMaxWidth(),rich)
                 else SelectionContainer(Modifier.weight(1f)) {
                     LazyColumn(state = scroll, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
-                        itemsIndexed(paragraphs) { _, paragraph -> Text(paragraph, fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp) }
+                        itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp) }
                         item {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 TextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }

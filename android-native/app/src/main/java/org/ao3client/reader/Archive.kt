@@ -14,11 +14,16 @@ import org.json.JSONObject
 
 data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "")
 data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String)
-data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "") {
+data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "", internal val styles: List<TextStyleSpan> = emptyList()) {
     fun exportText(): String = listOfNotNull(title,notesBefore.takeIf { it.isNotBlank() }?.let { "Author notes\n\n$it" },text,notesAfter.takeIf { it.isNotBlank() }?.let { "End notes\n\n$it" }).joinToString("\n\n")
-    fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter)
+    fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter).put("styles",JSONArray().also { array -> styles.forEach { array.put(it.json()) } })
     companion object {
-        fun fromJson(value: JSONObject) = Chapter(value.optString("title"),value.getString("text"),value.optString("notesBefore"),value.optString("notesAfter"))
+        fun fromJson(value: JSONObject): Chapter {
+            val text=value.getString("text"); val styles=value.optJSONArray("styles") ?: JSONArray()
+            return Chapter(value.optString("title"),text,value.optString("notesBefore"),value.optString("notesAfter"),(0 until styles.length()).mapNotNull { i ->
+                styles.optJSONObject(i)?.let(TextStyleSpan::fromJson)?.takeIf { it.start>=0 && it.end>it.start && it.end<=text.length }
+            })
+        }
     }
 }
 data class Listing(val works: List<Fic>, val page: Int, val pages: Int, val total: String)
@@ -73,13 +78,7 @@ object ArchiveParser {
         val root = Jsoup.parse(html).selectFirst("div.user.profile") ?: error("AO3 did not return this user's public profile.")
         return AuthorProfile(username, root.selectFirst("h3.heading")?.text().orEmpty(), root.selectFirst("dl.meta")?.text().orEmpty(), root.selectFirst(".bio blockquote.userstuff")?.text().orEmpty())
     }
-    private fun readableText(element: Element): String {
-        val body = element.clone()
-        body.select(".landmark, .hidden").remove()
-        body.select("br").forEach { it.after("\n") }
-        body.select("p, div, h1, h2, h3, h4, blockquote, li").forEach { it.appendText("\n\n") }
-        return body.wholeText().trim()
-    }
+    private fun readableText(element: Element): String = readingText(element).text
     fun chapters(html: String): List<Chapter> {
         val doc = Jsoup.parse(html)
         val bodies = doc.select("#chapters .userstuff").filter { el ->
@@ -103,7 +102,8 @@ object ArchiveParser {
         }
         return bodies.mapIndexed { i, el ->
             val title = chapterRoot(el)?.selectFirst("h3.title")?.text()
-            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", readableText(el), before[i].joinToString("\n\n"), after[i].joinToString("\n\n"))
+            val content=readingText(el)
+            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles)
         }
     }
     fun username(html: String): String? {

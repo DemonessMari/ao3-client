@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.unit.*
@@ -151,7 +152,7 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
 
 }
 
-@Composable internal fun CurlBookPages(vm: ClientState, pages: List<BookPage>, initial: Int, style: TextStyle, textWidth: Int, changed: (Int)->Unit) {
+@Composable internal fun CurlBookPages(vm: ClientState, pages: List<BookPage>, initial: Int, style: TextStyle, textWidth: Int, rich: AnnotatedString, changed: (Int)->Unit) {
     var index by remember { mutableIntStateOf(initial) }
     var target by remember { mutableIntStateOf(initial) }
     var phase by remember { mutableFloatStateOf(0f) }
@@ -160,9 +161,10 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
     val scope=rememberCoroutineScope()
     val measurer=rememberTextMeasurer(cacheSize=4)
     val density=LocalDensity.current
+    val uriHandler=LocalUriHandler.current
     val paper=MaterialTheme.colorScheme.surface.copy(alpha=1f); val ink=MaterialTheme.colorScheme.onSurface
-    val old=remember(pages,index,style,textWidth) { measurer.measure(pages[index].text,style,constraints=Constraints(maxWidth=textWidth)) }
-    val other=remember(pages,target,style,textWidth) { measurer.measure(pages[target].text,style,constraints=Constraints(maxWidth=textWidth)) }
+    val old=remember(pages,index,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[index].offset,pages[index].offset+pages[index].text.length),style,constraints=Constraints(maxWidth=textWidth)) }
+    val other=remember(pages,target,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[target].offset,pages[target].offset+pages[target].text.length),style,constraints=Constraints(maxWidth=textWidth)) }
     val pad=with(density) { Offset(24.dp.toPx(),20.dp.toPx()) }
     LaunchedEffect(index) { changed(index) }
     fun settle(commit:Boolean) { busy=true; scope.launch {
@@ -186,8 +188,15 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
                 contentDescription=pages[index].text
                 if(vm.textOnly) onClick(label="Show reading controls") { vm.textOnly=false; true }
                 customActions=listOf(CustomAccessibilityAction("Next page") { turn(1); true },CustomAccessibilityAction("Previous page") { turn(-1); true })
-            }.pointerInput(index,vm.textOnly) {
+            }.pointerInput(index,vm.textOnly,rich) {
                 detectTapGestures { point ->
+                    if(!busy && old.layoutInput.text.isNotEmpty()) {
+                        val position=point-pad; val offset=old.getOffsetForPosition(position)
+                        if(offset<old.layoutInput.text.length && old.getBoundingBox(offset).contains(position)) {
+                            val link=old.layoutInput.text.getLinkAnnotations(offset,offset+1).firstOrNull()?.item as? LinkAnnotation.Url
+                            if(link!=null) { runCatching { uriHandler.openUri(link.url) }.onFailure { vm.error="Could not open link." }; return@detectTapGestures }
+                        }
+                    }
                     if(point.x<size.width*.3f) turn(-1)
                     else if(point.x>size.width*.7f) turn(1)
                     else if(vm.textOnly) vm.textOnly=false

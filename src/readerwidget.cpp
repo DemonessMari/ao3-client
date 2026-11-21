@@ -143,6 +143,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     page->addWidget(m_book, 1);
     m_book->positionChanged = [this](double fraction) { auto *bar=m_browser->verticalScrollBar(); bar->setValue(qRound(fraction*bar->maximum())); saveProgress(); };
     m_book->chapterRequested = [this](int delta) { const int next=m_index+delta; if(next<0 || next>=m_chapters.size()) return; showChapter(next); renderText(m_chapters[next].text,delta<0?1.0:0.0); };
+    m_book->linkActivated = [this](const QString &url) { const auto target=readingLink(url,m_work.id); if(!target.isEmpty()) QDesktopServices::openUrl(QUrl(target)); };
     m_book->centerClicked = [this] { if(m_textOnly) setTextOnly(false); };
     m_browser->viewport()->installEventFilter(this);
     page->addWidget(m_browser, 1); page->addStretch(); layout->addLayout(page, 1);
@@ -325,6 +326,20 @@ void ReaderWidget::renderText(const QString &text, double fraction)
     font.setPointSize(m_fontSize->value());
     m_browser->document()->setDefaultFont(font);
     m_browser->setPlainText(text);
+    if (m_index>=0 && m_index<m_chapters.size() && text==m_chapters[m_index].text) {
+        for (const auto &span:m_chapters[m_index].styles) {
+            if (span.start<0 || span.end<=span.start || span.end>text.size()) continue;
+            QTextCharFormat style;
+            if (span.bold) style.setFontWeight(QFont::Bold);
+            if (span.italic) style.setFontItalic(true);
+            if (span.underline) style.setFontUnderline(true);
+            if (span.strike) style.setFontStrikeOut(true);
+            if (span.code) style.setFontFamilies({"monospace"});
+            const auto link=readingLink(span.url,m_work.id);
+            if (!link.isEmpty()) { style.setAnchor(true); style.setAnchorHref(link); style.setFontUnderline(true); }
+            QTextCursor range(m_browser->document()); range.setPosition(span.start); range.setPosition(span.end,QTextCursor::KeepAnchor); range.mergeCharFormat(style);
+        }
+    }
     QTextCursor cursor(m_browser->document());
     cursor.select(QTextCursor::Document);
     QTextBlockFormat block;

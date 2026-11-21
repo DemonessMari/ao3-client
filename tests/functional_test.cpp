@@ -978,6 +978,37 @@ private slots:
         QCOMPARE(window.m_currentResult.totalPages, 1);
         QVERIFY(window.m_paginationWidget->isHidden());
     }
+    void readingStylesAndLinksSurviveOfflineAndBookMode() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/work-formatting.html")); QVERIFY(fixture.open(QIODevice::ReadOnly));
+        const auto chapter=extractWorkChapters(QString::fromUtf8(fixture.readAll())).first();
+        QVERIFY(!chapter.text.contains("unwanted script text"));
+        Work work; work.id="778899"; work.title="Formatting test";
+        ReaderWidget reader; reader.openWork(work,{chapter});
+        auto format=[&](const QString &word,QTextDocument *document) {
+            const int start=document->toPlainText().indexOf(word); QTextCursor cursor(document);
+            cursor.setPosition(start); cursor.setPosition(start+word.size(),QTextCursor::KeepAnchor); return cursor.charFormat();
+        };
+        QVERIFY(format("bolditalic",reader.m_browser->document()).fontWeight()>=QFont::Bold);
+        QVERIFY(format("bolditalic",reader.m_browser->document()).fontItalic());
+        QVERIFY(format("underline",reader.m_browser->document()).fontUnderline());
+        QVERIFY(format("deleted",reader.m_browser->document()).fontStrikeOut());
+        QCOMPARE(format("monospace",reader.m_browser->document()).fontFamilies().toStringList(),QStringList{"monospace"});
+        QCOMPARE(format("AO3 link",reader.m_browser->document()).anchorHref(),QString("https://archiveofourown.org/works/123"));
+        QCOMPARE(format("footnote",reader.m_browser->document()).anchorHref(),QString("https://archiveofourown.org/works/778899#footnote"));
+        for(const auto &word:QStringList{"unsafe","local file","credentials"}) QVERIFY(!format(word,reader.m_browser->document()).isAnchor());
+        reader.setBookMode(true); QTRY_VERIFY(reader.m_book->doc);
+        QVERIFY(format("bolditalic",reader.m_book->doc).fontItalic());
+        QTemporaryDir directory; ReadingLibrary library(directory.path()); QVERIFY(library.saveOffline(work,{chapter}));
+        const auto saved=library.load(work.id).first(); QCOMPARE(saved.styles.size(),chapter.styles.size());
+        QCOMPARE(saved.styles.first().start,chapter.styles.first().start);
+        const auto json=ReadingLibrary::chapterMetadata(chapter); const auto restored=ReadingLibrary::readChapter(json);
+        QCOMPARE(restored.styles.size(),chapter.styles.size());
+        QVERIFY(readingLink("javascript:alert(1)",work.id).isEmpty());
+        QVERIFY(readingLink("file:///tmp/a",work.id).isEmpty());
+        reader.setBookMode(false); reader.renderText("Translated text without source positions");
+        QVERIFY(reader.m_browser->document()->toPlainText().startsWith("Translated"));
+        QVERIFY(!format("Translated",reader.m_browser->document()).fontItalic());
+    }
     void chapterNotesStaySeparateAndSurviveOfflineBackup() {
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/work-notes.html")); QVERIFY(fixture.open(QIODevice::ReadOnly));
         const auto chapters = extractWorkChapters(QString::fromUtf8(fixture.readAll()));
