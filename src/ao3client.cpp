@@ -90,6 +90,7 @@ LoginManager *AO3Client::loginManager() const
 void AO3Client::login(const QString &login, const QString &password)
 {
     m_kudosStatus.clear();
+    m_readingPending.clear();
     const quint64 generation = ++m_authGeneration;
     QNetworkRequest request = makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/users/login")));
 
@@ -149,6 +150,7 @@ void AO3Client::checkSession()
 void AO3Client::logout()
 {
     m_kudosStatus.clear();
+    m_readingPending.clear();
     ++m_commentsGeneration;
     ++m_authGeneration;
     ++m_listingGeneration;
@@ -800,5 +802,30 @@ void AO3Client::submitComment(const QString &workId,const CommentForm &form,cons
         reply->deleteLater();if(generation!=m_authGeneration)return;
         if(ao3RequestFailed(reply))emit commentSubmitted(workId,{{},"Could not confirm whether the comment was posted. Refresh comments before trying again.",true});
         else emit commentSubmitted(workId,parseCommentSubmission(QString::fromUtf8(reply->readAll())));
+    });
+}
+
+void AO3Client::setMarkedForLater(const QString &id,bool later) {
+    if(!m_loginManager->isLoggedIn() || !QRegularExpression("^[0-9]+$").match(id).hasMatch() || m_readingPending.contains(id))return;
+    const auto generation=m_authGeneration;const auto user=m_loginManager->username();
+    const QString action=later?"mark_for_later":"mark_as_read";
+    const QUrl source("https://archiveofourown.org/works/"+id+"?view_adult=true");
+    m_readingPending.insert(id);
+    auto finish=[this,id,generation](const QString &message) { if(generation!=m_authGeneration)return;m_readingPending.remove(id);emit readingActionFinished(id,message); };
+    auto request=makeRequest(source);request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);request.setRawHeader("Cache-Control","no-cache");
+    auto *reply=m_manager->get(request);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,id,later,action,generation,user,source,finish] {
+        reply->deleteLater();if(generation!=m_authGeneration)return;
+        const auto html=QString::fromUtf8(reply->readAll());const auto form=parseReadingAction(html,id);
+        if(reply->error()!=QNetworkReply::NoError || !kudosIdentityMatches(html,user) || form.action.isEmpty()) {finish("Reading history is unavailable. Check your sign-in and AO3 history preferences.");return;}
+        const QString success=later?"Marked for later on AO3":"Marked as read on AO3";
+        if(form.action!=action) {finish(success);return;}
+        QByteArray body;for(auto it=form.fields.cbegin();it!=form.fields.cend();++it) {if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        auto post=makeRequest(QUrl("https://archiveofourown.org/works/"+id+"/"+action));post.setRawHeader("Content-Type","application/x-www-form-urlencoded");post.setRawHeader("Referer",source.toEncoded());
+        auto *posted=m_manager->post(post,body);
+        connect(posted,&QNetworkReply::finished,this,[posted,id,action,user,success,finish] {
+            posted->deleteLater();const auto html=QString::fromUtf8(posted->readAll());const auto result=parseReadingAction(html,id);
+            finish(posted->error()==QNetworkReply::NoError && kudosIdentityMatches(html,user) && !result.action.isEmpty() && result.action!=action?success:QString("Could not confirm the change. Check your Marked for Later list on AO3."));
+        });
     });
 }

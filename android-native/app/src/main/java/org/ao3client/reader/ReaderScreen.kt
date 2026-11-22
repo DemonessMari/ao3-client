@@ -119,6 +119,7 @@ import kotlinx.coroutines.launch
             Text("Reading options", style = MaterialTheme.typography.titleLarge)
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
             KudosButton(vm,fic.id)
+            ReadingListButton(vm,fic.id)
             MenuRow("Comments",onClick={tools=false;vm.showComments(fic.id)})
             if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) MenuRow("Author notes",onClick={tools=false;notes=true})
             MenuRow("Add bookmark", onClick = { tools = false; bookmarkName = vm.chapters[vm.chapter].title; bookmarkDialog = true })

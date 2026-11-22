@@ -38,6 +38,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *, QEvent *) override;
 signals:
+    void readingActionRequested(const QString &workId);
     void kudosRequested(const QString &workId);
     void workOpened(const QString &workId);
     void backRequested();

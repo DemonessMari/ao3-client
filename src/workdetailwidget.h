@@ -20,6 +20,7 @@ public:
     Work currentWork() const { return m_currentWork; }
 
 signals:
+    void readingActionRequested(const QString &workId);
     void kudosRequested(const QString &workId);
     void workShown(const QString &workId);
     void commentsRequested(const QString &workId);

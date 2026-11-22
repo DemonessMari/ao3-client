@@ -88,6 +88,22 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void readingListActions() {
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/reading-action.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(fixture.readAll());
+        const auto form=parseReadingAction(html,"123");QCOMPARE(form.action,QString("mark_for_later"));QCOMPARE(form.fields.size(),2);QCOMPARE(form.fields.value("authenticity_token"),QString("csrf+&=token"));
+        QVERIFY(parseReadingAction(html,"456").action.isEmpty());
+        for(const auto &bad:QStringList{QString(html).replace("/works/123/mark_for_later","https://evil.example/works/123/mark_for_later"),QString(html).replace("value=\"patch\"","value=\"delete\""),QString(html).replace("authenticity_token","missing"),"<div id='workskin'>"+html+"</div>"})QVERIFY(parseReadingAction(bad,"123").action.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);
+        window.m_loginManager->setUserInfo({"Alice","https://archiveofourown.org/users/Alice",true});
+        QSignalSpy finished(window.m_client,&AO3Client::readingActionFinished);
+        const auto read=QString(html).replace("mark_for_later","mark_as_read");network->pages={html.toUtf8(),read.toUtf8()};int before=network->requests.size();
+        window.m_client->setMarkedForLater("123",true);window.m_client->setMarkedForLater("123",true);
+        QTRY_COMPARE(finished.size(),1);QCOMPARE(finished.last()[1].toString(),QString("Marked for later on AO3"));QCOMPARE(network->requests.size(),before+2);QCOMPARE(network->requests.last().path(),QString("/works/123/mark_for_later"));QVERIFY(network->bodies.last().contains("_method=patch"));
+        network->page=read.toUtf8();before=network->requests.size();window.m_client->setMarkedForLater("123",true);QTRY_COMPARE(finished.size(),2);QCOMPARE(network->requests.size(),before+1);
+        network->pages={read.toUtf8(),html.toUtf8()};window.m_client->setMarkedForLater("123",false);QTRY_COMPARE(finished.size(),3);QCOMPARE(finished.last()[1].toString(),QString("Marked as read on AO3"));
+        network->pages={html.toUtf8(),QByteArray("Unknown")};window.m_client->setMarkedForLater("123",true);QTRY_COMPARE(finished.size(),4);QVERIFY(finished.last()[1].toString().contains("Could not confirm"));
+        network->page=QString(html).replace("Alice","Bob").toUtf8();before=network->requests.size();window.m_client->setMarkedForLater("123",true);QTRY_COMPARE(finished.size(),5);QCOMPARE(network->requests.size(),before+1);
+    }
     void kudosFormsResultsAndPosting() {
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/kudos-form.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(fixture.readAll());
         const auto fields=parseKudosForm(html,"123");QCOMPARE(fields.size(),3);QCOMPARE(fields.value("authenticity_token"),QString("csrf+&=token"));

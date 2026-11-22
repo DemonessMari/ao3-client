@@ -120,6 +120,8 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
         "QPushButton:hover { background: #e8e3dc; }"
     ));
     btnLayout->addWidget(m_downloadButton);
+    auto *readingAction=new QPushButton("AO3 reading list",m_buttonBar);btnLayout->addWidget(readingAction);
+    connect(readingAction,&QPushButton::clicked,this,[this] {if(!m_currentWork.id.isEmpty())emit readingActionRequested(m_currentWork.id);});
     m_kudosButton=new QPushButton("Give kudos",m_buttonBar);m_kudosButton->setObjectName("giveKudos");btnLayout->addWidget(m_kudosButton);
     connect(m_kudosButton,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty())emit kudosRequested(m_currentWork.id); });
     auto *profile = new QPushButton("Author profile", m_buttonBar); profile->setObjectName("authorProfileButton"); profile->setVisible(!mobileUi()); btnLayout->addWidget(profile);

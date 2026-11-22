@@ -150,6 +150,8 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     QPushButton *desktopOnline=nullptr;
     auto *feedback=new QWidget(this);auto *feedbackRow=new QHBoxLayout(feedback);feedbackRow->setContentsMargins(0,0,0,0);layout->addWidget(feedback);
     auto *comments = new QPushButton("Comments",feedback); comments->setObjectName("readerComments"); feedbackRow->addWidget(comments);
+    auto *readingAction=new QPushButton("AO3 reading list",feedback);feedbackRow->addWidget(readingAction);
+    connect(readingAction,&QPushButton::clicked,this,[this] {if(!m_work.id.isEmpty())emit readingActionRequested(m_work.id);});
     m_kudosButton=new QPushButton("Give kudos",feedback);m_kudosButton->setObjectName("readerKudos");feedbackRow->addWidget(m_kudosButton);
     connect(m_kudosButton,&QPushButton::clicked,this,[this] {if(!m_work.id.isEmpty())emit kudosRequested(m_work.id);});
     connect(comments,&QPushButton::clicked,this,[this] {saveProgress();if(!m_work.id.isEmpty())emit commentsRequested(m_work.id);});

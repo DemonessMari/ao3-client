@@ -148,7 +148,7 @@ class Archive(private val prefs: SharedPreferences) {
             return "/works/search?" + args.joinToString("&") { encode(it.first) + "=" + encode(it.second) }
         }
     }
-    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null): String {
+    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null): String {
         val generation = expectedGeneration ?: cookieGeneration
         var url = URL(BASE + path)
         var post = form
@@ -168,6 +168,7 @@ class Archive(private val prefs: SharedPreferences) {
                     cookies.get(url.toURI(), emptyMap())["Cookie"]
                 }
                 if (!cookieHeader.isNullOrEmpty()) connection.setRequestProperty("Cookie", cookieHeader.joinToString("; "))
+                if(referer!=null)connection.setRequestProperty("Referer",BASE+referer)
                 post?.let { values ->
                     connection.requestMethod = "POST"; connection.doOutput = true
                     connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -211,6 +212,25 @@ class Archive(private val prefs: SharedPreferences) {
     fun downloads(id:String):List<OfficialDownload> {
         require(id.matches(Regex("[0-9]+")))
         return OfficialDownloads.parse(request("/works/$id?view_adult=true"),id)
+    }
+    fun setMarkedForLater(id:String,later:Boolean,expected:String):String {
+        require(id.matches(Regex("[0-9]+")))
+        val generation=cookieGeneration
+        val path="/works/$id?view_adult=true"
+        val html=request(path)
+        require(ArchiveParser.sessionIdentity(html)==expected) { "Your AO3 session changed. Sign in again." }
+        val form=ReadingActions.form(html,id) ?: error("Reading history is unavailable. Check your AO3 history preferences.")
+        val action=if(later) "mark_for_later" else "mark_as_read"
+        val success=if(later) "Marked for later on AO3" else "Marked as read on AO3"
+        if(generation!=cookieGeneration)throw java.util.concurrent.CancellationException("Session changed")
+        if(form.action!=action)return success
+        return try {
+            val result=request("/works/$id/$action",form.fields,generation,path)
+            val updated=ReadingActions.form(result,id)
+            if(ArchiveParser.sessionIdentity(result)==expected && updated!=null && updated.action!=action)success
+            else "Could not confirm the change. Check your Marked for Later list on AO3."
+        } catch(e:java.util.concurrent.CancellationException) {throw e}
+          catch(_:Exception) {"Could not confirm the change. Check your Marked for Later list on AO3."}
     }
     fun giveKudos(id:String,expected:String?):KudosResult {
         require(id.matches(Regex("[0-9]+")))
