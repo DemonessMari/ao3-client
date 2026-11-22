@@ -2,10 +2,10 @@
 set -euo pipefail
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${AO3_BUILD_DIR:-$project_dir/build}"
-version="$(sed -n 's/project(ao3-client VERSION \([^ ]*\).*/\1/p' "$project_dir/CMakeLists.txt")"
+version="$(sed -n 's/.*setApplicationVersion(QStringLiteral("\([^"]*\)")).*/\1/p' "$project_dir/src/main.cpp")"
 stage="$(mktemp -d)"; trap 'rm -rf -- "$stage"' EXIT
 cmake --install "$build_dir" --prefix "$stage/ao3-client-$version/usr"
-cp "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/PRIVACY.md" "$project_dir/THIRD-PARTY-NOTICES.md" "$project_dir/FEATURES.md" "$project_dir/RELEASE-CHECKLIST.md" "$project_dir/VERIFICATION.md" "$project_dir/SECURITY.md" "$stage/ao3-client-$version/"
+cp "$project_dir/SKINS.md" "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/PRIVACY.md" "$project_dir/THIRD-PARTY-NOTICES.md" "$project_dir/FEATURES.md" "$project_dir/RELEASE-CHECKLIST.md" "$project_dir/VERIFICATION.md" "$project_dir/SECURITY.md" "$stage/ao3-client-$version/"
 cp "$project_dir/scripts/install-package.py" "$stage/ao3-client-$version/install-package.py"
 cp "$project_dir/scripts/write-launcher.py" "$stage/ao3-client-$version/write-launcher.py"
 cat > "$stage/ao3-client-$version/install.sh" <<'INSTALL'

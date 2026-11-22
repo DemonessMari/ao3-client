@@ -13,6 +13,7 @@
 #include "mobileui.h"
 #include "mobilestack.h"
 #include "readabletheme.h"
+#include "appskin.h"
 #include <QGuiApplication>
 #include <QInputMethod>
 #include <QMenu>
@@ -218,7 +219,7 @@ void MainWindow::setupUI()
     m_headerBar = new QWidget(centralWidget);
     m_headerBar->setMinimumHeight(72);
     m_headerBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    m_headerBar->setStyleSheet(QStringLiteral("background: #900;"));
+    m_headerBar->setStyleSheet(QStringLiteral("background: palette(window);"));
     auto *headerLayout = new QGridLayout(m_headerBar);
     headerLayout->setContentsMargins(16, 8, 16, 8);
     headerLayout->setSpacing(12);
@@ -235,15 +236,15 @@ void MainWindow::setupUI()
     m_searchInput->setMinimumWidth(280);
     m_searchInput->setMaximumWidth(450);
     m_searchInput->setStyleSheet(QStringLiteral(
-        "QLineEdit { border: 1px solid #bbb; border-radius: 4px; padding: 2px 10px; background: white; color: #333; font-size: 10pt; }"
+        "QLineEdit { border: 1px solid palette(mid); border-radius: 4px; padding: 2px 10px; background: palette(base); color: palette(text); font-size: 10pt; }"
     ));
     headerLayout->addWidget(m_searchInput, 0, 1);
 
     m_searchButton = new QPushButton(QStringLiteral("Search"), m_headerBar);
     m_searchButton->setMinimumHeight(32);
     m_searchButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #600; color: white; border: none; border-radius: 4px; padding: 2px 18px; font-weight: bold; font-size: 10pt; }"
-        "QPushButton:hover { background: #700; }"
+        "QPushButton { background: palette(highlight); color: palette(highlighted-text); border: none; border-radius: 4px; padding: 2px 18px; font-weight: bold; font-size: 10pt; }"
+        "QPushButton:hover { background: palette(highlight); }"
     ));
     connect(m_searchButton, &QPushButton::clicked, this, &MainWindow::performSearch);
     headerLayout->addWidget(m_searchButton, 0, 2);
@@ -259,7 +260,8 @@ void MainWindow::setupUI()
     m_filterDock->setWidget(m_filterPanel);
     addDockWidget(Qt::LeftDockWidgetArea, m_filterDock);
     m_filterButton->setCheckable(true);
-    m_filterButton->setChecked(true);
+    m_filterButton->setChecked(false);
+    m_filterDock->hide();
     connect(m_filterButton, &QPushButton::clicked, this, [this](bool checked) {
         if (!mobileUi()) { m_filterDock->setVisible(checked); return; }
         m_pendingReadId.clear();
@@ -281,15 +283,15 @@ void MainWindow::setupUI()
     headerLayout->setColumnStretch(mobileUi() ? 1 : 4, 1);
 
     m_userGreeting = new QLabel(m_headerBar);
-    m_userGreeting->setStyleSheet(QStringLiteral("color: #ffcccc; font-size: 9pt; background: transparent;"));
+    m_userGreeting->setStyleSheet(QStringLiteral("color: palette(text); font-size: 9pt; background: transparent;"));
     m_userGreeting->hide();
     headerLayout->addWidget(m_userGreeting, 0, 5);
 
     m_loginButton = new QPushButton(QStringLiteral("Log In"), m_headerBar);
     m_loginButton->setMinimumHeight(32);
     m_loginButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; padding: 2px 18px; font-size: 10pt; }"
-        "QPushButton:hover { background: rgba(255,255,255,0.15); }"
+        "QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid); border-radius: 4px; padding: 2px 18px; font-size: 10pt; }"
+        "QPushButton:hover { background: palette(base); }"
     ));
     connect(m_loginButton, &QPushButton::clicked, this, &MainWindow::onLoginClicked);
     headerLayout->addWidget(m_loginButton, mobileUi() ? 1 : 0, mobileUi() ? 2 : 6);
@@ -305,7 +307,7 @@ void MainWindow::setupUI()
     // ── Navigation ──
     m_navBar = new QWidget(centralWidget);
     m_navBar->setObjectName(QStringLiteral("navigationBar"));
-    m_navBar->setStyleSheet(QStringLiteral("QWidget#navigationBar { background: #f5f0eb; border-bottom: 2px solid #d5ccc2; }"));
+    m_navBar->setStyleSheet(QStringLiteral("QWidget#navigationBar { background: palette(button); border-bottom: 2px solid palette(mid); }"));
     auto *navLayout = new QHBoxLayout(m_navBar);
     navLayout->setContentsMargins(16, 0, 16, 2);
     navLayout->setSpacing(2);
@@ -315,8 +317,8 @@ void MainWindow::setupUI()
         btn->setFlat(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QStringLiteral(
-            "QPushButton { background: transparent; color: #555; padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
-            "QPushButton:hover { color: #900; background: rgba(0,0,0,0.04); }"
+            "QPushButton { background: transparent; color: palette(text); padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
+            "QPushButton:hover { color: palette(highlight); background: palette(button); }"
         ));
         return btn;
     };
@@ -326,8 +328,8 @@ void MainWindow::setupUI()
     m_navWorks = makeNavBtn(QStringLiteral("My Works"));
     m_navLogout = makeNavBtn(QStringLiteral("Sign Out"));
     m_navLogout->setStyleSheet(QStringLiteral(
-        "QPushButton { background: transparent; color: #900; padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
-        "QPushButton:hover { background: rgba(200,0,0,0.08); }"
+        "QPushButton { background: transparent; color: palette(highlight); padding: 8px 14px; border: none; font-size: 9pt; font-weight: bold; }"
+        "QPushButton:hover { background: palette(button); }"
     ));
 
     connect(m_navWorks, &QPushButton::clicked, this, &MainWindow::showUserWorks);
@@ -372,8 +374,8 @@ void MainWindow::setupUI()
             button->setCheckable(true); button->setMinimumWidth(0); button->setMinimumHeight(48);
             button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
             button->setStyleSheet(QStringLiteral(
-                "QPushButton { background: #fff; color: #655e57; border: none; border-radius: 8px; padding: 8px 2px; font-size: 10pt; }"
-                "QPushButton:checked { background: #f3e3e0; color: #900; font-weight: bold; }"));
+                "QPushButton { background: palette(base); color: palette(text); border: none; border-radius: 8px; padding: 8px 2px; font-size: 10pt; }"
+                "QPushButton:checked { background: palette(button); color: palette(highlight); font-weight: bold; }"));
         }
         readingSettings->setCheckable(false);
     } else mainLayout->addWidget(m_navBar);
@@ -381,7 +383,7 @@ void MainWindow::setupUI()
     // ── Content ──
     m_contentStack = mobileUi() ? new MobileStack(centralWidget) : new QStackedWidget(centralWidget);
     m_contentStack->setObjectName(QStringLiteral("contentPages"));
-    m_contentStack->setStyleSheet(QStringLiteral("QStackedWidget#contentPages { background: #faf8f6; }"));
+    m_contentStack->setStyleSheet(QStringLiteral("QStackedWidget#contentPages { background: palette(base); }"));
 
     // Dashboard view (0)
     m_dashboardView = new DashboardWidget(this);
@@ -389,6 +391,10 @@ void MainWindow::setupUI()
     connect(m_dashboardView, &DashboardWidget::browseRequested, this, [this] {
         m_contentStack->setCurrentIndex(2); m_searchInput->setFocus();
     });
+
+    connect(m_dashboardView,&DashboardWidget::libraryRequested,this,&MainWindow::showLibrary);
+    connect(m_dashboardView,&DashboardWidget::skinRequested,this,[this]{editAppSkin(this);});
+    connect(m_dashboardView,&DashboardWidget::workRequested,this,[this](const QString &id){for(const auto &value:ReadingLibrary().entries()){const auto entry=value.toObject();if(ReadingLibrary::work(entry).id==id){openLibraryEntry(entry);break;}}});
 
     // Login view (1)
     m_loginView = new LoginDialog(this);
@@ -417,13 +423,13 @@ void MainWindow::setupUI()
         searchViewLayout->addWidget(searchBar);
         auto *tools = new QHBoxLayout; tools->setContentsMargins(12, 0, 12, 8);
         auto *heading = new QLabel(QStringLiteral("Search"), searchView);
-        heading->setStyleSheet(QStringLiteral("font-size: 12pt; font-weight: bold; color: #443a34;"));
+        heading->setStyleSheet(QStringLiteral("font-size: 12pt; font-weight: bold; color: palette(text);"));
         tools->addWidget(heading, 1);
         m_filterButton->setParent(searchView); m_filterButton->setMinimumHeight(44);
         tools->addWidget(m_filterButton); searchViewLayout->addLayout(tools);
         m_headerBar->setMinimumHeight(0); m_headerBar->setMaximumHeight(60);
         auto *brand = new QLabel(QStringLiteral("AO3 Client"), m_headerBar);
-        brand->setStyleSheet(QStringLiteral("color: white; font-size: 17pt; font-weight: bold; background: transparent;"));
+        brand->setStyleSheet(QStringLiteral("color: palette(text); font-size: 17pt; font-weight: bold; background: transparent;"));
         headerLayout->removeWidget(m_loginButton); headerLayout->addWidget(brand, 0, 1);
         headerLayout->addWidget(m_loginButton, 0, 2);
         m_loginButton->setText(QStringLiteral("Sign in"));
@@ -432,7 +438,7 @@ void MainWindow::setupUI()
 
     m_searchSplitter = new QSplitter(Qt::Horizontal, searchView);
     m_searchSplitter->setHandleWidth(1);
-    m_searchSplitter->setStyleSheet(QStringLiteral("QSplitter::handle { background: #ddd; }"));
+    m_searchSplitter->setStyleSheet(QStringLiteral("QSplitter::handle { background: palette(mid); }"));
 
     m_workList = new QListWidget(m_searchSplitter);
     m_workList->setMinimumWidth(280);
@@ -440,9 +446,9 @@ void MainWindow::setupUI()
     m_workList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_workList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_workList->setStyleSheet(QStringLiteral(
-        "QListWidget { border: none; background: white; }"
-        "QListWidget::item { border-bottom: 1px solid #e8e3dc; padding: 0; }"
-        "QListWidget::item:selected { background: #e8f0f8; }"
+        "QListWidget { border: none; background: palette(base); }"
+        "QListWidget::item { border-bottom: 1px solid palette(button); padding: 0; }"
+        "QListWidget::item:selected { background: palette(button); }"
     ));
 
     if (!mobileUi()) connect(m_workList, &QListWidget::currentRowChanged, this, &MainWindow::onWorkSelected);
@@ -463,7 +469,7 @@ void MainWindow::setupUI()
     // Pagination bar
     m_paginationWidget = new QWidget(searchView);
     m_paginationWidget->setStyleSheet(QStringLiteral(
-        "background: white; border-top: 1px solid #e0ddd5; padding: 6px;"
+        "background: palette(base); border-top: 1px solid palette(mid); padding: 6px;"
     ));
     auto *pageLayout = new QHBoxLayout(m_paginationWidget);
     pageLayout->setContentsMargins(12, 6, 12, 6);
@@ -471,19 +477,19 @@ void MainWindow::setupUI()
     m_prevButton = new QPushButton(QStringLiteral("Previous"), m_paginationWidget);
     m_prevButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
     m_prevButton->setStyleSheet(QStringLiteral(
-        "QPushButton { color: #2a5f8f; border: 1px solid #ccc; border-radius: 3px; padding: 4px 14px; background: #faf8f6; font-size: 9pt; }"
-        "QPushButton:hover { background: #e8f0f8; }"
-        "QPushButton:disabled { color: #bbb; }"
+        "QPushButton { color: palette(highlight); border: 1px solid palette(mid); border-radius: 3px; padding: 4px 14px; background: palette(base); font-size: 9pt; }"
+        "QPushButton:hover { background: palette(button); }"
+        "QPushButton:disabled { color: palette(mid); }"
     ));
     m_pageLabel = new QLabel(m_paginationWidget);
     m_pageLabel->setAlignment(Qt::AlignCenter);
-    m_pageLabel->setStyleSheet(QStringLiteral("color: #666; font-size: 9pt;"));
+    m_pageLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 9pt;"));
     m_nextButton = new QPushButton(QStringLiteral("Next"), m_paginationWidget);
     m_nextButton->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
     m_nextButton->setStyleSheet(QStringLiteral(
-        "QPushButton { color: #2a5f8f; border: 1px solid #ccc; border-radius: 3px; padding: 4px 14px; background: #faf8f6; font-size: 9pt; }"
-        "QPushButton:hover { background: #e8f0f8; }"
-        "QPushButton:disabled { color: #bbb; }"
+        "QPushButton { color: palette(highlight); border: 1px solid palette(mid); border-radius: 3px; padding: 4px 14px; background: palette(base); font-size: 9pt; }"
+        "QPushButton:hover { background: palette(button); }"
+        "QPushButton:disabled { color: palette(mid); }"
     ));
 
     pageLayout->addWidget(m_prevButton);
@@ -548,7 +554,7 @@ void MainWindow::setupUI()
     m_libraryPage = new QWidget(m_contentStack);
     auto *libraryLayout = new QVBoxLayout(m_libraryPage);
     auto *libraryHeading = new QLabel(QStringLiteral("Library"), m_libraryPage);
-    libraryHeading->setStyleSheet(QStringLiteral("font-size: 18pt; font-weight: bold; color: #292723;")); libraryLayout->addWidget(libraryHeading);
+    libraryHeading->setStyleSheet(QStringLiteral("font-size: 18pt; font-weight: bold; color: palette(text);")); libraryLayout->addWidget(libraryHeading);
     m_libraryFilter = new QComboBox(m_libraryPage); m_libraryFilter->addItems({"Recent reads", "Offline saved", "Favorites"}); libraryLayout->addWidget(m_libraryFilter);
     m_librarySearch=new QLineEdit(m_libraryPage); m_librarySearch->setPlaceholderText("Search library by title or author"); libraryLayout->addWidget(m_librarySearch); connect(m_librarySearch,&QLineEdit::textChanged,this,[this] { refreshLibrary(); });
     auto *backupRow=new QHBoxLayout; auto *backup=new QPushButton("Export library backup",m_libraryPage); auto *restore=new QPushButton("Import library backup",m_libraryPage); backupRow->addWidget(backup); backupRow->addWidget(restore); libraryLayout->addLayout(backupRow);
@@ -684,7 +690,7 @@ void MainWindow::setupUI()
         m_mobileStatus = new QLabel(centralWidget); m_mobileStatus->setWordWrap(true);
         m_mobileStatus->setMinimumWidth(0); m_mobileStatus->setMaximumHeight(96);
         m_mobileStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        m_mobileStatus->setStyleSheet(QStringLiteral("color: #655e57; background: #faf8f6; padding: 6px 12px; font-size: 10pt;"));
+        m_mobileStatus->setStyleSheet(QStringLiteral("color: palette(text); background: palette(base); padding: 6px 12px; font-size: 10pt;"));
         mainLayout->addWidget(m_mobileStatus); mainLayout->addWidget(m_navBar);
         connect(statusBar(), &QStatusBar::messageChanged, m_mobileStatus, &QLabel::setText);
         connect(m_contentStack, &QStackedWidget::currentChanged, this, [this](int index) {
@@ -698,7 +704,7 @@ void MainWindow::setupUI()
 
     // Status bar
     statusBar()->setStyleSheet(QStringLiteral(
-        "QStatusBar { background: #f5f0eb; border-top: 1px solid #ddd; color: #666; font-size: 8pt; }"
+        "QStatusBar { background: palette(button); border-top: 1px solid palette(mid); color: palette(text); font-size: 8pt; }"
     ));
 
     setCentralWidget(centralWidget);
@@ -883,6 +889,7 @@ void MainWindow::showUserWorks()
 
 void MainWindow::showDashboard()
 {
+    m_dashboardView->refreshLibrary();
     m_pendingReadId.clear();
     if (m_contentStack->currentWidget() == m_reader) closeReader();
     if (m_loginManager->isLoggedIn()) {
@@ -1062,7 +1069,11 @@ void MainWindow::refreshLibrary()
 void MainWindow::openLibrarySelection()
 {
     auto *item = m_libraryList->currentItem(); if (!item) return;
-    const auto entry = QJsonObject::fromVariantMap(item->data(Qt::UserRole).toMap()); const auto work = ReadingLibrary::work(entry);
+    openLibraryEntry(QJsonObject::fromVariantMap(item->data(Qt::UserRole).toMap()));
+}
+void MainWindow::openLibraryEntry(const QJsonObject &entry)
+{
+    const auto work = ReadingLibrary::work(entry);
     m_detailWidget->showWork(work);
     const auto chapters = ReadingLibrary().load(work.id);
     if (!chapters.isEmpty()) { openReader(work, chapters); return; }

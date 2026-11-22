@@ -54,9 +54,9 @@ LoginDialog::LoginDialog(QWidget *parent)
     m_loginButton = new QPushButton(QStringLiteral("Sign in"), card);
     m_loginButton->setMinimumHeight(36);
     m_loginButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #900; color: white; border: none; border-radius: 4px; font-weight: bold; }"
-        "QPushButton:hover { background: #b00; }"
-        "QPushButton:pressed { background: #700; }"
+        "QPushButton { background: palette(highlight); color: palette(highlighted-text); border: none; border-radius: 4px; font-weight: bold; }"
+        "QPushButton:hover { background: palette(highlight); }"
+        "QPushButton:pressed { background: palette(highlight); }"
     ));
     cardLayout->addWidget(m_loginButton);
 

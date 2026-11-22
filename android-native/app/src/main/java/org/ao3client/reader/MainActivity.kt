@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 "sepia" -> lightColorScheme(primary = Color(0xFF843D21), background = Color(0xFFF1E3C7), surface = Color(0xFFF1E3C7))
                 else -> lightColorScheme(primary = Color(0xFF920B19), secondary = Color(0xFF76564C), background = Color(0xFFFFF8F5), surface = Color(0xFFFFF8F5))
             }
-            MaterialTheme(colorScheme = colors) {
+            MaterialTheme(colorScheme = model.appSkin?.colorScheme() ?: colors) {
                 ClientApp(model)
             }
         }
@@ -70,13 +70,13 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(when(vm.screen) { "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            navigationIcon = { if (vm.screen in listOf("archiveBookmark", "comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "archiveBookmark") vm.bookmarkReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        topBar = { TopAppBar(title = { Text(when(vm.screen) { "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            navigationIcon = { if (vm.screen in listOf("skins", "archiveBookmark", "comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if(vm.screen=="skins")vm.skinReturn else if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "archiveBookmark") vm.bookmarkReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             actions = { if(vm.screen !in listOf("login", "settings")) TextButton(onClick = { vm.navigate(if (vm.username == null) "login" else "account") }) { Text(if(vm.username == null) "Sign in" else "Account") } }) },
         bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
             NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
@@ -89,10 +89,7 @@ class MainActivity : ComponentActivity() {
             if (vm.loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
             vm.error?.let { ErrorCard(it) { vm.error = null } }
             when(vm.screen) {
-                "home" -> Column(Modifier.fillMaxSize()) {
-                    vm.libraryEntries.firstOrNull()?.let { entry -> Button(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth().padding(16.dp)) { Text("Continue · ${entry.fic.title}",maxLines=2,overflow=TextOverflow.Ellipsis) } }
-                    HomeScreen(browse={vm.navigate("search")},website={vm.openWebsite(Archive.BASE+"/")})
-                }
+                "home" -> HomeScreen(vm)
                 "search" -> SearchScreen(vm)
                 "library" -> LibraryScreen(vm)
                 "archiveBookmark" -> ArchiveBookmarkScreen(vm)
@@ -100,6 +97,7 @@ class MainActivity : ComponentActivity() {
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
                 "details" -> DetailScreen(vm)
+                "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
                 "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
@@ -115,11 +113,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-@Composable fun HomeScreen(browse: () -> Unit,website:()->Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Text("AO3 Client", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(28.dp)); Button(onClick = browse, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.Search, null); Spacer(Modifier.width(8.dp)); Text("Search") }
-        Spacer(Modifier.height(12.dp));OutlinedButton(onClick=website,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Text("Browse AO3 website")}
+@Composable fun HomeScreen(vm:ClientState) {
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        item {Text("Home",style=MaterialTheme.typography.headlineMedium)}
+        item {Text("${vm.libraryEntries.size} recent works · ${vm.libraryEntries.count{it.offline}} offline · ${vm.libraryEntries.count{it.favorite}} favorites")}
+        item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={vm.navigate("search")}){Text("Search")};OutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};OutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
+        item {Text("Recent reads",style=MaterialTheme.typography.titleLarge)}
+        if(vm.libraryEntries.isEmpty())item{Text("Your recent reads will appear here.")}
+        items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->Card(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
+        item {OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/")},modifier=Modifier.fillMaxWidth()){Text("Browse AO3 website")}}
     }
 }
 @Composable fun SearchScreen(vm: ClientState) {
@@ -268,9 +270,10 @@ class MainActivity : ComponentActivity() {
     val prefs = vm.preferences
     Text("Reading appearance", style = MaterialTheme.typography.titleLarge)
     Text("Changes save automatically.", style = MaterialTheme.typography.bodySmall)
+    OutlinedButton(onClick=vm::showSkins){Text("App skin" + (vm.appSkin?.let { " · "+it.name } ?: ""))}
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
-            FilterChip(selected = prefs.theme == value, onClick = { vm.appearance(theme = value) }, label = { Text(title) })
+            FilterChip(selected = vm.appSkin == null && prefs.theme == value, onClick = { vm.applySkin(null); vm.appearance(theme = value) }, label = { Text(title) })
         }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

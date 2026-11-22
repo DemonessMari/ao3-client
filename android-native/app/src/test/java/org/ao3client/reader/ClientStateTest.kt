@@ -52,6 +52,14 @@ class ClientStateTest {
         assertEquals("reader",vm.screen); assertEquals("dark",vm.preferences.theme); assertEquals(27,vm.preferences.fontSize)
         val restored=state(app); assertEquals("dark",restored.preferences.theme); assertEquals("sans-serif",restored.preferences.fontFamily); assertEquals(1.9f,restored.preferences.lineSpacing,.001f); assertEquals(27,restored.preferences.fontSize)
     }
+    @Test fun skinPersistsAndTheEditorReturnsToTheReader() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
+        assertEquals("home",vm.screen);vm.applySkin(AppSkin.preset("dark"));assertEquals("Dark",state(app).appSkin?.name)
+        vm.screen="reader";vm.showSkins();assertEquals("skins",vm.screen);assertEquals("reader",vm.skinReturn)
+        assertTrue(runCatching{vm.applySkin(AppSkin(text="#ffffff"))}.isFailure);assertEquals("Dark",vm.appSkin?.name)
+        vm.screen="reader";vm.navigate("settings");assertEquals("reader",vm.settingsReturn);vm.showSkins();vm.navigate(vm.skinReturn);assertEquals("settings",vm.screen);assertEquals("reader",vm.settingsReturn)
+        vm.applySkin(null);assertNull(state(app).appSkin)
+    }
     @Test fun noPublicTranslationProviderIsSilentlySelected() {
         val app=TestApp(directory.newFolder(),MemoryPreferences()); val vm=state(app)
         assertEquals("",vm.preferences.service); vm.selected=Fic("123","Title","Writer"); vm.chapters=listOf(Chapter("One","Original")); vm.translate()

@@ -1,4 +1,5 @@
 #include <QApplication>
+#include "appskin.h"
 #include <QIcon>
 #include "mainwindow.h"
 #include "mobileui.h"
@@ -15,7 +16,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AO3 Client"));
-    app.setApplicationVersion(QStringLiteral("3.2.0-rc.1"));
+    app.setApplicationVersion(QStringLiteral("3.2.0-rc.2"));
     QCommandLineParser parser; parser.setApplicationDescription("Unofficial AO3 reader"); parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"smoke-test","Open the main window briefly and exit (installation check)."}); parser.process(app);
     app.setOrganizationName(QStringLiteral("AO3Client"));
@@ -33,6 +34,7 @@ int main(int argc, char *argv[])
             "QTabBar::tab { min-height: 36px; }"));
     }
     if(QSettings().value("translation/url").toString()=="https://translate.cutie.dating") { QSettings().remove("translation/url"); QSettings().remove("translation/consented"); }
+    applyAppSkin();
     MainWindow window;
     if (mobileUi()) {
         applyReadableTheme(&window);

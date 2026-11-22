@@ -1,3 +1,4 @@
+#include "appskin.h"
 #include <QtTest>
 #include "bookview.h"
 #include <QTextBlock>
@@ -89,6 +90,24 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void appSkinFormatAndContrast() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/app-skin.json"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();AppSkin skin;QString error;QVERIFY2(AppSkin::parse(bytes,skin,error),qPrintable(error));QCOMPARE(skin.name,QString("Blue"));AppSkin copy;QVERIFY(AppSkin::parse(skin.json(),copy,error));QCOMPARE(copy.accent,skin.accent);
+        for(int i=0;i<3;++i)QVERIFY2(AppSkin::parse(AppSkin::preset(i).json(),copy,error),qPrintable(error));
+        auto object=QJsonDocument::fromJson(bytes).object();for(const auto &pair:QVector<QPair<QString,QJsonValue>>{{"text","#ffffff"},{"onAccent","#174a8b"},{"accent","#eeeeee"},{"surface","#00ffffff"},{"version",2},{"css","body{display:none}"}}){auto invalid=object;invalid[pair.first]=pair.second;QVERIFY(!AppSkin::parse(QJsonDocument(invalid).toJson(),copy,error));}
+        QVERIFY(!AppSkin::parse(QByteArray(16385,'x'),copy,error));
+    }
+    void appSkinUpdatesExistingChromeAndReader() {
+        const auto prior=QSettings().value("appearance/skin"),use=QSettings().value("reader/useAppSkin");const auto palette=QApplication::palette();auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");if(use.isValid())QSettings().setValue("reader/useAppSkin",use);else QSettings().remove("reader/useAppSkin");QApplication::setPalette(palette);});
+        MainWindow window;installNetwork(window);window.resize(1100,850);window.show();QTest::qWait(30);
+        QSettings().setValue("reader/useAppSkin",true);const auto skin=AppSkin::preset(1);QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QCOMPARE(window.palette().color(QPalette::Window),QColor(skin.background));QCOMPARE(window.m_searchInput->palette().color(QPalette::Text),QColor(skin.text));QCOMPARE(window.m_headerBar->palette().color(QPalette::Window),QColor(skin.background));QCOMPARE(window.m_searchButton->palette().color(QPalette::Button),QColor(skin.accent));
+        Work work;work.id="865432";work.title="Skin preview";work.author="Reader";window.m_reader->openWork(work,{{"Chapter one","Reading text.\n\nAnother paragraph."}});window.m_reader->applyAppearance();QCOMPARE(window.m_reader->m_browser->palette().color(QPalette::Text),QColor(skin.text));QCOMPARE(window.m_reader->m_browser->palette().color(QPalette::Base),QColor(skin.background));
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS")){window.showDashboard();QTest::qWait(80);window.grab().save("/tmp/ao3-home-dark.png");QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(80);window.grab().save("/tmp/ao3-home-light.png");}
+    }
+    void filtersStartClosedAndHomeShowsLibraryActions() {
+        MainWindow window;installNetwork(window);window.show();QTest::qWait(30);QVERIFY(window.m_filterDock->isHidden());QVERIFY(!window.m_filterButton->isChecked());QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(!window.m_filterDock->isHidden());QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(window.m_filterDock->isHidden());
+        QVERIFY(window.m_dashboardView->findChild<QListWidget *>("homeRecentReads"));QSignalSpy browse(window.m_dashboardView,&DashboardWidget::browseRequested);for(auto *button:window.m_dashboardView->findChildren<QPushButton *>())if(button->text()=="Search")button->click();QCOMPARE(browse.size(),1);
+        Work recent;recent.id="879999";recent.title="Recent work";recent.author="Author";QVERIFY(ReadingLibrary().saveOffline(recent,{{"One","A recent saved chapter."}}));window.m_librarySearch->setText("No match");window.m_libraryFilter->setCurrentIndex(2);window.m_dashboardView->refreshLibrary();window.m_dashboardView->workRequested(recent.id);QCOMPARE(window.m_reader->workId(),recent.id);QCOMPARE(window.m_reader->m_browser->toPlainText(),QString("A recent saved chapter."));
+    }
     void websiteSessionProbePreservesOrReplacesTheNativeAccount() {
         const auto previousAgent=QSettings().value("network/userAgent");auto restore=qScopeGuard([&]{if(previousAgent.isValid())QSettings().setValue("network/userAgent",previousAgent);else QSettings().remove("network/userAgent");});
         QNetworkCookie cookie("_otwarchive_session","web-token");cookie.setDomain("archiveofourown.org");cookie.setPath("/");cookie.setHttpOnly(true);
@@ -534,7 +553,7 @@ private slots:
         MainWindow window;
         window.show();
         auto *network = installNetwork(window);
-        QTest::qWait(30);
+        window.show();QTest::qWait(30);QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(!window.m_filterDock->isHidden());
         QCOMPARE(window.m_prevButton->text(), QStringLiteral("Previous"));
         QCOMPARE(window.m_nextButton->text(), QStringLiteral("Next"));
         QVERIFY(!window.m_prevButton->icon().isNull());
@@ -628,7 +647,7 @@ private slots:
         MainWindow window;
         auto *network = installNetwork(window);
         window.show();
-        QTest::qWait(30);
+        QTest::qWait(30);QTest::mouseClick(window.m_filterButton,Qt::LeftButton);
         auto *tabs = window.m_filterPanel->findChild<QTabWidget *>(QStringLiteral("filterTabs"));
         tabs->setCurrentIndex(1);
         auto *edit = window.m_filterPanel->findChild<TagLineEdit *>(QStringLiteral("fandom_names"));
@@ -699,7 +718,7 @@ private slots:
         QSettings().setValue("translation/consented",true);
         MainWindow window;
         installNetwork(window);
-        window.show(); QTest::qWait(30);
+        window.show(); QTest::qWait(30);QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(!window.m_filterDock->isHidden());
         const QString html = QStringLiteral("<div id='chapters'><div class='chapter'><div class='chapter preface group'><h3 class='title'>Chapter 1: Beginning</h3></div><div class='userstuff module'><p>Bonjour le monde.</p></div></div><div class='chapter'><div class='chapter preface group'><h3 class='title'>Chapter 2: Ending</h3></div><div class='userstuff module'><p>Deuxième chapitre.</p></div></div></div>");
         const auto chapters = extractWorkChapters(html);
         QCOMPARE(chapters.size(), 2);
@@ -871,11 +890,7 @@ private slots:
     void readingSettingsDarkThemeAndNarrowLayout() {
         const QPalette original = QApplication::palette();
         const auto restore = qScopeGuard([&] { QApplication::setPalette(original); });
-        QPalette dark = original;
-        dark.setColor(QPalette::Window, QColor(QStringLiteral("#202020")));
-        dark.setColor(QPalette::WindowText, Qt::white);
-        dark.setColor(QPalette::Text, Qt::white);
-        dark.setColor(QPalette::ButtonText, Qt::white);
+        QPalette dark = AppSkin::preset(1).palette();
         QApplication::setPalette(dark);
         ReaderWidget reader;
         Work work; work.title = QStringLiteral("A long title that should wrap without clipping the reading controls or chapter bar");
@@ -886,14 +901,14 @@ private slots:
         QVERIFY(reader.rect().contains(reader.m_chapter->geometry()));
         QVERIFY(reader.m_browser->height() > 180);
         QVERIFY(!reader.m_chapter->geometry().intersects(reader.m_next->geometry()));
-        QVERIFY(reader.palette().color(QPalette::WindowText).lightness() < 100);
+        QCOMPARE(reader.palette().color(QPalette::WindowText),dark.color(QPalette::WindowText));
         if (qEnvironmentVariableIsSet("AO3_CAPTURE_THEME")) reader.grab().save(QStringLiteral("/tmp/ao3-reader-narrow.png"));
         QTimer::singleShot(0, &reader, [&] {
             auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget()); QVERIFY(dialog);
             QTest::qWait(30);
             QVERIFY(dialog->width() >= 540);
-            QVERIFY(dialog->palette().color(QPalette::Window).lightness() > 200);
-            QVERIFY(dialog->palette().color(QPalette::WindowText).lightness() < 100);
+            QCOMPARE(dialog->palette().color(QPalette::Window),dark.color(QPalette::Window));
+            QCOMPARE(dialog->palette().color(QPalette::WindowText),dark.color(QPalette::WindowText));
             auto *url = dialog->findChild<QLineEdit *>(QStringLiteral("translationServiceUrl")); QVERIFY(url);
             QVERIFY(url->width() >= 280);
             if (qEnvironmentVariableIsSet("AO3_CAPTURE_THEME")) dialog->grab().save(QStringLiteral("/tmp/ao3-settings-darktheme.png"));

@@ -17,6 +17,11 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = Archive(storage)
     var preferences by mutableStateOf(Preferences(storage.getString("language", "en")!!, storage.getBoolean("filterLanguage", false), storage.getString("service", "")!!, storage.getString("apiKey", "")!!, storage.getInt("fontSize", 19), storage.getString("theme", "light")!!, storage.getString("fontFamily", "serif")!!, storage.getFloat("lineSpacing", 1.6f)))
+    var appSkin by mutableStateOf(runCatching { AppSkin.parse(storage.getString("appSkin", "")!!.toByteArray()) }.getOrNull())
+        private set
+    var skinReturn="home"
+    fun showSkins(){skinReturn=screen;navigate("skins")}
+    fun applySkin(skin:AppSkin?){val valid=skin?.let{AppSkin.parse(it.json().toByteArray())};appSkin=valid;storage.edit().apply{if(valid==null)remove("appSkin") else putString("appSkin",valid.json())}.apply()}
     var screen by mutableStateOf("home")
     var settingsReturn = "home"
     var query by mutableStateOf("")
@@ -239,8 +244,8 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if (destination != "reader") { ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
         error = null
         if (destination == "filters" && screen != "filters") filterDraft = filters
-        if (destination == "library") refreshLibrary()
-        if (destination == "settings") settingsReturn = screen
+        if (destination == "library" || destination == "home") refreshLibrary()
+        if (destination == "settings" && screen != "skins") settingsReturn = screen
         screen = destination
         storage.edit().putBoolean("resumeReader",destination=="reader").apply()
     }
@@ -369,6 +374,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         settingsConfirmation = true
     }
     fun appearance(theme: String = preferences.theme, family: String = preferences.fontFamily, spacing: Float = preferences.lineSpacing) {
+        if(theme!=preferences.theme) applySkin(null)
         preferences = preferences.copy(theme = theme, fontFamily = family, lineSpacing = spacing.coerceIn(1.2f, 2.2f))
         storage.edit().putString("theme", preferences.theme).putString("fontFamily", preferences.fontFamily).putFloat("lineSpacing", preferences.lineSpacing).apply()
     }

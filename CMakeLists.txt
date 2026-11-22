@@ -18,6 +18,8 @@ qt_add_executable(ao3-client
     src/readerwidget.cpp
     src/translationclient.h
     src/translationclient.cpp
+    src/appskin.cpp
+    src/appskin.h
     src/main.cpp
     src/mainwindow.h
     src/mainwindow.cpp
@@ -78,7 +80,7 @@ if(NOT ANDROID)
     install(TARGETS ao3-client RUNTIME DESTINATION bin)
     install(FILES icons/ao3.png DESTINATION share/icons/hicolor/256x256/apps RENAME ao3-client.png)
     install(FILES ao3-client.desktop DESTINATION share/applications)
-    install(FILES LICENSE README.md PRIVACY.md THIRD-PARTY-NOTICES.md FEATURES.md RELEASE-CHECKLIST.md VERIFICATION.md SECURITY.md DESTINATION share/doc/ao3-client)
+    install(FILES LICENSE SKINS.md README.md PRIVACY.md THIRD-PARTY-NOTICES.md FEATURES.md RELEASE-CHECKLIST.md VERIFICATION.md SECURITY.md DESTINATION share/doc/ao3-client)
     install(DIRECTORY licenses/ DESTINATION share/doc/ao3-client/licenses)
 
 endif()
@@ -97,7 +99,7 @@ if(BUILD_TESTING AND NOT ANDROID)
     add_executable(functional-test
         tests/functional_test.cpp
         src/mainwindow.cpp src/ao3client.cpp src/loginmanager.cpp
-        src/logindialog.cpp src/workdetailwidget.cpp src/dashboardwidget.cpp
+        src/appskin.cpp src/logindialog.cpp src/workdetailwidget.cpp src/dashboardwidget.cpp
         src/workitemwidget.cpp src/workcontent.cpp src/searchfilters.cpp src/taglineedit.cpp src/readerwidget.cpp src/translationclient.cpp resources/resources.qrc)
     target_compile_definitions(functional-test PRIVATE AO3_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     target_include_directories(functional-test PRIVATE src)

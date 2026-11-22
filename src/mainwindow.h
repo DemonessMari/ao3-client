@@ -97,6 +97,7 @@ private:
     bool m_listingBookmarks = false;
     void refreshLibrary();
     void openLibrarySelection();
+    void openLibraryEntry(const QJsonObject &entry);
     QWidget *m_libraryPage = nullptr;
     QListWidget *m_libraryList = nullptr;
     QComboBox *m_libraryFilter = nullptr;

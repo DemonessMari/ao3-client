@@ -24,7 +24,7 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     QFont nf = noSelLabel->font();
     nf.setPointSize(14);
     noSelLabel->setFont(nf);
-    noSelLabel->setStyleSheet(QStringLiteral("color: #999;"));
+    noSelLabel->setStyleSheet(QStringLiteral("color: palette(text);"));
     noSelLayout->addWidget(noSelLabel);
     mainLayout->addWidget(m_noSelectionWidget);
 
@@ -41,7 +41,7 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     m_titleLabel->setFont(tf);
     m_titleLabel->setTextFormat(Qt::PlainText);
     m_titleLabel->setWordWrap(true);
-    m_titleLabel->setStyleSheet(QStringLiteral("color: #2a5f8f;"));
+    m_titleLabel->setStyleSheet(QStringLiteral("color: palette(highlight);"));
     layout->addWidget(m_titleLabel);
 
     m_authorLabel = new QLabel(m_detailWidget);
@@ -49,38 +49,38 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     af.setPointSize(11);
     m_authorLabel->setTextFormat(Qt::PlainText);
     m_authorLabel->setFont(af);
-    m_authorLabel->setStyleSheet(QStringLiteral("color: #666;"));
+    m_authorLabel->setStyleSheet(QStringLiteral("color: palette(text);"));
     layout->addWidget(m_authorLabel);
 
     auto *sep1 = new QFrame(m_detailWidget);
     sep1->setFrameShape(QFrame::HLine);
-    sep1->setStyleSheet(QStringLiteral("color: #ddd;"));
+    sep1->setStyleSheet(QStringLiteral("color: palette(mid);"));
     layout->addWidget(sep1);
 
     m_fandomLabel = new QLabel(m_detailWidget);
     m_fandomLabel->setTextFormat(Qt::PlainText);
     m_fandomLabel->setWordWrap(true);
-    m_fandomLabel->setStyleSheet(QStringLiteral("color: #900; font-size: 9pt;"));
+    m_fandomLabel->setStyleSheet(QStringLiteral("color: palette(highlight); font-size: 9pt;"));
     layout->addWidget(m_fandomLabel);
 
     m_ratingLabel = new QLabel(m_detailWidget);
     m_ratingLabel->setWordWrap(true);
-    m_ratingLabel->setStyleSheet(QStringLiteral("color: #555; font-size: 9pt;"));
+    m_ratingLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 9pt;"));
     layout->addWidget(m_ratingLabel);
 
     m_tagsLabel = new QLabel(m_detailWidget);
     m_tagsLabel->setWordWrap(true);
-    m_tagsLabel->setStyleSheet(QStringLiteral("color: #555; font-size: 9pt;"));
+    m_tagsLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 9pt;"));
     layout->addWidget(m_tagsLabel);
 
     m_statsLabel = new QLabel(m_detailWidget);
     m_statsLabel->setWordWrap(true);
-    m_statsLabel->setStyleSheet(QStringLiteral("color: #888; font-size: 9pt;"));
+    m_statsLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 9pt;"));
     layout->addWidget(m_statsLabel);
 
     auto *sep2 = new QFrame(m_detailWidget);
     sep2->setFrameShape(QFrame::HLine);
-    sep2->setStyleSheet(QStringLiteral("color: #ddd;"));
+    sep2->setStyleSheet(QStringLiteral("color: palette(mid);"));
     layout->addWidget(sep2);
 
     auto *summaryTitle = new QLabel(QStringLiteral("<b>Summary</b>"), m_detailWidget);
@@ -91,12 +91,12 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     m_summaryBrowser = new QTextBrowser(m_detailWidget);
     m_summaryBrowser->setOpenExternalLinks(true);
     m_summaryBrowser->setMaximumHeight(150);
-    m_summaryBrowser->setStyleSheet(QStringLiteral("background: transparent; border: none; font-size: 9pt; color: #444;"));
+    m_summaryBrowser->setStyleSheet(QStringLiteral("background: transparent; border: none; font-size: 9pt; color: palette(text);"));
     layout->addWidget(m_summaryBrowser);
 
     auto *sep3 = new QFrame(m_detailWidget);
     sep3->setFrameShape(QFrame::HLine);
-    sep3->setStyleSheet(QStringLiteral("color: #ddd;"));
+    sep3->setStyleSheet(QStringLiteral("color: palette(mid);"));
     layout->addWidget(sep3);
 
     // Buttons
@@ -108,16 +108,16 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     m_readButton = new QPushButton(QStringLiteral("Open reader"), m_buttonBar);
     m_readButton->setMinimumHeight(32);
     m_readButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #900; color: white; border: none; border-radius: 4px; padding: 4px 20px; font-weight: bold; }"
-        "QPushButton:hover { background: #b00; }"
+        "QPushButton { background: palette(highlight); color: palette(highlighted-text); border: none; border-radius: 4px; padding: 4px 20px; font-weight: bold; }"
+        "QPushButton:hover { background: palette(highlight); }"
     ));
     btnLayout->addWidget(m_readButton);
 
     m_downloadButton = new QPushButton(QStringLiteral("Download"), m_buttonBar);
     m_downloadButton->setMinimumHeight(32);
     m_downloadButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background: #f5f0eb; color: #333; border: 1px solid #ccc; border-radius: 4px; padding: 4px 20px; }"
-        "QPushButton:hover { background: #e8e3dc; }"
+        "QPushButton { background: palette(button); color: palette(text); border: 1px solid palette(mid); border-radius: 4px; padding: 4px 20px; }"
+        "QPushButton:hover { background: palette(button); }"
     ));
     btnLayout->addWidget(m_downloadButton);
     auto *readingAction=new QPushButton("AO3 account",m_buttonBar);btnLayout->addWidget(readingAction);
@@ -136,14 +136,14 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     // Content tabs
     m_tabs = new QTabWidget(m_detailWidget);
     m_tabs->setStyleSheet(QStringLiteral(
-        "QTabWidget::pane { border: 1px solid #ddd; border-top: none; background: white; }"
-        "QTabBar::tab { padding: 6px 16px; border: 1px solid #ddd; border-bottom: none; background: #f5f0eb; }"
-        "QTabBar::tab:selected { background: white; font-weight: bold; }"
+        "QTabWidget::pane { border: 1px solid palette(mid); border-top: none; background: palette(base); }"
+        "QTabBar::tab { padding: 6px 16px; border: 1px solid palette(mid); border-bottom: none; background: palette(button); }"
+        "QTabBar::tab:selected { background: palette(base); font-weight: bold; }"
     ));
 
     m_contentBrowser = new QTextBrowser(m_tabs);
     m_contentBrowser->setOpenExternalLinks(true);
-    m_contentBrowser->setStyleSheet(QStringLiteral("font-size: 11pt; color: #333; padding: 12px; line-height: 1.6;"));
+    m_contentBrowser->setStyleSheet(QStringLiteral("font-size: 11pt; color: palette(text); padding: 12px; line-height: 1.6;"));
     m_tabs->addTab(m_contentBrowser, QStringLiteral("Work Content"));
     m_tabs->hide();
 

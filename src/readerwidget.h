@@ -31,6 +31,7 @@ public:
     void addBookmark();
     void showBookmarks();
     void applyAppearance();
+    void refreshSkin();
     void setTextOnly(bool enabled);
     void setBookMode(bool enabled);
     void setKudosStatus(const QString &status,bool guest=false);

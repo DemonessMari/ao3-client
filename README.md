@@ -53,3 +53,5 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 For release APK/AAB builds, set `AO3_SIGNING_FILE` and `AO3_SIGNING_PASSWORD` privately; the keystore alias is `ao3-release`. Run `./scripts/build-android.sh release`. Keep the signing key backed up and outside source control.
 
 [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Licenses](THIRD-PARTY-NOTICES.md) · [Release checklist](RELEASE-CHECKLIST.md)
+
+App colors can be edited, previewed and shared between editions using [app skins](SKINS.md). Home shows recent reads and library counts; search filters open using **Filters**.

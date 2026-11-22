@@ -19,13 +19,13 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
     tf.setPointSize(11);
     tf.setBold(true);
     titleLabel->setFont(tf);
-    titleLabel->setStyleSheet(QStringLiteral("color: #2a5f8f;"));
+    titleLabel->setStyleSheet(QStringLiteral("color: palette(highlight);"));
     titleLabel->setWordWrap(true);
     layout->addWidget(titleLabel);
 
     auto *byline = new QLabel(QStringLiteral("by %1").arg(work.author.isEmpty() ? QStringLiteral("Anonymous") : work.author), this);
     byline->setWordWrap(true);
-    byline->setStyleSheet(QStringLiteral("color: #666; font-size: 10pt;"));
+    byline->setStyleSheet(QStringLiteral("color: palette(text); font-size: 10pt;"));
     layout->addWidget(byline);
 
     QStringList tagParts;
@@ -36,7 +36,7 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
 
     if (!tagParts.isEmpty()) {
         auto *tagsLabel = new QLabel(tagParts.join(QStringLiteral(" | ")), this);
-        tagsLabel->setStyleSheet(QStringLiteral("color: #900; font-size: 10pt;"));
+        tagsLabel->setStyleSheet(QStringLiteral("color: palette(highlight); font-size: 10pt;"));
         tagsLabel->setWordWrap(true);
         layout->addWidget(tagsLabel);
     }
@@ -46,7 +46,7 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
         if (summary.length() > 300)
             summary = summary.left(300) + QStringLiteral("...");
         auto *summaryLabel = new QLabel(summary, this);
-        summaryLabel->setStyleSheet(QStringLiteral("color: #555; font-size: 10pt;"));
+        summaryLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 10pt;"));
         summaryLabel->setWordWrap(true);
         layout->addWidget(summaryLabel);
     }
@@ -67,7 +67,7 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
 
     auto *statsLabel = new QLabel(statsParts.join(QStringLiteral(" | ")), this);
     statsLabel->setWordWrap(true);
-    statsLabel->setStyleSheet(QStringLiteral("color: #888; font-size: 10pt;"));
+    statsLabel->setStyleSheet(QStringLiteral("color: palette(text); font-size: 10pt;"));
     layout->addWidget(statsLabel);
 
     for (auto *label : findChildren<QLabel *>()) {
@@ -76,7 +76,7 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
     }
 
     setStyleSheet(QStringLiteral(
-        "WorkItemWidget { background: white; border-bottom: 1px solid #ddd; }"
-        "WorkItemWidget:hover { background: #f0f5fa; }"
+        "WorkItemWidget { background: palette(base); border-bottom: 1px solid palette(mid); }"
+        "WorkItemWidget:hover { background: palette(button); }"
     ));
 }
