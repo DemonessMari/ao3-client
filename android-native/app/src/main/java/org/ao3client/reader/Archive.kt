@@ -213,6 +213,24 @@ class Archive(private val prefs: SharedPreferences) {
         require(id.matches(Regex("[0-9]+")))
         return OfficialDownloads.parse(request("/works/$id?view_adult=true"),id)
     }
+    fun setWorkSubscribed(id:String,subscribed:Boolean,expected:String):String {
+        require(id.matches(Regex("[0-9]+")))
+        val generation=cookieGeneration
+        val path="/works/$id?view_adult=true"
+        val html=request(path)
+        require(ArchiveParser.sessionIdentity(html)==expected) {"Your AO3 session changed. Sign in again."}
+        val form=Subscriptions.form(html,id,expected) ?: error("Subscription unavailable. Check your AO3 sign-in and access to this work.")
+        val success=if(subscribed) "Subscribed to this work on AO3" else "Unsubscribed from this work on AO3"
+        if(generation!=cookieGeneration)throw java.util.concurrent.CancellationException("Session changed")
+        if(form.subscribed==subscribed)return success
+        return try {
+            val result=request(form.path,form.fields,generation,path)
+            val updated=Subscriptions.form(result,id,expected)
+            if(ArchiveParser.sessionIdentity(result)==expected && updated?.subscribed==subscribed)success
+            else "Could not confirm the change. Check your subscriptions on AO3."
+        } catch(e:java.util.concurrent.CancellationException) {throw e}
+          catch(_:Exception) {"Could not confirm the change. Check your subscriptions on AO3."}
+    }
     fun setMarkedForLater(id:String,later:Boolean,expected:String):String {
         require(id.matches(Regex("[0-9]+")))
         val generation=cookieGeneration

@@ -4,7 +4,7 @@ Unofficial AO3 reader for Linux (Qt 6) and Android (Kotlin/Compose). Not affilia
 
 Both editions support search and filters, tag suggestions, sign-in, profiles, offline reading, favorites, bookmarks, progress, appearance settings, fullscreen, paged reading, translation and library backups.
 
-Comments can be read, posted and replied to inside both editions. The current source also adds kudos, official-format downloads, and AO3 Mark for Later/Mark as Read actions; these additions are not in the 3.1.0 release yet. Account bookmarks, subscriptions, series, collections and account settings open in a browser with a separate sign-in. Public bookmark lists show AO3 works only.
+Comments can be read, posted and replied to inside both editions. The current source also adds kudos, official-format downloads, AO3 Mark for Later/Mark as Read actions, and work subscriptions; these additions are not in the 3.1.0 release yet. Account bookmarks, subscription management, series, collections and account settings open in a browser with a separate sign-in. Public bookmark lists show AO3 works only.
 
 3.1.0 is a prerelease. Phone rendering and long-session testing remain pending. See [verification](VERIFICATION.md).
 

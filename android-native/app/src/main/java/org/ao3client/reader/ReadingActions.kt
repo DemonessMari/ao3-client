@@ -21,13 +21,15 @@ object ReadingActions {
 }
 
 @Composable
-fun ReadingListButton(vm:ClientState,id:String) {
+fun WorkAccountButton(vm:ClientState,id:String) {
     var choosing by remember(id) { mutableStateOf(false) }
-    if(vm.username!=null)OutlinedButton(onClick={choosing=true},enabled=id !in vm.readingPending) { Text("AO3 reading list") }
-    if(choosing)AlertDialog(onDismissRequest={choosing=false},title={Text("AO3 reading list")},text={
+    if(vm.username!=null)OutlinedButton(onClick={choosing=true},enabled=id !in vm.accountPending) { Text("AO3 account") }
+    if(choosing)AlertDialog(onDismissRequest={choosing=false},title={Text("AO3 account")},text={
         androidx.compose.foundation.layout.Column {
             TextButton(onClick={choosing=false;vm.setMarkedForLater(id,true)}) { Text("Mark for later") }
             TextButton(onClick={choosing=false;vm.setMarkedForLater(id,false)}) { Text("Mark as read") }
+            TextButton(onClick={choosing=false;vm.setWorkSubscribed(id,true)}) { Text("Subscribe to work") }
+            TextButton(onClick={choosing=false;vm.setWorkSubscribed(id,false)}) { Text("Unsubscribe from work") }
         }
     },confirmButton={TextButton(onClick={choosing=false}) { Text("Cancel") }})
 }

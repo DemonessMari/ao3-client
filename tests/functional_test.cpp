@@ -88,6 +88,28 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void workSubscriptionActions() {
+        QFile freshFile(QStringLiteral(AO3_FIXTURE_DIR "/subscription-new.html")),existingFile(QStringLiteral(AO3_FIXTURE_DIR "/subscription-existing.html"));
+        QVERIFY(freshFile.open(QIODevice::ReadOnly));QVERIFY(existingFile.open(QIODevice::ReadOnly));
+        const auto fresh=QString::fromUtf8(freshFile.readAll()),existing=QString::fromUtf8(existingFile.readAll());
+        const auto create=parseWorkSubscription(fresh,"123","Alice"),remove=parseWorkSubscription(existing,"123","Alice");
+        QCOMPARE(create.path,QString("/users/Alice/subscriptions"));QVERIFY(!create.subscribed);QCOMPARE(create.fields.size(),3);QCOMPARE(create.fields.value("authenticity_token"),QString("csrf+&=token"));
+        QVERIFY(remove.subscribed);QCOMPARE(remove.path,QString("/users/Alice/subscriptions/456"));QCOMPARE(remove.fields.value("_method"),QString("delete"));
+        QVERIFY(parseWorkSubscription(fresh,"999","Alice").path.isEmpty());QVERIFY(parseWorkSubscription(existing,"123","Bob").path.isEmpty());
+        for(const auto &bad:QStringList{QString(fresh).replace("/users/Alice/subscriptions","https://evil.example/users/Alice/subscriptions"),QString(fresh).replace("value=\"Work\"","value=\"User\""),QString(existing).replace("value=\"delete\"","value=\"patch\""),QString(fresh).replace("authenticity_token","missing"),"<div id='workskin'>"+fresh+"</div>","<div class='userstuff'>"+existing+"</div>",QString(existing).replace("/subscriptions/456","/subscriptions/delete_all")})QVERIFY(parseWorkSubscription(bad,"123","Alice").path.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);
+        window.m_loginManager->setUserInfo({"Alice","https://archiveofourown.org/users/Alice",true});
+        QSignalSpy finished(window.m_client,&AO3Client::accountActionFinished);
+        network->pages={fresh.toUtf8(),existing.toUtf8()};int before=network->requests.size();
+        window.m_client->setWorkSubscribed("123",true);window.m_client->setWorkSubscribed("123",true);window.m_client->setMarkedForLater("123",true);
+        QTRY_COMPARE(finished.size(),1);QCOMPARE(finished.last()[1].toString(),QString("Subscribed to this work on AO3"));QCOMPARE(network->requests.size(),before+2);QCOMPARE(network->requests.last().path(),QString("/users/Alice/subscriptions"));
+        QVERIFY(!network->bodies.last().contains("unwanted"));QVERIFY(network->bodies.last().contains("subscription%5Bsubscribable_id%5D=123"));QVERIFY(!network->bodies.last().contains("_method"));
+        network->page=existing.toUtf8();before=network->requests.size();window.m_client->setWorkSubscribed("123",true);QTRY_COMPARE(finished.size(),2);QCOMPARE(network->requests.size(),before+1);
+        network->pages={existing.toUtf8(),fresh.toUtf8()};window.m_client->setWorkSubscribed("123",false);QTRY_COMPARE(finished.size(),3);QCOMPARE(finished.last()[1].toString(),QString("Unsubscribed from this work on AO3"));QCOMPARE(network->requests.last().path(),QString("/users/Alice/subscriptions/456"));QVERIFY(network->bodies.last().contains("_method=delete"));
+        network->pages={fresh.toUtf8(),QByteArray("Unknown response")};window.m_client->setWorkSubscribed("123",true);QTRY_COMPARE(finished.size(),4);QVERIFY(finished.last()[1].toString().contains("Could not confirm"));
+        network->page=QString(fresh).replace("Alice","Bob").toUtf8();before=network->requests.size();window.m_client->setWorkSubscribed("123",true);QTRY_COMPARE(finished.size(),5);QCOMPARE(network->requests.size(),before+1);
+        network->page=fresh.toUtf8();window.m_client->setWorkSubscribed("123",true);window.m_client->logout();QTest::qWait(50);QCOMPARE(finished.size(),5);QVERIFY(window.m_client->m_workAccountPending.isEmpty());
+    }
     void readingListActions() {
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/reading-action.html"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(fixture.readAll());
         const auto form=parseReadingAction(html,"123");QCOMPARE(form.action,QString("mark_for_later"));QCOMPARE(form.fields.size(),2);QCOMPARE(form.fields.value("authenticity_token"),QString("csrf+&=token"));
@@ -95,7 +117,7 @@ private slots:
         for(const auto &bad:QStringList{QString(html).replace("/works/123/mark_for_later","https://evil.example/works/123/mark_for_later"),QString(html).replace("value=\"patch\"","value=\"delete\""),QString(html).replace("authenticity_token","missing"),"<div id='workskin'>"+html+"</div>"})QVERIFY(parseReadingAction(bad,"123").action.isEmpty());
         MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);
         window.m_loginManager->setUserInfo({"Alice","https://archiveofourown.org/users/Alice",true});
-        QSignalSpy finished(window.m_client,&AO3Client::readingActionFinished);
+        QSignalSpy finished(window.m_client,&AO3Client::accountActionFinished);
         const auto read=QString(html).replace("mark_for_later","mark_as_read");network->pages={html.toUtf8(),read.toUtf8()};int before=network->requests.size();
         window.m_client->setMarkedForLater("123",true);window.m_client->setMarkedForLater("123",true);
         QTRY_COMPARE(finished.size(),1);QCOMPARE(finished.last()[1].toString(),QString("Marked for later on AO3"));QCOMPARE(network->requests.size(),before+2);QCOMPARE(network->requests.last().path(),QString("/works/123/mark_for_later"));QVERIFY(network->bodies.last().contains("_method=patch"));

@@ -141,15 +141,17 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_detailWidget, &WorkDetailWidget::profileRequested, this, &MainWindow::showProfile);
-    auto readingAction=[this](const QString &id) {
-        if(!m_loginManager->isLoggedIn()) {statusBar()->showMessage("Sign in to use your AO3 reading list");return;}
-        bool ok=false;const QStringList choices{"Mark for later","Mark as read"};
-        const auto choice=QInputDialog::getItem(this,"AO3 reading list","Action",choices,0,false,&ok);
-        if(ok)m_client->setMarkedForLater(id,choice==choices.first());
+    auto accountAction=[this](const QString &id) {
+        if(!m_loginManager->isLoggedIn()) {statusBar()->showMessage("Sign in to use AO3 account actions");return;}
+        bool ok=false;const QStringList choices{"Mark for later","Mark as read","Subscribe to work","Unsubscribe from work"};
+        const auto choice=QInputDialog::getItem(this,"AO3 account","Action",choices,0,false,&ok);
+        if(!ok)return;
+        if(choices.indexOf(choice)<2)m_client->setMarkedForLater(id,choice==choices.first());
+        else m_client->setWorkSubscribed(id,choice==choices[2]);
     };
-    connect(m_detailWidget,&WorkDetailWidget::readingActionRequested,this,readingAction);
-    connect(m_reader,&ReaderWidget::readingActionRequested,this,readingAction);
-    connect(m_client,&AO3Client::readingActionFinished,this,[this](const QString &,const QString &message) {statusBar()->showMessage(message);});
+    connect(m_detailWidget,&WorkDetailWidget::readingActionRequested,this,accountAction);
+    connect(m_reader,&ReaderWidget::readingActionRequested,this,accountAction);
+    connect(m_client,&AO3Client::accountActionFinished,this,[this](const QString &,const QString &message) {statusBar()->showMessage(message);});
     connect(m_detailWidget,&WorkDetailWidget::kudosRequested,m_client,&AO3Client::giveKudos);
     connect(m_detailWidget,&WorkDetailWidget::workShown,this,[this](const QString &id) { m_detailWidget->setKudosStatus(m_client->kudosStatus(id),!m_loginManager->isLoggedIn()); });
     connect(m_client,&AO3Client::kudosChanged,this,[this](const QString &id,const QString &status,const QString &message) {

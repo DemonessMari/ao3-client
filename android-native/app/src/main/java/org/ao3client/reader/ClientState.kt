@@ -34,19 +34,22 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var profileReturn = "details"
     var ownWorks by mutableStateOf(false)
     var selected by mutableStateOf<Fic?>(null)
-    val readingPending=mutableStateMapOf<String,Boolean>()
-    fun setMarkedForLater(id:String,later:Boolean) {
+    val accountPending=mutableStateMapOf<String,Boolean>()
+    fun setMarkedForLater(id:String,later:Boolean)=workAccountAction(id) {expected -> archive.setMarkedForLater(id,later,expected)}
+    fun setWorkSubscribed(id:String,subscribed:Boolean)=workAccountAction(id) {expected -> archive.setWorkSubscribed(id,subscribed,expected)}
+    private fun workAccountAction(id:String,action:(String)->String) {
         val expected=username ?: return
-        if(id in readingPending)return
+        if(id in accountPending)return
+        error=null
         val generation=kudosGeneration
-        readingPending[id]=true
+        accountPending[id]=true
         viewModelScope.launch {
             try {
-                val message=withContext(Dispatchers.IO) {archive.setMarkedForLater(id,later,expected)}
+                val message=withContext(Dispatchers.IO) {action(expected)}
                 if(generation==kudosGeneration)notice=message
             } catch(e:CancellationException) {throw e}
-              catch(e:Exception) {if(generation==kudosGeneration)error=e.message ?: "Reading list unavailable"}
-            finally {if(generation==kudosGeneration)readingPending.remove(id)}
+              catch(e:Exception) {if(generation==kudosGeneration)error=e.message ?: "Account action unavailable"}
+            finally {if(generation==kudosGeneration)accountPending.remove(id)}
         }
     }
     val kudosStates=mutableStateMapOf<String,String>()
@@ -286,12 +289,12 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         cancelTranslation(); chapter = 0; positionIndex = 0; positionOffset = 0; bookOffset = 0; translation = null; readerRevision++
     }
     fun login(name: String, password: String) = load {
-        ++kudosGeneration;kudosStates.clear();readingPending.clear()
+        ++kudosGeneration;kudosStates.clear();accountPending.clear()
         sessionJob?.cancel()
         username = withContext(Dispatchers.IO) { archive.login(name.trim(), password) }
         screen = "home"
     }
-    fun logout() { ++kudosGeneration;kudosStates.clear();readingPending.clear();sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { ++kudosGeneration;kudosStates.clear();accountPending.clear();sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()

@@ -11,6 +11,7 @@
 #include "officialdownload.h"
 #include "kudos.h"
 #include "readingaction.h"
+#include "subscription.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -24,6 +25,7 @@ public:
     void fetchWorkDetails(const QString &workId);
     void fetchWorkContent(const QString &workId);
     void downloadWork(const QString &workId);
+    void setWorkSubscribed(const QString &workId,bool subscribed);
     void setMarkedForLater(const QString &workId,bool later);
     void giveKudos(const QString &workId);
     QString kudosStatus(const QString &workId) const { return m_kudosStatus.value(workId); }
@@ -43,7 +45,7 @@ public:
     LoginManager *loginManager() const;
 
 signals:
-    void readingActionFinished(const QString &workId,const QString &message);
+    void accountActionFinished(const QString &workId,const QString &message);
     void kudosChanged(const QString &workId,const QString &status,const QString &message);
     void officialDownloadsFetched(const QString &workId, const QVector<OfficialDownload> &downloads);
     void officialDownloadSaved(const QString &path);
@@ -83,5 +85,5 @@ private:
     quint64 m_authGeneration = 0;
     quint64 m_listingGeneration = 0;
     QMap<QString,QString> m_kudosStatus;
-    QSet<QString> m_readingPending;
+    QSet<QString> m_workAccountPending;
 };

@@ -243,7 +243,7 @@ class MainActivity : ComponentActivity() {
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
         KudosButton(vm,fic.id)
-        ReadingListButton(vm,fic.id)
+        WorkAccountButton(vm,fic.id)
         OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
         OutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
         Ao3WorkLinks(fic.id)
