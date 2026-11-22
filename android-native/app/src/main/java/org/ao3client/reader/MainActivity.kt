@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -115,7 +117,23 @@ class MainActivity : ComponentActivity() {
         })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
     }
     val account: @Composable () -> Unit = {
-        if(vm.screen !in listOf("login","settings"))TextButton(onClick={vm.navigate(if(vm.username==null)"login" else "account")}) {Text(if(vm.username==null)"Sign in" else "Account")}
+        if(vm.screen !in listOf("login","settings")) {
+            val user=vm.username
+            if(user==null)TextButton(onClick={vm.navigate("login")}) {Text("Sign in")}
+            else {
+                var expanded by remember(user) { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick={expanded=true},modifier=Modifier.semantics { contentDescription="Account: $user" }) { ProfilePicture(vm,user,size=36.dp) }
+                    DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
+                        Text(user,Modifier.padding(horizontal=16.dp,vertical=8.dp),style=MaterialTheme.typography.titleMedium)
+                        DropdownMenuItem(text={Text("Account details")},onClick={expanded=false;vm.navigate("account")})
+                        DropdownMenuItem(text={Text("My profile")},onClick={expanded=false;vm.showProfile("/users/$user")})
+                        DropdownMenuItem(text={Text("My works")},onClick={expanded=false;vm.myWorks()})
+                        DropdownMenuItem(text={Text("Sign out")},onClick={expanded=false;vm.logout()})
+                    }
+                }
+            }
+        }
     }
     if(vm.screen in listOf("home","search","library","settings","account")) {
         Surface(color=MaterialTheme.colorScheme.surface) {

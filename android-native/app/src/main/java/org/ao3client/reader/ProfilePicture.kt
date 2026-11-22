@@ -13,6 +13,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,12 +25,12 @@ internal fun decodeAvatarBitmap(bytes:ByteArray):Bitmap? {
     val options=BitmapFactory.Options().apply{inSampleSize=1};while(maxOf(bounds.outWidth,bounds.outHeight)/options.inSampleSize>256)options.inSampleSize*=2
     return BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
 }
-@Composable fun ProfilePicture(vm:ClientState,username:String,url:String?=null,alt:String="") {
-    key(username,url,vm.username){ProfilePictureContent(vm,username,url,alt)}
+@Composable fun ProfilePicture(vm:ClientState,username:String,url:String?=null,alt:String="",size:Dp=80.dp) {
+    key(username,url,vm.username){ProfilePictureContent(vm,username,url,alt,size)}
 }
-@Composable private fun ProfilePictureContent(vm:ClientState,username:String,url:String?,alt:String) {
+@Composable private fun ProfilePictureContent(vm:ClientState,username:String,url:String?,alt:String,size:Dp) {
     val bitmap by produceState<Bitmap?>(null,username,url,vm.username){value=null;try{value=withContext(Dispatchers.IO){vm.profilePictureBytes(username,url)?.let(::decodeAvatarBitmap)}}catch(e:CancellationException){throw e}catch(_:Exception){value=null}}
-    Surface(modifier=Modifier.size(80.dp).semantics(mergeDescendants=true){contentDescription=alt.ifBlank{"Profile picture for $username"}},shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surfaceVariant){
-        Box(Modifier.fillMaxSize().padding(4.dp),contentAlignment=Alignment.Center){val image=bitmap;if(image!=null)Image(image.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=ContentScale.Fit) else Text(username.take(1).uppercase(),style=MaterialTheme.typography.headlineLarge)}
+    Surface(modifier=Modifier.size(size).semantics(mergeDescendants=true){contentDescription=alt.ifBlank{"Profile picture for $username"}},shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surfaceVariant){
+        Box(Modifier.fillMaxSize().padding(4.dp),contentAlignment=Alignment.Center){val image=bitmap;if(image!=null)Image(image.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=ContentScale.Fit) else Text(username.take(1).uppercase(),style=if(size<60.dp)MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineLarge)}
     }
 }

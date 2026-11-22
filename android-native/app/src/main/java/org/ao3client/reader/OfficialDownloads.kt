@@ -34,7 +34,10 @@ object OfficialDownloads {
             if(!cookie.isNullOrBlank())connection.setRequestProperty("Cookie",cookie)
             connection.connectTimeout=15000;connection.readTimeout=60000
             connection.setRequestProperty("User-Agent",userAgent ?: "AO3Client (Unofficial Android Reader)")
-            require(connection.responseCode==200) { "AO3 did not return the requested file. Try again later." }
+            val status=connection.responseCode
+            require(status!=429) { "AO3 rate limit reached (HTTP 429). Wait before trying again." }
+            require(status!=404) { "AO3 could not find this download (HTTP 404)." }
+            require(status==200) { "AO3 did not return the requested file (HTTP $status). Try again later." }
             require(connection.contentLengthLong<=MAX_BYTES) { "Download exceeds 64 MB" }
             require(item.format=="html" || !connection.contentType.orEmpty().contains("text/html")) { "AO3 returned a web page instead of the download" }
             val data=connection.inputStream.use { input ->

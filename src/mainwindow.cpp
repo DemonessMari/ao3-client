@@ -168,6 +168,12 @@ MainWindow::MainWindow(QWidget *parent)
         if(m_reader->workId()==id) m_reader->setKudosStatus(status,!m_loginManager->isLoggedIn());
         if(!message.isEmpty())statusBar()->showMessage(message);
     });
+    connect(m_client,&AO3Client::authorProfileFetched,this,[this](const AuthorProfile &profile){
+        if(m_loginManager->isLoggedIn() && profile.username==m_loginManager->username() && profile.username!=m_profileUsername && profile.error.isEmpty() && !profile.avatarUrl.isEmpty())m_client->fetchProfileAvatar(profile.username,QUrl(profile.avatarUrl));
+    });
+    connect(m_client,&AO3Client::profileAvatarFetched,this,[this](const QString &username,const QImage &image){
+        if(m_loginManager->isLoggedIn() && username==m_loginManager->username() && !image.isNull()){m_loginButton->setText({});m_loginButton->setIcon(QIcon(QPixmap::fromImage(image)));m_loginButton->setIconSize(QSize(32,32));}
+    });
     connect(m_client, &AO3Client::authorProfileFetched, this, [this](const AuthorProfile &profile) {
         if(profile.username != m_profileUsername) return;
         m_profileAvatar->setAccessibleName(profile.avatarAlt.isEmpty()?"Profile picture for "+profile.username:profile.avatarAlt);
@@ -801,11 +807,12 @@ void MainWindow::onError(const QString &error)
 
 void MainWindow::onLoginClicked()
 {
-    if(!mobileUi() && m_loginManager->isLoggedIn()){showProfile("/users/"+m_loginManager->username());return;}
-    if (mobileUi() && m_loginManager->isLoggedIn()) {
-        QMenu menu(this); menu.addSection(m_loginManager->username());
-        auto *logout = menu.addAction(QStringLiteral("Sign out"));
-        if (menu.exec(m_loginButton->mapToGlobal(QPoint(0, m_loginButton->height()))) == logout) onLogout();
+    if(m_loginManager->isLoggedIn()) {
+        QMenu menu(this);menu.addSection(m_loginManager->username());
+        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");menu.addSeparator();auto *logout=menu.addAction("Sign out");
+        auto *selected=menu.exec(m_loginButton->mapToGlobal(QPoint(0,m_loginButton->height())));
+        if(selected==profile)showProfile("/users/"+m_loginManager->username());
+        else if(selected==works)showUserWorks();else if(selected==logout)onLogout();
         return;
     }
     showLoginView();
@@ -931,12 +938,15 @@ void MainWindow::setLoggedInState(bool loggedIn)
 
     if (loggedIn) {
         QString name = m_loginManager->userInfo().username;
-        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : m_loginButton->fontMetrics().elidedText(name,Qt::ElideRight,150));
+        m_loginButton->setAccessibleName("Account: "+name);
+        m_loginButton->setFixedSize(44,44);
+        if(m_accountPictureUser!=name){m_loginButton->setIcon({});m_loginButton->setText(name.left(1).toUpper());m_accountPictureUser=name;m_client->fetchAuthorProfile(name);}
         m_loginButton->setToolTip(name);
         m_loginButton->setEnabled(true);
         m_userGreeting->setText(QString());
         m_userGreeting->hide();
     } else {
+        m_accountPictureUser.clear();m_loginButton->setIcon({});m_loginButton->setMinimumSize(0,32);m_loginButton->setMaximumSize(190,QWIDGETSIZE_MAX);m_loginButton->setAccessibleName("Sign in");
         m_loginButton->setText(mobileUi() ? QStringLiteral("Sign in") : QStringLiteral("Log In"));
         m_loginButton->setEnabled(true);
         m_userGreeting->hide();

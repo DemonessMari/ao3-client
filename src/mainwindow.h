@@ -94,6 +94,7 @@ private:
     QTextBrowser *m_profileText = nullptr;
     QLabel *m_profileAvatar = nullptr;
     QString m_profileUsername;
+    QString m_accountPictureUser;
     QString m_listingAuthor;
     bool m_listingBookmarks = false;
     void refreshLibrary();

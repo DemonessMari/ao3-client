@@ -5,6 +5,14 @@ import org.junit.Test
 import java.net.URLDecoder
 
 class ArchiveTest {
+    @Test fun excludeSingleChapterUsesServerQueryAndPreservesGrouping() {
+        val decoded=URLDecoder.decode(Archive.searchPath("alpha OR beta",2,mapOf("single_chapter" to listOf("exclude"))),"UTF-8")
+        assertTrue(decoded.contains("work_search[query]=(alpha OR beta) AND -expected_number_of_chapters:1"))
+        assertFalse(decoded.contains("work_search[single_chapter]"))
+        assertTrue(decoded.contains("page=2"))
+        val only=URLDecoder.decode(Archive.searchPath("",1,mapOf("single_chapter" to listOf("1"))),"UTF-8")
+        assertTrue(only.contains("work_search[single_chapter]=1"))
+    }
     @Test fun realSearchRouteAndArrayFilters() {
         val path = Archive.searchPath("alpha & beta", 3, mapOf("archive_warning_ids[]" to listOf("16", "18"), "rating_ids" to listOf("13"), "excluded_rating_ids[]" to listOf("12"), "excluded_category_ids[]" to listOf("23")))
         assertTrue(path.startsWith("/works/search?"))

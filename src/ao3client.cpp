@@ -48,6 +48,8 @@ namespace {
 QString ao3NetworkError(QNetworkReply *reply)
 {
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if(status==429)return QStringLiteral("AO3 rate limit reached (HTTP 429). Wait before trying again.");
+    if(status==404)return QStringLiteral("AO3 could not find this page (HTTP 404). The work may be unavailable or require account access.");
     if (status == 418 || status == 503) {
         const QString body = QString::fromUtf8(reply->peek(65536));
         if (body.contains(QStringLiteral("archive is down for maintenance"), Qt::CaseInsensitive))
@@ -236,9 +238,12 @@ void AO3Client::search(const QString &query, int page, const SearchFilters &filt
     const quint64 generation = ++m_listingGeneration;
     QUrl url(QStringLiteral("https://archiveofourown.org/works/search"));
     QUrlQuery urlQuery;
-    urlQuery.addQueryItem(QStringLiteral("work_search[query]"), query);
+    const bool excludeSingle=filters.value("single_chapter").contains("exclude");
+    const auto effectiveQuery=excludeSingle?(query.trimmed().isEmpty()?QString():"("+query+") AND ")+"-expected_number_of_chapters:1":query;
+    urlQuery.addQueryItem(QStringLiteral("work_search[query]"), effectiveQuery);
     for (auto it = filters.cbegin(); it != filters.cend(); ++it) {
         QString key = it.key();
+        if(key=="single_chapter" && excludeSingle)continue;
         const bool array = key.endsWith(QStringLiteral("[]"));
         if (array) key.chop(2);
         for (const auto &value : it.value())

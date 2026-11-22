@@ -419,7 +419,8 @@ private slots:
         QVERIFY(window.m_loginManager->isLoggedIn());
         QCOMPARE(window.m_loginManager->username(), QStringLiteral("MixedCase"));
         QCOMPARE(window.m_loginManager->userInfo().dashboardUrl, QStringLiteral("https://archiveofourown.org/users/MixedCase"));
-        QCOMPARE(window.m_loginButton->text(), QStringLiteral("MixedCase"));
+        QCOMPARE(window.m_loginButton->text(), QStringLiteral("M"));
+        QCOMPARE(window.m_loginButton->accessibleName(),QStringLiteral("Account: MixedCase"));
         QVERIFY(!window.m_navWorks->isHidden());
         QCOMPARE(window.m_contentStack->currentIndex(), 0);
         // Restart does not trust stored cookies until a new server verification.
@@ -492,6 +493,14 @@ private slots:
         QCOMPARE(window.m_contentStack->currentIndex(), 0);
         LoginManager loggedOut;
         QVERIFY(loggedOut.cookies().isEmpty());
+    }
+    void excludeSingleChapterUsesServerQuery() {
+        MainWindow window;auto *network=installNetwork(window);network->page="<ol class='work index group'></ol>";
+        SearchFilters filters;filters["single_chapter"]={"exclude"};window.m_filterPanel->setFilters(filters);
+        QCOMPARE(window.m_filterPanel->filters().value("single_chapter"),QStringList{"exclude"});
+        QSignalSpy done(window.m_client,&AO3Client::searchCompleted);window.m_client->search("alpha OR beta",2,filters);QTRY_COMPARE(done.size(),1);
+        QUrl searchUrl;for(const auto &request:network->requests)if(request.path()=="/works/search")searchUrl=request;QVERIFY(!searchUrl.isEmpty());
+        const QUrlQuery query(searchUrl);QCOMPARE(query.queryItemValue("work_search[query]"),QString("(alpha OR beta) AND -expected_number_of_chapters:1"));QVERIFY(!query.hasQueryItem("work_search[single_chapter]"));QCOMPARE(query.queryItemValue("page"),QString("2"));
     }
     void searchUsesRealHttpRoute() {
         QTcpServer server;

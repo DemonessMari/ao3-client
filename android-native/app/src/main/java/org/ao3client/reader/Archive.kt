@@ -48,7 +48,7 @@ object Catalogue {
         FilterField("language_id", "Language", "Any AO3 language code, e.g. en or et"),
         FilterField("complete", "Completion", choices = choices("Complete" to "T", "In progress" to "F")),
         FilterField("crossover", "Crossovers", choices = choices("Include only" to "T", "Exclude" to "F")),
-        FilterField("single_chapter", "Single chapter", choices = choices("Only single-chapter works" to "1")),
+        FilterField("single_chapter", "Chapter count", choices = choices("Only single-chapter works" to "1", "Exclude single-chapter works" to "exclude")),
         FilterField("word_count", "Word count", "e.g. 1000-50000 or >10000"),
         FilterField("kudos_count", "Kudos", "e.g. >100"), FilterField("hits", "Hits", "e.g. >1000"),
         FilterField("comments_count", "Comments", "e.g. >10"), FilterField("bookmarks_count", "Bookmarks", "e.g. >50"),
@@ -141,9 +141,12 @@ class Archive(private val prefs: SharedPreferences,private val websiteProbe:((Co
         const val BASE = "https://archiveofourown.org"
         fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
         fun searchPath(query: String, page: Int, filters: Map<String,List<String>>): String {
-            val args = mutableListOf("work_search[query]" to query, "page" to "$page")
+            val excludeSingle=filters["single_chapter"]?.contains("exclude")==true
+            val effectiveQuery=if(excludeSingle) (if(query.isBlank()) "" else "($query) AND ")+"-expected_number_of_chapters:1" else query
+            val args = mutableListOf("work_search[query]" to effectiveQuery, "page" to "$page")
             val excluded = mutableSetOf<String>()
             filters.forEach { (key, values) ->
+                if(key=="single_chapter" && excludeSingle)return@forEach
                 val target = if(key in listOf("excluded_rating_ids[]", "excluded_warning_ids[]", "excluded_category_ids[]")) "excluded_tag_ids[]" else key
                 values.filter { it.isNotBlank() }.forEach {
                     if(target != "excluded_tag_ids[]" || excluded.add(it)) args += "work_search[${target.removeSuffix("[]")}]${if (target.endsWith("[]")) "[]" else ""}" to it
@@ -191,6 +194,8 @@ class Archive(private val prefs: SharedPreferences,private val websiteProbe:((Co
                 } else {
                     val body = (if (status >= 400) connection.errorStream else connection.inputStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
                     if (status >= 400) {
+                        if(status==429)error("AO3 rate limit reached (HTTP 429). Wait before trying again.")
+                        if(status==404)error("AO3 could not find this page (HTTP 404). The work may be unavailable or require access through your account.")
                         if (body.contains("archive is down for maintenance", true)) error("AO3 is down for maintenance (HTTP $status). Try again later.")
                         error("AO3 returned HTTP $status. Please try again later.")
                     }

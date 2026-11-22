@@ -82,7 +82,7 @@ SearchFilterPanel::SearchFilterPanel(QWidget *parent) : QWidget(parent)
     };
     combo(QStringLiteral("complete"), QStringLiteral("Completion"), {{QStringLiteral("Complete only"), "T"}, {QStringLiteral("In progress only"), "F"}});
     combo(QStringLiteral("crossover"), QStringLiteral("Crossovers"), {{QStringLiteral("Exclude crossovers"), "F"}, {QStringLiteral("Only crossovers"), "T"}});
-    combo(QStringLiteral("single_chapter"), QStringLiteral("Chapters"), {{QStringLiteral("Single chapter only"), "1"}});
+    combo(QStringLiteral("single_chapter"), QStringLiteral("Chapter count"), {{QStringLiteral("Only single-chapter works"), "1"}, {QStringLiteral("Exclude single-chapter works"), "exclude"}});
     form = tagForm;
     combo(QStringLiteral("rating_ids"), QStringLiteral("Rating"), {});
     form = workForm;
