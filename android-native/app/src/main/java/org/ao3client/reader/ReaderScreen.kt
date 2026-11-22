@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @Composable fun ReaderScreen(vm: ClientState) {
+    val readingFamily=readerFontFamily(vm)
     val fic = vm.selected ?: return
     if(vm.chapters.isEmpty()) return
     val activity = LocalContext.current as MainActivity
@@ -95,7 +96,7 @@ import kotlinx.coroutines.launch
                 if(vm.bookMode) BookReader(vm,text,paragraphs,Modifier.weight(1f).fillMaxWidth(),rich)
                 else SelectionContainer(Modifier.weight(1f)) {
                     LazyColumn(state = scroll, contentPadding = PaddingValues(horizontal = vm.preferences.margin.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
-                        itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp,modifier=Modifier.fillMaxWidth(),textAlign=readingAlignment(vm.preferences.alignment)) }
+                        itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = readingFamily, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp,modifier=Modifier.fillMaxWidth(),textAlign=readingAlignment(vm.preferences.alignment)) }
                         item {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 TextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }
@@ -147,8 +148,8 @@ import kotlinx.coroutines.launch
             Text("Author notes",style=MaterialTheme.typography.titleLarge)
             SelectionContainer {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                    if(currentChapter.notesBefore.isNotBlank()) { Text("Before chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesBefore,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
-                    if(currentChapter.notesAfter.isNotBlank()) { Text("After chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesAfter,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
+                    if(currentChapter.notesBefore.isNotBlank()) { Text("Before chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesBefore,fontFamily=readingFamily,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
+                    if(currentChapter.notesAfter.isNotBlank()) { Text("After chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesAfter,fontFamily=readingFamily,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
                 }
             }
             Button(onClick={notes=false},modifier=Modifier.fillMaxWidth()) { Text("Done") }

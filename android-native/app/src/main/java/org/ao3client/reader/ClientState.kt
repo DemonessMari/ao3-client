@@ -2,6 +2,9 @@ package org.ao3client.reader
 
 import android.app.Application
 import android.content.Context
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,6 +22,33 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = Archive(storage)
     var preferences by mutableStateOf(Preferences(storage.getString("language", "en")!!, storage.getBoolean("filterLanguage", false), storage.getString("service", "")!!, storage.getString("apiKey", "")!!, storage.getInt("fontSize", 19), storage.getString("theme", "light")!!, storage.getString("fontFamily", "serif")!!, storage.getFloat("lineSpacing", 1.6f),storage.getInt("margin",24).coerceIn(0,64),validAlignment(storage.getString("alignment","left")!!)))
+    private val fontStore=ReaderFontStore(File(app.filesDir,"fonts"))
+    internal var importedFonts by mutableStateOf(fontStore.list())
+        private set
+    var fontImporting by mutableStateOf(false)
+        private set
+    var fontError by mutableStateOf<String?>(null)
+        private set
+    fun importFont(resolver: ContentResolver,uri: Uri) {
+        if(fontImporting)return
+        fontImporting=true; fontError=null
+        viewModelScope.launch {
+            try {
+                val font=withContext(Dispatchers.IO) {
+                    val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { cursor -> if(cursor.moveToFirst())cursor.getString(0) else null } ?: "Imported font"
+                    resolver.openInputStream(uri)?.use { fontStore.import(it,name) } ?: error("Cannot read the font.")
+                }
+                importedFonts=fontStore.list();appearance(family=font.id);notice="Font imported."
+            } catch(e: CancellationException) {throw e}
+              catch(e: Exception) {fontError=e.message ?: "Could not import the font."}
+            finally {fontImporting=false}
+        }
+    }
+    fun removeFont(id: String) {
+        fontError=null
+        if(!fontStore.remove(id)){fontError="Could not remove the font.";return}
+        importedFonts=fontStore.list();if(preferences.fontFamily==id)appearance(family="serif")
+    }
     var appSkin by mutableStateOf(runCatching { AppSkin.parse(storage.getString("appSkin", "")!!.toByteArray()) }.getOrNull())
         private set
     var skinReturn="home"
@@ -232,7 +262,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var readerRevision by mutableIntStateOf(0)
     private var requestRevision = 0
     private var sessionJob: Job? = null
-    init { if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { username = withContext(Dispatchers.IO) { archive.session() } } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
+    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { username = withContext(Dispatchers.IO) { archive.session() } } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
     private fun load(block: suspend () -> Unit) {
         loadJob?.cancel(); val revision = ++requestRevision; error = null; loading = true
         loadJob = viewModelScope.launch {

@@ -1,4 +1,5 @@
 #include "profileavatar.h"
+#include "readerfonts.h"
 #include <QBuffer>
 #include "appskin.h"
 #include <QtTest>
@@ -868,6 +869,19 @@ private slots:
         QTest::mouseDClick(reader.m_browser->viewport(),Qt::LeftButton); QVERIFY(!reader.m_textOnly);
         QSettings().setValue("reader/bookMode",false);
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_BOOK")) { reader.setBookMode(true); reader.grab().save("/tmp/ao3-book-mode.png"); reader.setBookMode(false); }
+    }
+    void importedFontsAreValidatedCopiedAndUsedByTheReader() {
+        QSettings settings;const auto previous=settings.value("reader/fontFamily");auto restore=qScopeGuard([&]{if(previous.isValid())settings.setValue("reader/fontFamily",previous);else settings.remove("reader/fontFamily");});
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/reader-test-font.ttf"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto bytes=fixture.readAll();QString error;
+        QVERIFY(importReaderFont("not a font",error).isEmpty());QVERIFY(importReaderFont(QByteArray(20*1024*1024+1,'x'),error).isEmpty());
+        const auto id=importReaderFont(bytes,error);QVERIFY2(readerFontId(id),qPrintable(error));QCOMPARE(importReaderFont(bytes,error),id);QCOMPARE(readerFonts().size(),1);
+        settings.setValue("reader/fontFamily",id);ReaderWidget reader;reader.resize(900,800);reader.show();Work work;work.title="Custom font";const QString text=QString("A font preview with several words. ").repeated(70);reader.openWork(work,{{"One",text}});QTest::qWait(30);
+        QCOMPARE(QFontInfo(reader.m_browser->document()->defaultFont()).family(),QString("Reader Test Font"));QCOMPARE(reader.m_browser->toPlainText(),text);
+        const auto path=QDir(readerFontDirectory()).filePath(id.mid(5)+".font");QVERIFY(QFile::exists(path));
+        const auto registered=loadedReaderFonts().take(path);QFontDatabase::removeApplicationFont(registered.registration);
+        QCOMPARE(readerFonts().size(),1);QCOMPARE(readerFont(id).family(),QString("Reader Test Font"));
+        QVERIFY(!removeReaderFont("font:../../outside"));QVERIFY(removeReaderFont(id));QVERIFY(readerFonts().isEmpty());QCOMPARE(readerFont(id).family(),QString("serif"));
+        reader.renderText(text);QCOMPARE(reader.m_browser->document()->defaultFont().family(),QString("serif"));
     }
     void readerMarginsAndAlignmentReflowBothModes() {
         QSettings settings;const auto oldMargin=settings.value("reader/margin"),oldAlignment=settings.value("reader/alignment");

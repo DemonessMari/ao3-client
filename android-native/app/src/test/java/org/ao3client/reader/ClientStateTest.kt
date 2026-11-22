@@ -61,6 +61,14 @@ class ClientStateTest {
         vm.appearance(margin=999,alignment="invalid");assertEquals(64,vm.preferences.margin);assertEquals("left",vm.preferences.alignment)
         vm.appearance(margin=-1,alignment="right");assertEquals(0,vm.preferences.margin);assertEquals("right",state(app).preferences.alignment)
     }
+    @Test fun missingImportedFontFallsBackAndRemovingOneKeepsTheChapter() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val missing="font:"+"a".repeat(64)
+        app.prefs.edit().putString("fontFamily",missing).apply();val vm=state(app);assertEquals("serif",vm.preferences.fontFamily)
+        val bytes=javaClass.getResourceAsStream("/reader-test-font.ttf")!!.readBytes();val store=ReaderFontStore(File(app.directory,"fonts")) {true};val font=store.import(bytes.inputStream(),"Test font")
+        val restored=state(app);assertEquals(1,restored.importedFonts.size);restored.screen="reader";restored.chapter=2;restored.bookOffset=123;restored.appearance(family=font.id)
+        assertEquals(font.id,state(app).preferences.fontFamily);restored.removeFont(font.id)
+        assertEquals("serif",restored.preferences.fontFamily);assertEquals("reader",restored.screen);assertEquals(2,restored.chapter);assertEquals(123,restored.bookOffset)
+    }
     @Test fun skinPersistsAndTheEditorReturnsToTheReader() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         assertEquals("home",vm.screen);vm.applySkin(AppSkin.preset("dark"));assertEquals("Dark",state(app).appSkin?.name)

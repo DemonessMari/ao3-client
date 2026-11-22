@@ -1,6 +1,6 @@
 # Feature coverage
 
-Source for 3.2.0-rc.4. The 3.1.0 release excludes the newest native account actions and embedded website view.
+Source for 3.2.0-rc.5. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Source for 3.2.0-rc.4. The 3.1.0 release excludes the newest native account acti
 | Comments | Reading, paging, posting and replies | Editing/deletion, moderation, freezing and inbox |
 | Series and collections | Public work cards | Series order/navigation, related works, gifts, collections and challenges |
 | Account | Sign-in, persistent native session, sign-out, verified website-session handoff | Preferences, profile/pseuds, mute/block, invitations and account management |
-| Appearance | Reader theme/font/spacing/margins/alignment controls; optional system theme; native app-skin editor, preview and shared JSON import/export | Official site/work skin browsing, selection and editing |
+| Appearance | Reader theme/font/spacing/margins/alignment controls; local TrueType/OpenType font importing; optional system theme; native app-skin editor, preview and shared JSON import/export | Official site/work skin browsing, selection and editing |
 | Creating works | — | Drafts, preview/post/edit/import, chapters, series, co-creators and permitted participant tools |
 | Help and policies | Privacy/security/license documents | AO3 help, news, support and abuse forms |
 
@@ -21,4 +21,4 @@ Still missing from the native reader: faithful offline HTML/media/work skins, an
 
 Verification still required: authenticated account writes and role-specific website workflows; phone rendering, accessibility, rotation/Back/file pickers and long reading sessions. Automated fixture tests and builds do not establish full website parity or device acceptance.
 
-Further reader customization not implemented: imported fonts and configurable tap zones or volume-button actions. Text-to-speech and auto-scroll are also absent. Native app skins currently customize colors; AO3 CSS and layout skins remain in the website view. Profile-picture display is native; changing an AO3 icon uses the website pseud editor.
+Further reader customization not implemented: configurable tap zones or volume-button actions. Text-to-speech and auto-scroll are also absent. Native app skins currently customize colors; AO3 CSS and layout skins remain in the website view. Profile-picture display is native; changing an AO3 icon uses the website pseud editor.

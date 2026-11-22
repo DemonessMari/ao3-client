@@ -281,6 +281,7 @@ class MainActivity : ComponentActivity() {
             FilterChip(selected = prefs.fontFamily == value, onClick = { vm.appearance(family = value) }, label = { Text(title) })
         }
     }
+    FontControls(vm)
     Text("Text size · ${prefs.fontSize}")
     Slider(value = prefs.fontSize.toFloat(), onValueChange = { vm.fontSize(it.toInt()) }, valueRange = 14f..32f, steps = 17)
     Text("Line spacing · ${"%.1f".format(prefs.lineSpacing)}")
@@ -293,7 +294,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     Text("Text preview. Change the margins and alignment to see how your reading text will look.\nSecond paragraph of text.",modifier=Modifier.fillMaxWidth().padding(horizontal=prefs.margin.dp),textAlign=readingAlignment(prefs.alignment),
-        fontFamily = if(prefs.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif,
+        fontFamily = readerFontFamily(vm),
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize * prefs.lineSpacing).sp)
 }
 

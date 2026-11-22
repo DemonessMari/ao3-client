@@ -44,7 +44,7 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val prefs = vm.preferences
-    val style = TextStyle(fontFamily = if(prefs.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif,
+    val style = TextStyle(fontFamily = readerFontFamily(vm),
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize*prefs.lineSpacing).sp,textAlign=readingAlignment(prefs.alignment))
     BoxWithConstraints(modifier) {
         val width = with(density) { (maxWidth-(prefs.margin*2).dp).roundToPx() }.coerceAtLeast(1)

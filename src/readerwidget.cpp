@@ -1,4 +1,5 @@
 #include "readerwidget.h"
+#include "readerfonts.h"
 #include "bookview.h"
 #include "serviceurl.h"
 #include <QShortcut>
@@ -326,13 +327,12 @@ void ReaderWidget::renderText(const QString &text, double fraction)
     m_restoringPosition = true;
     const quint64 revision = ++m_renderRevision;
     QSettings settings;
-    const QString family = settings.value("reader/fontFamily", "serif").toString() == "sans-serif" ? "sans-serif" : "serif";
+    const QString family = settings.value("reader/fontFamily", "serif").toString();
     const int spacing = qBound(120, settings.value("reader/lineSpacing", 160).toInt(), 220);
     applyAppearance();
     // QTextDocument does not implement browser CSS line-height percentages.
     // Apply its native font and block formats so every paragraph actually reflows.
-    QFont font(family);
-    font.setStyleHint(family == "sans-serif" ? QFont::SansSerif : QFont::Serif);
+    QFont font=readerFont(family);
     font.setPointSize(m_fontSize->value());
     m_browser->document()->setDefaultFont(font);
     m_browser->setPlainText(text);
@@ -452,13 +452,14 @@ void ReaderWidget::showSettings()
     auto *key = new QLineEdit(settings.value(QStringLiteral("translation/key")).toString(), &dialog); key->setEchoMode(QLineEdit::Password);
     auto *theme = new QComboBox(&dialog); theme->setObjectName("readingTheme");
     theme->addItems({"Light", "Sepia", "Dark"}); theme->setCurrentIndex(qBound(0, settings.value("reader/theme", 0).toInt(), 2));
-    auto *family = new QComboBox(&dialog); family->setObjectName("readingFontFamily"); family->addItem("Serif", "serif"); family->addItem("Sans serif", "sans-serif"); family->setCurrentIndex(settings.value("reader/fontFamily", "serif").toString() == "sans-serif" ? 1 : 0);
+    auto *family = new QComboBox(&dialog); family->setObjectName("readingFontFamily"); family->addItem("Serif", "serif"); family->addItem("Sans serif", "sans-serif"); for(const auto &font:readerFonts())family->addItem(font.name,font.id);family->setCurrentIndex(qMax(0,family->findData(settings.value("reader/fontFamily","serif"))));
+    auto *fontActions=new QWidget(&dialog);auto *fontRow=new QHBoxLayout(fontActions);fontRow->setContentsMargins(0,0,0,0);auto *importFont=new QPushButton("Import font",fontActions);auto *removeFont=new QPushButton("Remove font",fontActions);fontRow->addWidget(importFont);fontRow->addWidget(removeFont);
     auto *spacing = new QSpinBox(&dialog); spacing->setObjectName("readingLineSpacing"); spacing->setRange(120, 220); spacing->setSingleStep(10); spacing->setSuffix("%"); spacing->setValue(settings.value("reader/lineSpacing", 160).toInt());
     auto *margin=new QSpinBox(&dialog);margin->setObjectName("readingMargin");margin->setRange(0,64);margin->setSuffix(" px");margin->setValue(settings.value("reader/margin",24).toInt());
     auto *alignment=new QComboBox(&dialog);alignment->setObjectName("readingAlignment");for(const auto &pair:{qMakePair("Left","left"),qMakePair("Justified","justify"),qMakePair("Center","center"),qMakePair("Right","right")})alignment->addItem(pair.first,pair.second);alignment->setCurrentIndex(qMax(0,alignment->findData(settings.value("reader/alignment","left"))));
     auto *useSkin=new QCheckBox("Use app skin colors",&dialog); useSkin->setChecked(settings.value("reader/useAppSkin",true).toBool()); form->addRow(useSkin);
     auto *editSkin=new QPushButton("App skin",&dialog); form->addRow(editSkin); connect(editSkin,&QPushButton::clicked,&dialog,[&]{editAppSkin(this);});
-    form->addRow("Reading theme", theme); form->addRow("Font", family); form->addRow("Line spacing", spacing);form->addRow("Side margins",margin);form->addRow("Alignment",alignment);
+    form->addRow("Reading theme", theme); form->addRow("Font", family);form->addRow(fontActions); form->addRow("Line spacing", spacing);form->addRow("Side margins",margin);form->addRow("Alignment",alignment);
     form->addRow(QStringLiteral("Default language"), language); form->addRow(search);
     form->addRow(QStringLiteral("LibreTranslate URL"), url); form->addRow(QStringLiteral("API key (optional)"), key); layout->addLayout(form);
     auto *size = new QSpinBox(&dialog); size->setObjectName("readingTextSize"); size->setRange(11,32); size->setValue(m_fontSize->value()); form->addRow("Text size",size);
@@ -470,10 +471,13 @@ void ReaderWidget::showSettings()
         if(m_index>=0) renderText(m_browser->toPlainText());
         AppSkin previewSkin;const bool custom=useSkin->isChecked() && readerAppSkin(previewSkin);theme->setEnabled(!custom);
         preview->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; padding: 12px %3px; }").arg(custom?previewSkin.background:theme->currentIndex()==2?"#191b1e":theme->currentIndex()==1?"#f1e3c7":"#faf8f3",custom?previewSkin.text:theme->currentIndex()==2?"#e7e1d8":"#292723").arg(margin->value()));
-        QFont font(family->currentData().toString()); font.setPointSize(size->value()); preview->document()->setDefaultFont(font);
+        removeFont->setEnabled(readerFontId(family->currentData().toString()));
+        QFont font=readerFont(family->currentData().toString()); font.setPointSize(size->value()); preview->document()->setDefaultFont(font);
         preview->setPlainText("Text preview.\nSecond line of text.");
         QTextCursor cursor(preview->document()); cursor.select(QTextCursor::Document); QTextBlockFormat block; block.setLineHeight(spacing->value(),QTextBlockFormat::ProportionalHeight);block.setAlignment(alignment->currentData()=="justify"?Qt::AlignJustify:alignment->currentData()=="center"?Qt::AlignHCenter:alignment->currentData()=="right"?Qt::AlignRight:Qt::AlignLeft); cursor.mergeBlockFormat(block);
     };
+    connect(importFont,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getOpenFileName(&dialog,"Import font",{},"Fonts (*.ttf *.otf)");if(path.isEmpty())return;QFile file(path);QString error;if(!file.open(QIODevice::ReadOnly)){QMessageBox::warning(&dialog,"Font import failed","Cannot read the file.");return;}const auto id=importReaderFont(file.read(20*1024*1024+1),error);if(id.isEmpty()){QMessageBox::warning(&dialog,"Font import failed",error);return;}int index=family->findData(id);if(index<0)for(const auto &font:readerFonts())if(font.id==id){family->addItem(font.name,font.id);index=family->count()-1;break;}family->setCurrentIndex(index);liveAppearance();});
+    connect(removeFont,&QPushButton::clicked,&dialog,[&]{const auto id=family->currentData().toString();if(!removeReaderFont(id)){QMessageBox::warning(&dialog,"Font removal failed","Could not remove the font.");return;}const int index=family->currentIndex();family->setCurrentIndex(0);family->removeItem(index);liveAppearance();});
     connect(editSkin,&QPushButton::clicked,&dialog,liveAppearance);
     connect(useSkin,&QCheckBox::toggled,&dialog,liveAppearance);
     connect(margin,&QSpinBox::valueChanged,&dialog,liveAppearance);connect(alignment,&QComboBox::currentIndexChanged,&dialog,liveAppearance);
