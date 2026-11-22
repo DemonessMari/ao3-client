@@ -11,8 +11,8 @@ android {
         applicationId 'org.ao3client.reader'
         minSdk 28
         targetSdk 36
-        versionCode 24
-        versionName '3.2.0-rc.9'
+        versionCode 25
+        versionName '3.2.0-rc.10'
     }
     sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures") }
     signingConfigs {
@@ -43,3 +43,11 @@ dependencies {
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
     testImplementation 'org.json:json:20240303'
 }
+
+def privacyAssets = layout.buildDirectory.dir('generated/privacy-assets')
+def syncPrivacyAsset = tasks.register('syncPrivacyAsset', Sync) {
+    from file('../../PRIVACY.md')
+    into privacyAssets
+}
+android.sourceSets.main.assets.srcDir(privacyAssets)
+tasks.named('preBuild').configure { dependsOn(syncPrivacyAsset) }

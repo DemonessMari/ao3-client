@@ -1,3 +1,4 @@
+#include "readerspeech.h"
 #include "profileavatar.h"
 #include "readerfonts.h"
 #include <QBuffer>
@@ -878,6 +879,20 @@ private slots:
         QTest::mouseDClick(reader.m_browser->viewport(),Qt::LeftButton); QVERIFY(!reader.m_textOnly);
         QSettings().setValue("reader/bookMode",false);
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_BOOK")) { reader.setBookMode(true); reader.grab().save("/tmp/ao3-book-mode.png"); reader.setBookMode(false); }
+    }
+    void offlineSpeechCanPauseResumeAndStopItsOwnProcess() {
+#ifdef Q_OS_UNIX
+        QTemporaryDir temporary;QVERIFY(temporary.isValid());QFile script(temporary.filePath("speech"));QVERIFY(script.open(QIODevice::WriteOnly));script.write("#!/usr/bin/python3\nimport sys,time\nsys.stdin.read()\nwhile True:\n sys.stdout.write('.');sys.stdout.flush();time.sleep(.03)\n");script.close();QVERIFY(script.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner));
+        ReaderSpeech speech(nullptr,script.fileName());speech.start("Reader text with shell characters $() and quotes.","en",175);QTRY_VERIFY(speech.process && speech.process->state()==QProcess::Running);auto *process=speech.process;QTRY_VERIFY(process->bytesAvailable()>0);speech.pauseOrResume();QVERIFY(speech.paused());QTest::qWait(70);process->readAllStandardOutput();QTest::qWait(120);QVERIFY(process->readAllStandardOutput().isEmpty());speech.pauseOrResume();QVERIFY(!speech.paused());QTRY_VERIFY(process->bytesAvailable()>0);QPointer<QProcess> stopped=process;speech.stop();QVERIFY(!speech.active());QTRY_VERIFY(!stopped || stopped->state()==QProcess::NotRunning);
+        speech.start("Text","bad;language",175);QVERIFY(!speech.active());QVERIFY(!speech.error.isEmpty());
+#else
+        QSKIP("Desktop speech uses the local Unix eSpeak engine.");
+#endif
+    }
+    void tapZonesCanReverseDisableAndKeepKeyboardEscape() {
+        QSettings settings;QMap<QString,QVariant> old;for(const auto &key:QStringList{"tapLeft","tapCenter","tapRight","tapEdge"})old[key]=settings.value("reader/"+key);auto restore=qScopeGuard([&]{for(auto i=old.begin();i!=old.end();++i)if(i.value().isValid())settings.setValue("reader/"+i.key(),i.value());else settings.remove("reader/"+i.key());});
+        settings.setValue("reader/tapLeft",1);settings.setValue("reader/tapRight",-1);settings.setValue("reader/tapCenter",0);settings.setValue("reader/tapEdge",35);
+        ReaderWidget reader;reader.resize(900,700);reader.show();reader.setBookMode(true);Work work;work.id="774423";reader.openWork(work,{{"One",QString("Long reading text. ").repeated(5000)}});QTest::qWait(70);QVERIFY(reader.m_book->pages()>2);reader.m_book->animated=false;const auto point=QPoint(10,reader.m_book->height()/2);QTest::mouseClick(reader.m_book,Qt::LeftButton,Qt::NoModifier,point);QCOMPARE(reader.m_book->page(),1);QTest::mouseClick(reader.m_book,Qt::LeftButton,Qt::NoModifier,QPoint(reader.m_book->width()/2,reader.m_book->height()/2));QCOMPARE(reader.m_book->page(),1);QTest::mouseClick(reader.m_book,Qt::LeftButton,Qt::NoModifier,QPoint(reader.m_book->width()-10,reader.m_book->height()/2));QCOMPARE(reader.m_book->page(),0);reader.setTextOnly(true);QTest::keyClick(reader.m_book,Qt::Key_F10);QTRY_VERIFY(!reader.m_textOnly);reader.setBookMode(false);
     }
     void autoScrollAdvancesAndStopsAtReadingBoundaries() {
         ReaderWidget reader;reader.resize(900,700);reader.show();Work work;work.id="774422";work.title="Auto-scroll";

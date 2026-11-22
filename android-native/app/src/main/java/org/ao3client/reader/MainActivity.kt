@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -139,6 +139,7 @@ class MainActivity : ComponentActivity() {
                     IconButton(onClick={expanded=true},modifier=Modifier.semantics { contentDescription="Account: $user" }) { ProfilePicture(vm,user,size=36.dp) }
                     DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
                         Text(user,Modifier.padding(horizontal=16.dp,vertical=8.dp),style=MaterialTheme.typography.titleMedium)
+                        DropdownMenuItem(text={Text("Check native sign-in")},onClick={expanded=false;vm.verifyNativeSession()})
                         DropdownMenuItem(text={Text("Account details")},onClick={expanded=false;vm.navigate("account")})
                         DropdownMenuItem(text={Text("My profile")},onClick={expanded=false;vm.showProfile("/users/$user")})
                         DropdownMenuItem(text={Text("My works")},onClick={expanded=false;vm.myWorks()})

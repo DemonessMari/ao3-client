@@ -19,3 +19,5 @@ Removing a download retains history and bookmarks. Clearing Android storage or u
 The embedded AO3 view runs the official website, including its JavaScript, forms, skins and media. It keeps website cookies, history and cache in app-private storage. Work images or embedded media may contact their hosting services. File uploads use a system picker; only files you choose are provided to the website. It exposes no app bridge or direct access to local files. External links use the browser’s own session and privacy settings.
 
 Report privacy issues through [private security reports](https://github.com/DemonessMari/ao3-client/security/advisories/new). Do not attach credentials, private works or full backups to public issues.
+
+Read aloud sends chapter text to the installed eSpeak NG process on desktop or to an Android system text-to-speech voice advertised as offline. The client does not send this text to an online speech service. Android voice installation is managed by system settings.

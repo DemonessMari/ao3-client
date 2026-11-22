@@ -190,7 +190,7 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
                 contentDescription=pages[index].text
                 if(vm.textOnly) onClick(label="Show reading controls") { vm.textOnly=false; true }
                 customActions=listOf(CustomAccessibilityAction("Next page") { turn(1); true },CustomAccessibilityAction("Previous page") { turn(-1); true })
-            }.pointerInput(index,vm.textOnly,rich) {
+            }.pointerInput(index,vm.textOnly,rich,vm.tapLeft,vm.tapCenter,vm.tapRight,vm.tapEdge) {
                 detectTapGestures { point ->
                     if(!busy && old.layoutInput.text.isNotEmpty()) {
                         val position=point-pad; val offset=old.getOffsetForPosition(position)
@@ -199,9 +199,7 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
                             if(link!=null) { runCatching { uriHandler.openUri(link.url) }.onFailure { vm.error="Could not open link." }; return@detectTapGestures }
                         }
                     }
-                    if(point.x<size.width*.3f) turn(-1)
-                    else if(point.x>size.width*.7f) turn(1)
-                    else if(vm.textOnly) vm.textOnly=false
+                    when(val action=tapZoneAction(point.x/size.width,vm.tapLeft,vm.tapCenter,vm.tapRight,vm.tapEdge)){-1,1->turn(action);2->vm.textOnly=!vm.textOnly}
                 }
             }.pointerInput(index,vm.pageAnimation) {
                 detectHorizontalDragGestures(

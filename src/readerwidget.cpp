@@ -1,3 +1,4 @@
+#include "readerspeech.h"
 #include "readerwidget.h"
 #include "readerfonts.h"
 #include "bookview.h"
@@ -148,7 +149,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_book->positionChanged = [this](double fraction) { auto *bar=m_browser->verticalScrollBar(); bar->setValue(qRound(fraction*bar->maximum())); saveProgress(); };
     m_book->chapterRequested = [this](int delta) { const int next=m_index+delta; if(next<0 || next>=m_chapters.size()) return; showChapter(next); renderText(m_chapters[next].text,delta<0?1.0:0.0); };
     m_book->linkActivated = [this](const QString &url) { const auto target=readingLink(url,m_work.id); if(!target.isEmpty()) QDesktopServices::openUrl(QUrl(target)); };
-    m_book->centerClicked = [this] { if(m_textOnly) setTextOnly(false); };
+    m_book->centerClicked = [this] { setTextOnly(!m_textOnly); };
     m_browser->viewport()->installEventFilter(this);
     page->addWidget(m_browser, 1); page->addStretch(); layout->addLayout(page, 1);
     QPushButton *desktopOnline=nullptr;
@@ -232,7 +233,11 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
         setFullscreen(false);
 
     }
+    m_speech=new ReaderSpeech(this);
     auto *modes = new QBoxLayout(mobileUi()?QBoxLayout::TopToBottom:QBoxLayout::LeftToRight);
+    QBoxLayout *extraTools=desktopLibraryTools?static_cast<QBoxLayout *>(desktopLibraryTools):modes;
+    auto *speech=new QPushButton("Read aloud",this);extraTools->addWidget(speech);connect(speech,&QPushButton::clicked,this,&ReaderWidget::showSpeech);
+    auto *taps=new QPushButton("Tap zones",this);extraTools->addWidget(taps);connect(taps,&QPushButton::clicked,this,&ReaderWidget::showTapZones);
     auto *hide = new QPushButton("Text only (F10)", this); hide->setObjectName("textOnlyMode"); modes->addWidget(hide);
     m_autoScroll=new QPushButton("Auto-scroll",this);m_autoScroll->setObjectName("autoScroll");m_autoScroll->setCheckable(true);modes->addWidget(m_autoScroll);
     m_autoScrollSpeed=new QSpinBox(this);m_autoScrollSpeed->setObjectName("autoScrollSpeed");m_autoScrollSpeed->setRange(10,120);m_autoScrollSpeed->setSuffix(" px/s");m_autoScrollSpeed->setAccessibleName("Auto-scroll speed");m_autoScrollSpeed->setValue(qBound(10,QSettings().value("reader/autoScrollSpeed",30).toInt(),120));modes->addWidget(m_autoScrollSpeed);
@@ -322,7 +327,7 @@ void ReaderWidget::setKudosStatus(const QString &status,bool guest) {
 }
 void ReaderWidget::showChapter(int index)
 {
-    stopAutoScroll();
+    stopAutoScroll();if(m_speech)m_speech->stop();
     if (index < 0 || index >= m_chapters.size()) return;
     saveProgress();
     m_translator->cancel(); m_busy = false; m_index = index;
@@ -336,7 +341,7 @@ void ReaderWidget::showChapter(int index)
 }
 void ReaderWidget::renderText(const QString &text, double fraction)
 {
-    stopAutoScroll();
+    stopAutoScroll();if(m_speech)m_speech->stop();
     auto *bar = m_browser->verticalScrollBar();
     const int anchor=m_bookMode && fraction<0 ? m_book->anchor() : -1;
     if (fraction < 0 && m_bookMode) fraction = m_book->fraction();
@@ -422,7 +427,7 @@ void ReaderWidget::translateChapter()
 }
 void ReaderWidget::clear()
 {
-    stopAutoScroll();
+    stopAutoScroll();if(m_speech)m_speech->stop();
     saveProgress();
     m_progressTimer.stop();
     ++m_renderRevision;
@@ -623,9 +628,27 @@ void ReaderWidget::setTextOnly(bool enabled) {
     if(m_bookMode) m_book->setFocus(); else m_browser->setFocus();
 }
 void ReaderWidget::stopAutoScroll() {if(m_autoScroll)m_autoScroll->setChecked(false);m_autoScrollTimer.stop();}
-void ReaderWidget::hideEvent(QHideEvent *event) {stopAutoScroll();QWidget::hideEvent(event);}
+void ReaderWidget::hideEvent(QHideEvent *event) {stopAutoScroll();if(m_speech)m_speech->stop();QWidget::hideEvent(event);}
 bool ReaderWidget::eventFilter(QObject *object,QEvent *event) {
     if(object==m_browser->viewport() && (event->type()==QEvent::Wheel || event->type()==QEvent::MouseButtonPress || event->type()==QEvent::TouchBegin))stopAutoScroll();
     if(object==m_browser->viewport() && event->type()==QEvent::MouseButtonDblClick && m_textOnly) { setTextOnly(false); return true; }
     return QWidget::eventFilter(object,event);
+}
+
+void ReaderWidget::showTapZones() {
+    stopAutoScroll();QDialog dialog(this);dialog.setWindowTitle("Book-mode tap zones");auto *form=new QFormLayout(&dialog);
+    for(const auto &region:QStringList{"Left","Center","Right"}){auto *box=new QComboBox(&dialog);for(const auto &entry:QList<QPair<QString,int>>{{"Previous page",-1},{"No action",0},{"Next page",1},{"Show/hide controls",2}})box->addItem(entry.first,entry.second);
+        const QString key="reader/tap"+region;box->setCurrentIndex(qMax(0,box->findData(QSettings().value(key,region=="Left"?-1:region=="Right"?1:2).toInt())));form->addRow(region,box);connect(box,qOverload<int>(&QComboBox::currentIndexChanged),&dialog,[box,key]{QSettings().setValue(key,box->currentData());});}
+    auto *edge=new QSpinBox(&dialog);edge->setRange(20,40);edge->setSuffix("%");edge->setValue(qBound(20,QSettings().value("reader/tapEdge",30).toInt(),40));form->addRow("Each edge zone",edge);connect(edge,qOverload<int>(&QSpinBox::valueChanged),&dialog,[](int value){QSettings().setValue("reader/tapEdge",value);});
+    auto *done=new QPushButton("Done",&dialog);form->addRow(done);connect(done,&QPushButton::clicked,&dialog,&QDialog::accept);dialog.exec();
+}
+void ReaderWidget::showSpeech() {
+    stopAutoScroll();QDialog dialog(this);dialog.setWindowTitle("Read aloud");auto *form=new QFormLayout(&dialog);
+    auto *language=new QLineEdit(QSettings().value("reader/speechLanguage","en").toString(),&dialog);language->setMaxLength(16);form->addRow("Speech language",language);
+    auto *rate=new QSpinBox(&dialog);rate->setRange(80,350);rate->setValue(qBound(80,QSettings().value("reader/speechRate",175).toInt(),350));form->addRow("Words per minute",rate);
+    auto *status=new QLabel(&dialog);status->setWordWrap(true);form->addRow(status);auto *start=new QPushButton("Read from here",&dialog),*pause=new QPushButton("Pause",&dialog),*stop=new QPushButton("Stop",&dialog),*done=new QPushButton("Done",&dialog);for(auto *button:{start,pause,stop,done})form->addRow(button);
+    m_speech->changed=[&,pause,status]{pause->setEnabled(m_speech->active());pause->setText(m_speech->paused()?"Resume":"Pause");status->setText(m_speech->error.isEmpty()?(m_speech->active()?(m_speech->paused()?"Paused":"Reading aloud"):"Stopped"):m_speech->error);};m_speech->changed();
+    connect(start,&QPushButton::clicked,&dialog,[&]{QSettings().setValue("reader/speechLanguage",language->text().trimmed());QSettings().setValue("reader/speechRate",rate->value());const int offset=m_bookMode?m_book->anchor():m_browser->cursorForPosition(QPoint(0,0)).position();m_speech->start(m_browser->toPlainText().mid(offset),language->text().trimmed(),rate->value());});
+    connect(pause,&QPushButton::clicked,&dialog,[this]{m_speech->pauseOrResume();});connect(stop,&QPushButton::clicked,&dialog,[this]{m_speech->stop();});connect(done,&QPushButton::clicked,&dialog,&QDialog::accept);
+    dialog.exec();m_speech->changed={};
 }

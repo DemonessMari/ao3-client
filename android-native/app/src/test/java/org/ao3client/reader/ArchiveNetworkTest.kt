@@ -33,6 +33,11 @@ class ArchiveNetworkTest {
         actions.forEach {action->val failure=runCatching(action).exceptionOrNull();assertNotNull(failure);val message=failure!!.message.orEmpty();assertTrue(message.contains("HTTP 404"));assertTrue(message.contains("/works/123"));assertFalse(message.contains("secret"));assertFalse(message.contains("view_adult"))}
         assertEquals(4,calls.size);assertTrue(calls.all {it.closed})
     }
+    @Test fun aWork404CanBeDistinguishedFromAnExpiredNativeSession() {
+        val prefs=MemoryPreferences();prefs.edit().putString("sessionUsername","Writer").putString("cookies","""[{"value":"_session_id=test; Path=/; Secure; Domain=archiveofourown.org"}]""").apply()
+        val calls=mutableListOf<Reply>();val client=Archive(prefs,connectionFactory={url->Reply(url,if(url.path=="/")200 else 404,"<div id='greeting'><a href='/users/Writer'>Hi</a><a href='/users/logout'>Log out</a></div>").also{calls+=it}})
+        assertTrue(runCatching{client.read("123")}.isFailure);assertEquals("Writer",client.session());assertEquals(listOf("/works/123","/"),calls.map{it.url.path});assertTrue(calls.all{it.getRequestProperty("Cookie").orEmpty().contains("_session_id=test")})
+    }
     @Test fun rateLimitStopsWithoutRetryingOrClearingRememberedIdentity() {
         val prefs=MemoryPreferences();prefs.edit().putString("sessionUsername","Writer").putString("cookies","""[{"value":"_session_id=test; Path=/; Secure; Domain=archiveofourown.org"}]""").apply();var calls=0
         val client=Archive(prefs,connectionFactory={url->calls++;Reply(url,429,"ignored")})

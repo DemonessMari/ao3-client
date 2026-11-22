@@ -24,6 +24,18 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var autoScrollSpeed by mutableIntStateOf(storage.getInt("autoScrollSpeed",30).coerceIn(10,120));private set
     var volumeNavigation by mutableStateOf(storage.getBoolean("volumeNavigation",false));private set
     var keepScreenOn by mutableStateOf(storage.getBoolean("keepScreenOn",false));private set
+    var tapLeft by mutableIntStateOf(storage.getInt("tapLeft",-1).coerceIn(-1,2));private set
+    var tapCenter by mutableIntStateOf(storage.getInt("tapCenter",2).coerceIn(-1,2));private set
+    var tapRight by mutableIntStateOf(storage.getInt("tapRight",1).coerceIn(-1,2));private set
+    var tapEdge by mutableIntStateOf(storage.getInt("tapEdge",30).coerceIn(20,40));private set
+    fun tapZone(region:String,value:Int) {val action=value.coerceIn(-1,2);when(region){"Left"->tapLeft=action;"Center"->tapCenter=action;"Right"->tapRight=action;else->return};storage.edit().putInt("tap$region",action).apply()}
+    fun tapEdge(value:Int) {tapEdge=value.coerceIn(20,40);storage.edit().putInt("tapEdge",tapEdge).apply()}
+    fun verifyNativeSession()=load {
+        val previous=username;val confirmed=withContext(Dispatchers.IO){archive.session()}
+        if(confirmed==null){logout();notice="AO3 reports that the native session is signed out. Sign in again."}
+        else if(previous!=null && confirmed!=previous){logout();notice="The native session belongs to a different account. Sign in again."}
+        else {username=confirmed;notice="AO3 verified the native sign-in as $confirmed. A work can still be unavailable or restricted."}
+    }
     internal var readerOverlayOpen=false
     internal var readerStep by mutableStateOf(0L to 0);private set
     fun autoScrollSpeed(value:Int) {autoScrollSpeed=value.coerceIn(10,120);storage.edit().putInt("autoScrollSpeed",autoScrollSpeed).apply()}

@@ -1,10 +1,10 @@
 # Verification
 
-2026-11-23: desktop and Android 3.2.0-rc.9.
+2026-11-23: desktop and Android 3.2.0-rc.10.
 
 - Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All five CTest suites passed: content, functional, launcher, WebEngine rendering and installer.
 - Android branding now uses the full site name and logo on main screens, with wrapping text and safe-area insets. Profile/work titles and navigation are retained. Phone rendering and large-system-font checks remain pending.
-- Android release: 84 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 29 warnings (including style suggestions).
+- Android release: 87 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 32 warnings (including style suggestions).
 - The embedded desktop renderer displayed the real AO3 sign-in form. No credentials were entered and no account action was submitted.
 - An earlier separate live Android test passed: two searches returned distinct result sets and a work opened with readable chapter text.
 - Interface-font checks compare the prior system-font interface with the selected imported font. Desktop checks cover existing navigation/buttons, heading size/weight, work-summary document fonts, opt-out and missing-file fallback; before/after desktop captures were inspected. Android tests cover all 15 typography roles and preference persistence; Mari confirmed imported fonts now apply on the phone in rc7. Other phone appearance/accessibility checks remain pending.
@@ -16,8 +16,8 @@
 - Session tests cover current AO3 greeting markup, logout links with query parameters, identity mismatch, cancellation and preservation of the previous account on a failed website-session import.
 - Bookmark and comment fixtures cover form scoping, nested threads, fresh identity/token checks and uncertain outcomes. These do not establish live account acceptance.
 
-- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 24 and 16 KB alignment verified. Shared identity script and privacy assets match source.
-- Desktop 3.2.0-rc.9 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
+- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 25 and 16 KB alignment verified. Shared identity script and privacy assets match source.
+- Desktop 3.2.0-rc.10 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
 - Final APK, AAB, desktop archive and checksums are in `~/Downloads`.
 
 Official-source review used `otwcode/otwarchive` revision `452391b648f2fb06b55c36133812449747634504`; production availability may differ.
@@ -31,3 +31,9 @@ Chapter-filter request tests verify server-side exclusion, query grouping and pa
 Reader extras: desktop auto-scroll tests verify movement, chapter-end stopping, chapter changes, book-mode exclusion and leaving the reader. Android tests verify bounded speed and persistence of volume navigation/keep-screen-on. Device checks remain pending for scrolling smoothness, volume keys, overlays, backgrounding and wake behavior. Neither edition starts auto-scroll automatically.
 
 Network-path tests exercise the real Android request method with controlled HTTP connections: work IDs, redirects, read/download/comment/bookmark GET routes, selectable 404 messages without query strings or response bodies, and a 429 without automatic retry or identity removal. They do not reproduce or explain the reported phone 404s. Production request headers and authentication are unchanged.
+
+Read-aloud: the installed desktop eSpeak NG generated 77,934 bytes of valid WAV audio without playback. A controlled child-process test verifies pause/resume and stop without playing audio or stopping unrelated processes. Speech input uses stdin and language/rate arguments are bounded. Android chunk tests cover long multilingual text, exact coverage and surrogate boundaries; actual offline voice selection, audio focus, pause/resume and speaker/headphone output remain unverified on the phone. Android requests offline voices and pauses when backgrounded; no background-playback service is provided.
+
+Book-mode tap-zone tests verify reversed left/right navigation, disabled center taps and retaining the desktop F10 escape. Android tests cover zone boundaries and persisted assignments/widths; actual phone gestures remain pending. The native account menu now offers an explicit server sign-in check. A controlled request test verifies a 404 work response can coexist with an authenticated root response. The user's across-work 404 cause remains unresolved.
+
+Android privacy assets are now generated from the canonical shared privacy document during preBuild; artifact verification compares the packaged bytes to source.

@@ -24,8 +24,8 @@ class ClientStateTest {
     @Test fun readerExtrasPersistAndBoundSpeed() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         vm.autoScrollSpeed(500);assertEquals(120,vm.autoScrollSpeed);vm.autoScrollSpeed(-1);assertEquals(10,vm.autoScrollSpeed)
-        vm.volumeNavigation(true);vm.keepScreenOn(true)
-        val restored=state(app);assertEquals(10,restored.autoScrollSpeed);assertTrue(restored.volumeNavigation);assertTrue(restored.keepScreenOn)
+        vm.volumeNavigation(true);vm.keepScreenOn(true);vm.tapZone("Left",1);vm.tapZone("Center",0);vm.tapZone("Right",-1);vm.tapEdge(500)
+        val restored=state(app);assertEquals(10,restored.autoScrollSpeed);assertTrue(restored.volumeNavigation);assertTrue(restored.keepScreenOn);assertEquals(1,restored.tapLeft);assertEquals(0,restored.tapCenter);assertEquals(-1,restored.tapRight);assertEquals(40,restored.tapEdge)
         val previous=vm.readerStep.first;vm.stepReading(1);assertEquals(previous+1,vm.readerStep.first);assertEquals(1,vm.readerStep.second)
     }
     @Test fun androidFactoryCanFindTheApplicationConstructor() {

@@ -1,3 +1,4 @@
+#include "tapzones.h"
 #pragma once
 #include <QWidget>
 #include <QTextDocument>
@@ -146,7 +147,7 @@ protected:
             const auto link=doc->documentLayout()->anchorAt(e->position()+QPointF(0,current*doc->pageSize().height()));
             if (!link.isEmpty()) { linkActivated(link); return; }
         }
-        if(e->position().x()<width()*.3) turn(-1); else if(e->position().x()>width()*.7) turn(1); else if(centerClicked) centerClicked(); }
+        const int action=readerTapAction(e->position().x()/qMax(1,width()));if(action==-1 || action==1)turn(action);else if(action==2 && centerClicked)centerClicked(); }
     void keyPressEvent(QKeyEvent *e) override { if(e->key()==Qt::Key_Right || e->key()==Qt::Key_PageDown || e->key()==Qt::Key_Space) turn(1); else if(e->key()==Qt::Key_Left || e->key()==Qt::Key_PageUp) turn(-1); else QWidget::keyPressEvent(e); }
 private:
     friend class FunctionalTest;

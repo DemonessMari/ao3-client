@@ -809,10 +809,10 @@ void MainWindow::onLoginClicked()
 {
     if(m_loginManager->isLoggedIn()) {
         QMenu menu(this);menu.addSection(m_loginManager->username());
-        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");menu.addSeparator();auto *logout=menu.addAction("Sign out");
+        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
         auto *selected=menu.exec(m_loginButton->mapToGlobal(QPoint(0,m_loginButton->height())));
         if(selected==profile)showProfile("/users/"+m_loginManager->username());
-        else if(selected==works)showUserWorks();else if(selected==logout)onLogout();
+        else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
         return;
     }
     showLoginView();
@@ -841,6 +841,7 @@ void MainWindow::onLoginFailed(const QString &reason)
 
 void MainWindow::onSessionChecked(bool valid, const UserInfo &user)
 {
+    if(statusBar()->currentMessage()=="Checking native sign-in...")statusBar()->showMessage(valid?"AO3 verified the native sign-in as "+user.username:"AO3 reports that the native session is signed out.");
     if (valid) {
         setLoggedInState(true);
         m_dashboardView->showUserInfo(user);

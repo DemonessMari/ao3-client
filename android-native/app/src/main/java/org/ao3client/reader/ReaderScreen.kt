@@ -47,6 +47,10 @@ import androidx.lifecycle.LifecycleEventObserver
     var tools by remember { mutableStateOf(false) }
     var translationConsent by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(false) }
+    var speechOptions by remember { mutableStateOf(false) }
+    val speech=remember(context) {ReaderSpeech(context)}
+    DisposableEffect(speech) {onDispose {speech.close()}}
+    DisposableEffect(vm.chapter,vm.translation,speech) {onDispose {speech.stop()}}
     var notes by remember(vm.chapter) { mutableStateOf(false) }
     val currentChapter = vm.chapters[vm.chapter]
     var chaptersMenu by remember { mutableStateOf(false) }
@@ -65,10 +69,10 @@ import androidx.lifecycle.LifecycleEventObserver
     LaunchedEffect(dragged) {if(dragged)autoScroll=false}
     val density=LocalDensity.current.density
     val view=LocalView.current
-    SideEffect { vm.readerOverlayOpen=tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent }
+    SideEffect { vm.readerOverlayOpen=tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent || speechOptions }
     DisposableEffect(activity,view,vm.keepScreenOn) {
         val previous=view.keepScreenOn;view.keepScreenOn=vm.keepScreenOn
-        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_PAUSE){autoScroll=false;vm.saveProgress()} }
+        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_PAUSE){autoScroll=false;if(speech.active && !speech.paused)speech.pauseOrResume();vm.saveProgress()} }
         activity.lifecycle.addObserver(observer)
         onDispose {activity.lifecycle.removeObserver(observer);view.keepScreenOn=previous;vm.readerOverlayOpen=false}
     }
@@ -107,7 +111,7 @@ import androidx.lifecycle.LifecycleEventObserver
         var lastAutoSave=0L
         snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; val now=android.os.SystemClock.uptimeMillis();if(!autoScroll || now-lastAutoSave>=1000){vm.saveProgress();lastAutoSave=now} } }
     }
-    BackHandler { when { notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
+    BackHandler { when { speechOptions -> speechOptions=false; notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
     Scaffold(
         topBar = { if(!hideChrome) TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } }) },
         bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
@@ -125,6 +129,7 @@ import androidx.lifecycle.LifecycleEventObserver
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
                 if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
+                if(speech.active && !vm.textOnly) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {TextButton(onClick={speech.pauseOrResume()}){Text(if(speech.paused)"Resume speech" else "Pause speech")};TextButton(onClick={speech.stop()}){Text("Stop speech")}}
                 if(autoScroll && !vm.textOnly) TextButton(onClick={autoScroll=false}) {Text("Pause auto-scroll")}
                 if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(currentChapter.title,Modifier.weight(1f).padding(vertical=6.dp),style=MaterialTheme.typography.labelLarge)
@@ -158,6 +163,8 @@ import androidx.lifecycle.LifecycleEventObserver
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Reading options", style = MaterialTheme.typography.titleLarge)
+            MenuRow("Read aloud",onClick={autoScroll=false;tools=false;speechOptions=true})
+            TapZoneControls(vm)
             if(!vm.bookMode) {
                 MenuRow(if(autoScroll) "Pause auto-scroll" else "Start auto-scroll",onClick={tools=false;autoScroll=!autoScroll})
                 Text("Auto-scroll speed · ${vm.autoScrollSpeed}")
@@ -189,6 +196,19 @@ import androidx.lifecycle.LifecycleEventObserver
             HorizontalDivider()
             Ao3WorkLinks(vm,fic.id)
             MenuRow("Start from the beginning", onClick = { tools = false; vm.restart() })
+        }
+    }
+    if(speechOptions) ModalBottomSheet(onDismissRequest={speechOptions=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),shape=RoundedCornerShape(topStart=16.dp,topEnd=16.dp)) {
+        var language by remember {mutableStateOf(vm.storage.getString("speechLanguage",if(vm.translation!=null)vm.preferences.language else "en").orEmpty())}
+        var rate by remember {mutableFloatStateOf(vm.storage.getFloat("speechRate",1f).coerceIn(.5f,2f))}
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text("Read aloud",style=MaterialTheme.typography.titleLarge)
+            OutlinedTextField(language,{language=it.take(16)},label={Text("Speech language, e.g. en or es")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            Text("Speech rate · ${"%.1f".format(rate)}×");Slider(rate,{rate=it},valueRange=.5f..2f)
+            speech.error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
+            Button(onClick={vm.storage.edit().putString("speechLanguage",language.trim()).putFloat("speechRate",rate).apply();val offset=if(vm.bookMode)vm.bookOffset.coerceAtLeast(0) else paragraphOffsets.getOrElse(scroll.firstVisibleItemIndex){text.length};speech.start(text,offset,language.trim(),rate)},modifier=Modifier.fillMaxWidth()){Text("Read from here")}
+            Row {TextButton(onClick={speech.pauseOrResume()},enabled=speech.active){Text(if(speech.paused)"Resume" else "Pause")};TextButton(onClick={speech.stop()}){Text("Stop")}}
+            TextButton(onClick={speechOptions=false}){Text("Done")}
         }
     }
     if(notes) ModalBottomSheet(onDismissRequest={notes=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),shape=RoundedCornerShape(topStart=16.dp,topEnd=16.dp)) {

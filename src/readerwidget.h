@@ -11,6 +11,7 @@ class QPushButton;
 class QTextBrowser;
 class QSpinBox;
 class BookView;
+class ReaderSpeech;
 
 class ReaderWidget : public QWidget {
     Q_OBJECT
@@ -53,6 +54,9 @@ private:
     QPushButton *m_kudosButton=nullptr;
     void showChapter(int index);
     void showNotes();
+    void showSpeech();
+    void showTapZones();
+    ReaderSpeech *m_speech=nullptr;
     QPushButton *m_notes = nullptr;
     void renderText(const QString &text, double fraction = -1);
     QString progressKey() const;
