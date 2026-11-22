@@ -17,6 +17,7 @@ public:
 signals:
     void loginRequested(const QString &login, const QString &password);
     void cancelled();
+    void websiteSignInRequested();
 
 private:
     QLineEdit *m_loginInput;

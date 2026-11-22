@@ -1,5 +1,6 @@
 #pragma once
 #include "commentpage.h"
+#include "siteidentity.h"
 struct KudosResult { QString message; bool success=false; bool uncertain=false; };
 inline QMap<QString,QString> parseKudosForm(const QString &html,const QString &id) {
     using namespace CommentHtml;
@@ -19,21 +20,6 @@ inline QMap<QString,QString> parseKudosForm(const QString &html,const QString &i
         if(fields.value("kudo[commentable_id]")==id && fields.value("kudo[commentable_type]")=="Work" && !fields.value("authenticity_token").isEmpty()) return fields;
     }
     return {};
-}
-inline bool kudosIdentityMatches(const QString &html,const QString &expected) {
-    const auto list=CommentHtml::nodes(html);bool login=false,logout=false;QString user;
-    for(int i=0;i<list.size();++i) {
-        const auto &n=list[i];bool story=false,greeting=false;
-        for(int p=n.parent;p>=0;p=list[p].parent) {if(list[p].attrs.value("id")=="greeting")greeting=true;if(list[p].attrs.value("id")=="workskin" || CommentHtml::hasClass(list[p],"userstuff"))story=true;}
-        if(story)continue;
-        const auto href=n.attrs.value(n.tag=="form"?"action":"href");if(href.isEmpty())continue;
-        const auto url=QUrl("https://archiveofourown.org").resolved(QUrl(href));
-        if(url.scheme()!="https" || url.host()!="archiveofourown.org" || !url.userInfo().isEmpty())continue;
-        if(url.path()=="/users/login")login=true;
-        if(url.path()=="/users/logout")logout=true;
-        if(greeting && QRegularExpression("^/users/[A-Za-z0-9_]+$").match(url.path()).hasMatch() && url.path()!="/users/login" && url.path()!="/users/logout")user=url.path().mid(7);
-    }
-    return expected.isEmpty()?login && !logout:logout && user==expected;
 }
 inline KudosResult parseKudosResult(const QString &html) {
     const auto list=CommentHtml::nodes(html);

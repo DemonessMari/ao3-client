@@ -34,6 +34,67 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var profileReturn = "details"
     var ownWorks by mutableStateOf(false)
     var selected by mutableStateOf<Fic?>(null)
+    var websiteUrl=Archive.BASE+"/"
+    var websiteReturn="home"
+    var websiteRevision by mutableIntStateOf(0)
+    fun openWebsite(url:String) {
+        if(!archiveWebsiteUrl(url)){error="This address is outside AO3.";return}
+        if(screen!="website")websiteReturn=screen
+        websiteUrl=url;++websiteRevision;navigate("website")
+    }
+    var websiteImporting by mutableStateOf(false)
+    fun useWebsiteSession(header:String,agent:String,expected:String) {
+        if(websiteImporting)return
+        val generation=kudosGeneration;websiteImporting=true;error=null;sessionJob?.cancel()
+        viewModelScope.launch {
+            try {
+                val user=withContext(Dispatchers.IO) {archive.useWebsiteSession(header,agent,expected)}
+                if(generation!=kudosGeneration)return@launch
+                ++kudosGeneration;kudosStates.clear();accountPending.clear()
+                archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
+                commentsPage=null;commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision
+                searchListing=null;accountListing=null;profile=null;profileListing=null;saveProgress();selected=null;chapters=emptyList();ownWorks=false
+                username=user;screen="account";notice="Website sign-in verified for the native reader."
+            } catch(e:CancellationException) {throw e}
+              catch(e:Exception) {if(generation==kudosGeneration)error=e.message ?: "Website sign-in could not be verified"}
+            finally {websiteImporting=false}
+        }
+    }
+    var archiveBookmark by mutableStateOf<ArchiveBookmarkForm?>(null)
+    var bookmarkReturn="details"
+    var bookmarkSending by mutableStateOf(false)
+    var bookmarkUncertain by mutableStateOf(false)
+    private var bookmarkRevision=0
+    fun editArchiveBookmark(id:String,refresh:Boolean=false) {
+        val expected=username ?: return
+        if(bookmarkSending)return
+        val revision=++bookmarkRevision
+        if(screen!="archiveBookmark")bookmarkReturn=screen
+        navigate("archiveBookmark")
+        if(!refresh && archiveBookmark?.workId==id)return
+        archiveBookmark=null;bookmarkUncertain=false
+        load {
+            val form=withContext(Dispatchers.IO) {archive.archiveBookmark(id,expected)}
+            if(revision==bookmarkRevision)archiveBookmark=form
+        }
+    }
+    fun saveArchiveBookmark(deleting:Boolean=false) {
+        val draft=archiveBookmark ?: return;val expected=username ?: return
+        if(bookmarkSending || bookmarkUncertain || draft.workId in accountPending)return
+        val generation=kudosGeneration;val revision=bookmarkRevision
+        bookmarkSending=true;accountPending[draft.workId]=true;error=null
+        viewModelScope.launch {
+            try {
+                val result=withContext(Dispatchers.IO) {archive.saveArchiveBookmark(draft,deleting,expected)}
+                if(generation!=kudosGeneration || revision!=bookmarkRevision)return@launch
+                bookmarkUncertain=result.uncertain
+                if(result.success) {archiveBookmark=null;if(screen=="archiveBookmark")navigate(bookmarkReturn);notice=result.message}
+                else error=result.message
+            } catch(e:CancellationException) {throw e}
+              catch(e:Exception) {if(generation==kudosGeneration && revision==bookmarkRevision)error=e.message ?: "Bookmark could not be saved"}
+            finally {if(generation==kudosGeneration) {bookmarkSending=false;accountPending.remove(draft.workId)}}
+        }
+    }
     val accountPending=mutableStateMapOf<String,Boolean>()
     fun setMarkedForLater(id:String,later:Boolean)=workAccountAction(id) {expected -> archive.setMarkedForLater(id,later,expected)}
     fun setWorkSubscribed(id:String,subscribed:Boolean)=workAccountAction(id) {expected -> archive.setWorkSubscribed(id,subscribed,expected)}
@@ -74,10 +135,11 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         val formats=withContext(Dispatchers.IO) { archive.downloads(id) }
         if(selected?.id==id) officialDownloads=formats
     }
-    fun saveOfficialDownload(id:String,item:OfficialDownload,uri:android.net.Uri)=load {
+    fun saveOfficialDownload(id:String,item:OfficialDownload,uri:android.net.Uri,websiteCookie:String?=null,websiteAgent:String?=null)=load {
         officialDownloads=null
         withContext(Dispatchers.IO) {
-            val bytes=OfficialDownloads.fetch(item,id)
+            val session=if(websiteAgent!=null)websiteCookie to websiteAgent else archive.downloadSession(item,id)
+            val bytes=OfficialDownloads.fetch(item,id,session.first,session.second)
             ensureActive()
             getApplication<Application>().contentResolver.openOutputStream(uri,"w")?.use { it.write(bytes) } ?: error("Cannot save download")
         }
@@ -289,12 +351,12 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         cancelTranslation(); chapter = 0; positionIndex = 0; positionOffset = 0; bookOffset = 0; translation = null; readerRevision++
     }
     fun login(name: String, password: String) = load {
-        ++kudosGeneration;kudosStates.clear();accountPending.clear()
+        ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
         sessionJob?.cancel()
         username = withContext(Dispatchers.IO) { archive.login(name.trim(), password) }
         screen = "home"
     }
-    fun logout() { ++kudosGeneration;kudosStates.clear();accountPending.clear();sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()
@@ -355,4 +417,6 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: "Translation failed" } finally { if(generation==translationGeneration) { translating = false; translationProgress = "" } }
         }
     }
+    override fun onCleared() {archive.cancelRequests();super.onCleared()}
+
 }

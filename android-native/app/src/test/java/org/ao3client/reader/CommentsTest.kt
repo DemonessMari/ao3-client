@@ -2,6 +2,12 @@ package org.ao3client.reader
 import org.junit.Assert.*
 import org.junit.Test
 class CommentsTest {
+    @Test fun nestedCommentsKeepTheirOwnAuthorsAndFormsStayOutsideStoryText() {
+        val nested="<ol class='thread'><li id='comment_1' class='comment'><h4 class='byline'><a href='/users/Alice'>Alice</a></h4><blockquote class='userstuff'>Parent</blockquote><ol class='thread'><li id='comment_2' class='comment'><h4 class='byline'><a href='/users/Bob'>Bob</a></h4><blockquote class='userstuff'>Reply</blockquote></li></ol></li></ol>"
+        val parsed=CommentParser.parse(nested);assertEquals(2,parsed.comments.size);assertEquals("Alice",parsed.comments[0].author);assertEquals("Parent",parsed.comments[0].text);assertEquals("Bob",parsed.comments[1].author);assertEquals(1,parsed.comments[1].depth)
+        val html=javaClass.classLoader!!.getResource("comment-form.html")!!.readText()
+        assertTrue(runCatching {parseCommentForm("<div class='userstuff'>$html</div>")}.isFailure);assertFalse(validCommentAction("/works/123/comments?unexpected=true"))
+    }
     @Test fun formsAndSubmissionResults() {
         val html=javaClass.classLoader!!.getResource("comment-form.html")!!.readText()
         val form=parseCommentForm(html)

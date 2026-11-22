@@ -26,6 +26,7 @@ fun WorkAccountButton(vm:ClientState,id:String) {
     if(vm.username!=null)OutlinedButton(onClick={choosing=true},enabled=id !in vm.accountPending) { Text("AO3 account") }
     if(choosing)AlertDialog(onDismissRequest={choosing=false},title={Text("AO3 account")},text={
         androidx.compose.foundation.layout.Column {
+            TextButton(onClick={choosing=false;vm.editArchiveBookmark(id)}) { Text("AO3 bookmark") }
             TextButton(onClick={choosing=false;vm.setMarkedForLater(id,true)}) { Text("Mark for later") }
             TextButton(onClick={choosing=false;vm.setMarkedForLater(id,false)}) { Text("Mark as read") }
             TextButton(onClick={choosing=false;vm.setWorkSubscribed(id,true)}) { Text("Subscribe to work") }

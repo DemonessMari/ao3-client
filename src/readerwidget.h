@@ -1,4 +1,5 @@
 #pragma once
+#include <QUrl>
 #include <QWidget>
 #include <QMap>
 #include <QTimer>
@@ -38,6 +39,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *, QEvent *) override;
 signals:
+    void archiveRequested(const QUrl &url);
     void readingActionRequested(const QString &workId);
     void kudosRequested(const QString &workId);
     void workOpened(const QString &workId);

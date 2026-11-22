@@ -60,6 +60,8 @@ LoginDialog::LoginDialog(QWidget *parent)
     ));
     cardLayout->addWidget(m_loginButton);
 
+    auto *website=new QPushButton("Sign in on AO3 website",card);website->setMinimumHeight(36);website->setStyleSheet(secondaryButtonStyle());cardLayout->addWidget(website);connect(website,&QPushButton::clicked,this,&LoginDialog::websiteSignInRequested);
+
     auto *cancelButton = new QPushButton(QStringLiteral("Cancel"), card);
     cancelButton->setMinimumHeight(36);
     cancelButton->setStyleSheet(secondaryButtonStyle());

@@ -30,6 +30,7 @@
 #include <QSpinBox>
 #include <QInputDialog>
 #include "mainwindow.h"
+#include "archiveweb.h"
 #include "readinglibrary.h"
 #include "librarybackup.h"
 #include "serviceurl.h"
@@ -88,6 +89,51 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void websiteSessionProbePreservesOrReplacesTheNativeAccount() {
+        const auto previousAgent=QSettings().value("network/userAgent");auto restore=qScopeGuard([&]{if(previousAgent.isValid())QSettings().setValue("network/userAgent",previousAgent);else QSettings().remove("network/userAgent");});
+        QNetworkCookie cookie("_otwarchive_session","web-token");cookie.setDomain("archiveofourown.org");cookie.setPath("/");cookie.setHttpOnly(true);
+        auto foreign=cookie;foreign.setDomain("evil.example");QCOMPARE(websiteSessionCookies({cookie,foreign}).size(),1);QVERIFY(websiteSessionCookies({cookie}).first().isSecure());QVERIFY(!validWebsiteSessionIdentity("Alice","Browser\r\nInjected: value"));
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);Q_UNUSED(network);
+        auto *probe=new FixtureNetwork;probe->setParent(window.m_client);delete window.m_client->m_sessionManager;window.m_client->m_sessionManager=probe;
+        window.m_loginManager->setUserInfo({"Bob","https://archiveofourown.org/users/Bob",true});QNetworkCookie old("old_session","old-token");old.setDomain("archiveofourown.org");old.setPath("/");window.m_loginManager->setCookiesFromUrl({old},QUrl("https://archiveofourown.org/"));const auto beforeCookies=window.m_loginManager->cookies();
+        QSignalSpy errors(window.m_client,&AO3Client::errorOccurred);QSignalSpy signedIn(window.m_client,&AO3Client::loginSuccessful);
+        probe->page="<div id='greeting'><a href='/users/Bob'>Bob</a><a href='/users/logout'>Log out</a></div>";
+        window.m_client->useWebsiteSession({cookie},"Browser/1","Alice");QTRY_COMPARE(errors.count(),1);QCOMPARE(window.m_loginManager->username(),QString("Bob"));QCOMPARE(window.m_loginManager->cookies(),beforeCookies);QCOMPARE(signedIn.count(),0);
+        probe->page="<div id='greeting'><a href='/users/Alice'>Alice</a><a href='/users/logout'>Log out</a></div>";
+        window.m_client->useWebsiteSession({cookie},"Browser/1","Alice");QTRY_COMPARE(signedIn.count(),1);QCOMPARE(window.m_loginManager->username(),QString("Alice"));bool oldRetained=false;for(const auto &c:window.m_loginManager->cookies())if(c.name()=="old_session")oldRetained=true;QVERIFY(!oldRetained);QCOMPARE(window.m_client->m_userAgent,QString("Browser/1"));
+        const int requests=probe->requests.size();window.m_client->useWebsiteSession({foreign},"Browser/1","Alice");QCOMPARE(probe->requests.size(),requests);
+    }
+    void archiveWebsitePolicyAndNestedComments() {
+        for(const auto &url:QStringList{"https://archiveofourown.org/","https://archiveofourown.org:443/users/Alice/preferences","https://archiveofourown.org/works/123?view_adult=true#comments"})QVERIFY(archiveWebUrl(QUrl(url)));
+        for(const auto &url:QStringList{"http://archiveofourown.org/","https://archiveofourown.org.evil.example/","https://other.example/","file:///etc/passwd","javascript:alert(1)","https://name:secret@archiveofourown.org/","https://archiveofourown.org:444/"})QVERIFY(!archiveWebUrl(QUrl(url)));
+        const QString nested="<ol class='thread'><li id='comment_1' class='comment'><h4 class='byline'><a href='/users/Alice'>Alice</a></h4><blockquote class='userstuff'>Parent</blockquote><ol class='thread'><li id='comment_2' class='comment'><h4 class='byline'><a href='/users/Bob'>Bob</a></h4><blockquote class='userstuff'>Reply</blockquote></li></ol></li></ol>";
+        const auto comments=parseCommentPage(nested);QCOMPARE(comments.comments.size(),2);QCOMPARE(comments.comments[0].author,QString("Alice"));QCOMPARE(comments.comments[0].text,QString("Parent"));QCOMPARE(comments.comments[1].author,QString("Bob"));QCOMPARE(comments.comments[1].depth,1);
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/comment-form.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto form=QString::fromUtf8(file.readAll());
+        QVERIFY(!parseCommentForm("<div class='userstuff'>"+form+"</div>").error.isEmpty());QVERIFY(!validCommentAction("/works/123/comments?unexpected=true"));
+    }
+    void archiveBookmarkOptionsAndPosting() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/archive-bookmark.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        const auto form=parseArchiveBookmark(html,"123");QVERIFY2(form.error.isEmpty(),qPrintable(form.error));QCOMPARE(form.pseud,QString("10"));QCOMPARE(form.pseuds.size(),2);QCOMPARE(form.notes,QString("<p>First & second</p>\nNext line"));QVERIFY(form.privateBookmark);QVERIFY(!form.recommendation);
+        auto draft=form;draft.notes="New notes";draft.privateBookmark=false;draft.recommendation=true;
+        const auto fields=archiveBookmarkFields(form,draft);QCOMPARE(fields.value("bookmark[private]"),QString("0"));QCOMPARE(fields.value("bookmark[rec]"),QString("1"));QVERIFY(!fields.contains("unwanted"));
+        for(const auto &bad:QStringList{QString(html).replace("/works/123/bookmarks","https://evil.example/works/123/bookmarks"),QString(html).replace("authenticity_token","missing"),"<div id='workskin'>"+html+"</div>",QString(html).replace("/works/123/bookmarks","/works/999/bookmarks")})QVERIFY(!parseArchiveBookmark(bad,"123").error.isEmpty());
+        const QString header="<div id='greeting'><a href='/users/Alice'>Alice</a><a href='/users/logout'>Log out</a></div>";
+        const QString success=header+"<div class='flash notice'>Bookmark saved.</div><li id='bookmark_456' class='bookmark'><h4><a href='/works/123'>Work</a></h4><a href='/bookmarks/456/edit'>Edit</a></li>";
+        QVERIFY(archiveFormResult(success).success);QVERIFY(archiveFormResult("<div id='workskin'>"+success+"</div>").uncertain);
+        const auto edited=QString(html).replace("/works/123/bookmarks","/bookmarks/456").replace("<select name=","<input type='hidden' name='_method' value='put'><select name=");
+        const auto edit=parseArchiveBookmark(edited,"123");QVERIFY(edit.error.isEmpty());QCOMPARE(edit.id,QString("456"));
+        const auto confirm=header+"<form class='simple destroy' method='post' action='/bookmarks/456'><input type='hidden' name='_method' value='delete'><input type='hidden' name='authenticity_token' value='delete-token'></form>";
+        QCOMPARE(parseBookmarkDelete(confirm,"456").value("_method"),QString("delete"));QVERIFY(parseBookmarkDelete(confirm,"999").isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);window.m_loginManager->setUserInfo({"Alice","https://archiveofourown.org/users/Alice",true});
+        QList<ArchiveFormResult> results;connect(window.m_client,&AO3Client::archiveBookmarkSaved,&window,[&](const QString &,const ArchiveFormResult &r){results.append(r);});
+        network->pages={html.toUtf8(),success.toUtf8()};const int before=network->requests.size();window.m_client->saveArchiveBookmark(draft);window.m_client->saveArchiveBookmark(draft);
+        QTRY_COMPARE(results.size(),1);QVERIFY(results.last().success);QCOMPARE(network->requests.size(),before+2);QCOMPARE(network->requests.last().path(),QString("/works/123/bookmarks"));QVERIFY(network->bodies.last().contains("bookmark%5Bprivate%5D=0"));QVERIFY(network->bodies.last().contains("fresh%26%2Btoken"));
+        network->pages={edited.toUtf8(),confirm.toUtf8(),success.toUtf8(),html.toUtf8()};window.m_client->saveArchiveBookmark(edit,true);QTRY_COMPARE(results.size(),2);QVERIFY(results.last().success);QCOMPARE(network->requests[network->requests.size()-2].path(),QString("/bookmarks/456"));QVERIFY(network->bodies[network->bodies.size()-2].contains("_method=delete"));QVERIFY(network->bodies[network->bodies.size()-2].contains("delete-token"));
+        network->pages={html.toUtf8(),QByteArray("Unknown")};window.m_client->saveArchiveBookmark(draft);QTRY_COMPARE(results.size(),3);QVERIFY(results.last().uncertain);
+        network->page=edited.toUtf8();int count=network->requests.size();window.m_client->saveArchiveBookmark(draft);QTRY_COMPARE(results.size(),4);QCOMPARE(network->requests.size(),count+1);QVERIFY(!results.last().success);
+        network->pages={edited.toUtf8(),success.toUtf8()};auto updated=edit;updated.tags="Updated tag";window.m_client->saveArchiveBookmark(updated);QTRY_COMPARE(results.size(),5);QVERIFY(results.last().success);QVERIFY(network->bodies.last().contains("_method=put"));
+        network->page=edited.toUtf8();window.editArchiveBookmark("123");QTRY_COMPARE(window.m_archiveBookmark.id,QString("456"));window.m_archiveBookmarkNotes->setPlainText("Unsent draft");window.m_contentStack->setCurrentIndex(0);count=network->requests.size();window.editArchiveBookmark("123");QCOMPARE(window.m_archiveBookmarkNotes->toPlainText(),QString("Unsent draft"));QCOMPARE(network->requests.size(),count);window.onLogout();QVERIFY(window.m_archiveBookmarkNotes->toPlainText().isEmpty());
+    }
     void workSubscriptionActions() {
         QFile freshFile(QStringLiteral(AO3_FIXTURE_DIR "/subscription-new.html")),existingFile(QStringLiteral(AO3_FIXTURE_DIR "/subscription-existing.html"));
         QVERIFY(freshFile.open(QIODevice::ReadOnly));QVERIFY(existingFile.open(QIODevice::ReadOnly));
@@ -131,10 +177,11 @@ private slots:
         const auto fields=parseKudosForm(html,"123");QCOMPARE(fields.size(),3);QCOMPARE(fields.value("authenticity_token"),QString("csrf+&=token"));
         QVERIFY(parseKudosForm(html,"456").isEmpty());
         QVERIFY(parseKudosForm(QString(html).replace("action=\"/kudos\"","action=\"https://evil.example/kudos\""),"123").isEmpty());
-        QVERIFY(kudosIdentityMatches(html,{}));QVERIFY(!kudosIdentityMatches(html,"Alice"));
+        QVERIFY(siteIdentityMatches(html,{}));QVERIFY(!siteIdentityMatches(html,"Alice"));
         const QString signedIn="<div id='greeting'>Hi, <a href='/users/Alice'>Alice</a><a href='/users/logout'>Log out</a></div>";
-        QVERIFY(kudosIdentityMatches(signedIn,"Alice"));QVERIFY(!kudosIdentityMatches(signedIn,{}));
-        QVERIFY(!kudosIdentityMatches(QString(signedIn).replace("Alice","Bob")+"<div id='workskin'>Hi, <a href='/users/Alice'>Alice</a></div>","Alice"));
+        QVERIFY(siteIdentityMatches(signedIn,"Alice"));QVERIFY(!siteIdentityMatches(signedIn,{}));
+        QVERIFY(!siteIdentityMatches(QString(signedIn).replace("Alice","Bob")+"<div id='workskin'>Hi, <a href='/users/Alice'>Alice</a></div>","Alice"));
+        QVERIFY(siteIdentityMatches("<nav id='greeting'><a href='/users/Alice'>Hi, Alice!</a><a href='/users/logout?return_to=%2F'>Log out</a></nav>","Alice"));
         const QString success="<div id='feedback'><div class='flash kudos_notice'>Thank you for leaving kudos!</div></div>";
         QVERIFY(parseKudosResult(success).success);
         QVERIFY(!parseKudosResult("<div id='feedback'><div class='flash kudos_error'>You have already left kudos here.</div></div>").success);
@@ -320,7 +367,7 @@ private slots:
         anonymous.setPath(QStringLiteral("/"));
         QVERIFY(window.m_loginManager->setCookiesFromUrl({anonymous}, origin));
         const QByteArray loginPage = R"(<input name="authenticity_token" value="csrf-test" />)";
-        const QByteArray identity = R"(<div>Hi, <a class='user' href='/users/MixedCase'>MixedCase</a>!</div><a href='/users/logout'>Sign out</a>)";
+        const QByteArray identity = R"(<nav id='greeting'><a class='user' href='/users/MixedCase'>Hi, MixedCase!</a><a href='/users/logout?return_to=%2F'>Sign out</a></nav>)";
         QSignalSpy failed(window.m_client, &AO3Client::loginFailed);
         QSignalSpy success(window.m_client, &AO3Client::loginSuccessful);
         network->pages = {loginPage, "Invalid password", "<a href='/users/login'>Sign in</a>"};

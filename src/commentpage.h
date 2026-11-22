@@ -46,12 +46,14 @@ inline CommentPage parseCommentPage(const QString &html,int page=1) {
         if(node.attrs.value("id")=="comments_placeholder" || node.attrs.value("id")=="feedback" || hasClass(node,"thread")) recognized=true;
         if(hasClass(node,"pagination")) for(int j=i+1;j<list.size();++j) if(list[j].tag=="a" && beneath(list,j,i)) result.pages=qMax(result.pages,QUrlQuery(QUrl(list[j].attrs.value("href"))).queryItemValue("page").toInt());
         const auto id=idRx.match(node.attrs.value("id")); if(node.tag!="li" || !id.hasMatch() || !hasClass(node,"comment"))continue;
+        bool story=false;for(int p=node.parent;p>=0;p=list[p].parent)if(list[p].attrs.value("id")=="workskin" || hasClass(list[p],"userstuff"))story=true;if(story)continue;
         recognized=true; ArchiveComment comment; comment.id=id.captured(1);
         for(int p=node.parent;p>=0;p=list[p].parent) if(list[p].tag=="ol" && hasClass(list[p],"thread")) ++comment.depth;
         comment.depth=qBound(0,comment.depth-1,8);
         int byline=-1;
         for(int j=i+1;j<list.size() && list[j].begin<node.end;++j) {
             const auto &part=list[j]; if(!beneath(list,j,i))continue;
+            bool nested=false;for(int p=part.parent;p>=0 && p!=i;p=list[p].parent)if(list[p].tag=="li" && hasClass(list[p],"comment"))nested=true;if(nested)continue;
             const QString body=html.mid(part.begin,part.end-part.begin);
             if(part.tag=="h4" && hasClass(part,"byline")) {byline=j;comment.author=text(body);}
             if(hasClass(part,"posted") && hasClass(part,"datetime")) comment.date=text(body);
@@ -76,13 +78,14 @@ struct CommentForm {
 struct CommentSubmission { QString notice,error; bool uncertain=false; };
 inline bool validCommentAction(const QString &action) {
     const auto url=QUrl("https://archiveofourown.org").resolved(QUrl(action));
-    return url.scheme()=="https" && url.host()=="archiveofourown.org" && url.port(443)==443 && url.userInfo().isEmpty() &&
+    return url.scheme()=="https" && url.host()=="archiveofourown.org" && url.port(443)==443 && url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment() &&
         QRegularExpression("^/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments$").match(url.path()).hasMatch();
 }
 inline CommentForm parseCommentForm(const QString &html) {
     using namespace CommentHtml;CommentForm result;const auto list=nodes(html);
     for(int i=0;i<list.size();++i) {
         if(list[i].tag!="form" || list[i].attrs.value("method").toLower()!="post")continue;
+        bool story=false;for(int p=list[i].parent;p>=0;p=list[p].parent)if(list[p].attrs.value("id")=="workskin" || hasClass(list[p],"userstuff"))story=true;if(story)continue;
         bool content=false;for(int j=i+1;j<list.size();++j) if(beneath(list,j,i) && list[j].tag=="textarea" && list[j].attrs.value("name")=="comment[comment_content]")content=true;
         if(!content)continue;
         result.action=list[i].attrs.value("action");if(!validCommentAction(result.action)) {result.error="AO3 returned an invalid comment form";return result;}

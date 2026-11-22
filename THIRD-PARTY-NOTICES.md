@@ -4,7 +4,7 @@ The client source is licensed under the MIT License (see LICENSE). Fanworks rema
 
 ## Desktop
 
-Qt 6 Core, Gui, Widgets and Network are dynamically linked system libraries. Qt is available under LGPL v3 / GPL / commercial terms as applicable to the installed distribution. This project does not statically link Qt or bundle it in the Linux archive. Users can replace their system Qt libraries. Source and licensing: https://www.qt.io/licensing/open-source-lgpl-obligations and https://code.qt.io/cgit/qt/qtbase.git/ . A copy of LGPL v3 is included in `licenses/Qt-LGPL-3.0.txt`.
+Qt 6 Core, Gui, Widgets, Network and WebEngineWidgets are dynamically linked system libraries. Qt is available under LGPL v3 / GPL / commercial terms as applicable to the installed distribution. This project does not statically link Qt or bundle it in the Linux archive. Users can replace their system Qt libraries. Source and licensing: https://www.qt.io/licensing/open-source-lgpl-obligations and https://code.qt.io/cgit/qt/qtbase.git/ . Qt WebEngine uses system-provided Chromium components and their third-party licenses; see the installed Qt WebEngine package and https://code.qt.io/cgit/qt/qtwebengine.git/ . A copy of LGPL v3 is included in `licenses/Qt-LGPL-3.0.txt`.
 
 ## Native Android
 

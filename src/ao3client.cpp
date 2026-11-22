@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSettings>
 
 void AO3Client::fetchOfficialDownloads(const QString &workId) {
     if (!QRegularExpression("^[0-9]+$").match(workId).hasMatch()) return;
@@ -63,12 +64,14 @@ bool ao3RequestFailed(QNetworkReply *reply)
 AO3Client::AO3Client(LoginManager *loginManager, QObject *parent)
     : QObject(parent)
     , m_manager(new QNetworkAccessManager(this))
+    , m_sessionManager(new QNetworkAccessManager(this))
     , m_loginManager(loginManager)
     , m_userAgent(QStringLiteral("AO3Client/3.0 (Unofficial Desktop Reader)"))
 {
 #ifdef Q_OS_ANDROID
     m_userAgent = QStringLiteral("AO3Client/1.0 (Qt Android Client)");
 #endif
+    m_userAgent=QSettings().value("network/userAgent",m_userAgent).toString();
     m_manager->setCookieJar(m_loginManager);
 }
 
@@ -154,6 +157,8 @@ void AO3Client::logout()
     ++m_commentsGeneration;
     ++m_authGeneration;
     ++m_listingGeneration;
+    ++m_sessionImportGeneration;
+    for(auto *reply:m_sessionManager->findChildren<QNetworkReply *>())if(!reply->isFinished())reply->abort();
     for (auto *reply : m_manager->findChildren<QNetworkReply *>()) {
         if (!reply->isFinished()) reply->abort();
     }
@@ -173,7 +178,7 @@ void AO3Client::giveKudos(const QString &id) {
         reply->deleteLater(); if(generation!=m_authGeneration)return;
         const auto html=QString::fromUtf8(reply->readAll());
         const auto fields=parseKudosForm(html,id);
-        if(reply->error()!=QNetworkReply::NoError || fields.isEmpty() || !kudosIdentityMatches(html,expected)) {
+        if(reply->error()!=QNetworkReply::NoError || fields.isEmpty() || !siteIdentityMatches(html,expected)) {
             m_kudosStatus.remove(id); emit kudosChanged(id,{},"Kudos could not be sent. Check your sign-in and whether kudos are available for this work."); return;
         }
         QByteArray body;for(auto it=fields.cbegin();it!=fields.cend();++it) { if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value()); }
@@ -205,22 +210,10 @@ void AO3Client::verifySession(bool loginAttempt, quint64 generation)
             return;
         }
         const QString html = QString::fromUtf8(reply->readAll());
-        const QRegularExpression logoutRx(QStringLiteral(R"regex((?:href|action)\s*=\s*['"]/users/logout(?:\?[^'"]*)?['"])regex"));
-        const QRegularExpression greetingRx(QStringLiteral(R"regex(Hi,\s*<a\b([^>]*)>(.*?)</a>)regex"),
-            QRegularExpression::DotMatchesEverythingOption);
-        const auto greeting = greetingRx.match(html);
-        const QRegularExpression hrefRx(QStringLiteral(R"regex(\bhref\s*=\s*['"](/users/[^/'"?#]+)['"])regex"));
-        const auto href = hrefRx.match(greeting.captured(1));
+        const auto identity=parseSiteIdentity(html);
         UserInfo user;
-        if (logoutRx.match(html).hasMatch() && greeting.hasMatch() && href.hasMatch()) {
-            QTextDocument text;
-            text.setHtml(greeting.captured(2));
-            user.username = text.toPlainText().trimmed();
-            user.dashboardUrl = QUrl(QStringLiteral("https://archiveofourown.org")).resolved(QUrl(href.captured(1))).toString();
-            user.isLoggedIn = !user.username.isEmpty();
-        }
-        const QRegularExpression signInRx(QStringLiteral(R"regex((?:href|action)\s*=\s*['"]/users/login(?:\?[^'"]*)?['"])regex"));
-        if (!user.isLoggedIn && !signInRx.match(html).hasMatch()) {
+        if(identity.logout && !identity.user.isEmpty())user={identity.user,"https://archiveofourown.org/users/"+identity.user,true};
+        if(!user.isLoggedIn && (!identity.login || identity.logout)) {
             const auto message = QStringLiteral("Could not verify session. Try again when AO3 is available.");
             if (loginAttempt) emit loginFailed(message);
             else emit errorOccurred(message);
@@ -817,7 +810,7 @@ void AO3Client::setMarkedForLater(const QString &id,bool later) {
     connect(reply,&QNetworkReply::finished,this,[this,reply,id,later,action,generation,user,source,finish] {
         reply->deleteLater();if(generation!=m_authGeneration)return;
         const auto html=QString::fromUtf8(reply->readAll());const auto form=parseReadingAction(html,id);
-        if(reply->error()!=QNetworkReply::NoError || !kudosIdentityMatches(html,user) || form.action.isEmpty()) {finish("Reading history is unavailable. Check your sign-in and AO3 history preferences.");return;}
+        if(reply->error()!=QNetworkReply::NoError || !siteIdentityMatches(html,user) || form.action.isEmpty()) {finish("Reading history is unavailable. Check your sign-in and AO3 history preferences.");return;}
         const QString success=later?"Marked for later on AO3":"Marked as read on AO3";
         if(form.action!=action) {finish(success);return;}
         QByteArray body;for(auto it=form.fields.cbegin();it!=form.fields.cend();++it) {if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
@@ -825,7 +818,7 @@ void AO3Client::setMarkedForLater(const QString &id,bool later) {
         auto *posted=m_manager->post(post,body);
         connect(posted,&QNetworkReply::finished,this,[posted,id,action,user,success,finish] {
             posted->deleteLater();const auto html=QString::fromUtf8(posted->readAll());const auto result=parseReadingAction(html,id);
-            finish(posted->error()==QNetworkReply::NoError && kudosIdentityMatches(html,user) && !result.action.isEmpty() && result.action!=action?success:QString("Could not confirm the change. Check your Marked for Later list on AO3."));
+            finish(posted->error()==QNetworkReply::NoError && siteIdentityMatches(html,user) && !result.action.isEmpty() && result.action!=action?success:QString("Could not confirm the change. Check your Marked for Later list on AO3."));
         });
     });
 }
@@ -841,7 +834,7 @@ void AO3Client::setWorkSubscribed(const QString &id,bool subscribed) {
     connect(reply,&QNetworkReply::finished,this,[this,reply,id,subscribed,generation,user,source,finish] {
         reply->deleteLater();if(generation!=m_authGeneration)return;
         const auto html=QString::fromUtf8(reply->readAll());const auto form=parseWorkSubscription(html,id,user);
-        if(reply->error()!=QNetworkReply::NoError || !kudosIdentityMatches(html,user) || form.path.isEmpty()) {finish("Subscription unavailable. Check your AO3 sign-in and access to this work.");return;}
+        if(reply->error()!=QNetworkReply::NoError || !siteIdentityMatches(html,user) || form.path.isEmpty()) {finish("Subscription unavailable. Check your AO3 sign-in and access to this work.");return;}
         const QString success=subscribed?"Subscribed to this work on AO3":"Unsubscribed from this work on AO3";
         if(form.subscribed==subscribed) {finish(success);return;}
         QByteArray body;for(auto it=form.fields.cbegin();it!=form.fields.cend();++it) {if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
@@ -849,7 +842,77 @@ void AO3Client::setWorkSubscribed(const QString &id,bool subscribed) {
         auto *posted=m_manager->post(post,body);
         connect(posted,&QNetworkReply::finished,this,[posted,id,subscribed,user,success,finish] {
             posted->deleteLater();const auto html=QString::fromUtf8(posted->readAll());const auto result=parseWorkSubscription(html,id,user);
-            finish(posted->error()==QNetworkReply::NoError && kudosIdentityMatches(html,user) && !result.path.isEmpty() && result.subscribed==subscribed?success:QString("Could not confirm the change. Check your subscriptions on AO3."));
+            finish(posted->error()==QNetworkReply::NoError && siteIdentityMatches(html,user) && !result.path.isEmpty() && result.subscribed==subscribed?success:QString("Could not confirm the change. Check your subscriptions on AO3."));
         });
+    });
+}
+
+void AO3Client::fetchArchiveBookmark(const QString &id) {
+    if(!m_loginManager->isLoggedIn() || !QRegularExpression("^[0-9]+$").match(id).hasMatch())return;
+    const auto auth=m_authGeneration,revision=++m_bookmarkGeneration;const auto user=m_loginManager->username();
+    auto request=makeRequest(QUrl("https://archiveofourown.org/works/"+id+"?view_adult=true"));request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);request.setRawHeader("Cache-Control","no-cache");
+    auto *reply=m_manager->get(request);connect(reply,&QNetworkReply::finished,this,[this,reply,id,auth,revision,user] {
+        reply->deleteLater();if(auth!=m_authGeneration || revision!=m_bookmarkGeneration)return;
+        const auto html=QString::fromUtf8(reply->readAll());auto form=parseArchiveBookmark(html,id);
+        if(reply->error()!=QNetworkReply::NoError || !siteIdentityMatches(html,user))form.error="Could not load your AO3 bookmark. Check your sign-in and connection.";
+        emit archiveBookmarkFetched(form);
+    });
+}
+void AO3Client::saveArchiveBookmark(const ArchiveBookmarkForm &draft,bool deleting) {
+    const auto id=draft.workId;
+    if(!m_loginManager->isLoggedIn() || !QRegularExpression("^[0-9]+$").match(id).hasMatch() || m_workAccountPending.contains(id))return;
+    const auto auth=m_authGeneration;const auto user=m_loginManager->username();
+    m_workAccountPending.insert(id);
+    const QUrl source("https://archiveofourown.org/works/"+id+"?view_adult=true");
+    auto finish=[this,id,auth](const ArchiveFormResult &result) {if(auth!=m_authGeneration)return;m_workAccountPending.remove(id);emit archiveBookmarkSaved(id,result);};
+    auto send=[this,id,auth,user,source,finish,deleting,draft](const QString &path,const QMap<QString,QString> &fields) {
+        QByteArray body;for(auto it=fields.cbegin();it!=fields.cend();++it){if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        auto req=makeRequest(QUrl("https://archiveofourown.org"+path));req.setRawHeader("Content-Type","application/x-www-form-urlencoded");req.setRawHeader("Referer",source.toEncoded());
+        auto *reply=m_manager->post(req,body);connect(reply,&QNetworkReply::finished,this,[this,reply,id,auth,user,source,finish,deleting,draft] {
+            reply->deleteLater();if(auth!=m_authGeneration)return;
+            const auto html=QString::fromUtf8(reply->readAll());
+            ArchiveFormResult unknown{"Could not confirm the change. Check your AO3 bookmarks before trying again.",false,true};
+            auto result=reply->error()==QNetworkReply::NoError && siteIdentityMatches(html,user)?archiveFormResult(html):unknown;
+            if(!result.success){finish(result);return;}
+            if(!deleting){finish(archiveBookmarkRecord(html,id,draft.id)?result:unknown);return;}
+            auto req=makeRequest(source);req.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);req.setRawHeader("Cache-Control","no-cache");auto *check=m_manager->get(req);
+            connect(check,&QNetworkReply::finished,this,[check,id,user,result,unknown,finish]{check->deleteLater();const auto html=QString::fromUtf8(check->readAll());const auto form=parseArchiveBookmark(html,id);finish(check->error()==QNetworkReply::NoError && siteIdentityMatches(html,user) && form.error.isEmpty() && form.id.isEmpty()?result:unknown);});
+        });
+    };
+    auto req=makeRequest(source);req.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);req.setRawHeader("Cache-Control","no-cache");auto *reply=m_manager->get(req);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,id,draft,deleting,auth,user,finish,send] {
+        reply->deleteLater();if(auth!=m_authGeneration)return;
+        const auto html=QString::fromUtf8(reply->readAll());const auto fresh=parseArchiveBookmark(html,id);
+        if(reply->error()!=QNetworkReply::NoError || !siteIdentityMatches(html,user) || !fresh.error.isEmpty() || fresh.id!=draft.id) {finish({"Your bookmark or session changed. Reload the bookmark before saving.",false,false});return;}
+        if(!deleting) {
+            bool valid=false;for(const auto &p:fresh.pseuds)if(p.first==draft.pseud)valid=true;
+            if(!valid){finish({"This pseud is unavailable. Reload the bookmark.",false,false});return;}
+            send(fresh.path,archiveBookmarkFields(fresh,draft));return;
+        }
+        if(fresh.id.isEmpty()){finish({"No AO3 bookmark to delete.",false,false});return;}
+        auto req=makeRequest(QUrl("https://archiveofourown.org/bookmarks/"+fresh.id+"/confirm_delete"));req.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);
+        auto *confirmation=m_manager->get(req);connect(confirmation,&QNetworkReply::finished,this,[this,confirmation,fresh,auth,user,finish,send] {
+            confirmation->deleteLater();if(auth!=m_authGeneration)return;
+            const auto html=QString::fromUtf8(confirmation->readAll());const auto fields=parseBookmarkDelete(html,fresh.id);
+            if(confirmation->error()!=QNetworkReply::NoError || !siteIdentityMatches(html,user) || fields.isEmpty()){finish({"Could not load AO3's delete confirmation.",false,false});return;}
+            send("/bookmarks/"+fresh.id,fields);
+        });
+    });
+}
+
+void AO3Client::useWebsiteSession(const QList<QNetworkCookie> &cookies,const QString &agent,const QString &expectedUser) {
+    const auto accepted=websiteSessionCookies(cookies);
+    if(!validWebsiteSessionIdentity(expectedUser,agent) || accepted.isEmpty()){emit errorOccurred("Sign in on the AO3 website before importing its session.");return;}
+    const auto revision=++m_sessionImportGeneration,auth=m_authGeneration;
+    for(auto *reply:m_sessionManager->findChildren<QNetworkReply *>())if(!reply->isFinished())reply->abort();
+    const QUrl source("https://archiveofourown.org/");auto *jar=new QNetworkCookieJar;jar->setCookiesFromUrl(accepted,source);
+    m_sessionManager->setCookieJar(jar);
+    auto request=makeRequest(source);request.setRawHeader("User-Agent",agent.toUtf8());request.setRawHeader("Cache-Control","no-cache");request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,QNetworkRequest::AlwaysNetwork);
+    auto *reply=m_sessionManager->get(request);connect(reply,&QNetworkReply::finished,this,[this,reply,jar,source,expectedUser,agent,revision,auth]{
+        reply->deleteLater();if(revision!=m_sessionImportGeneration || auth!=m_authGeneration)return;
+        if(reply->error()!=QNetworkReply::NoError || !siteIdentityMatches(QString::fromUtf8(reply->readAll()),expectedUser)){emit errorOccurred("AO3 could not verify this website session for the native reader. Your existing reader sign-in was kept.");return;}
+        const auto verified=jar->cookiesForUrl(source);
+        logout();m_userAgent=agent;QSettings().setValue("network/userAgent",agent);m_loginManager->setCookiesFromUrl(verified,source);
+        UserInfo user{expectedUser,"https://archiveofourown.org/users/"+expectedUser,true};m_loginManager->setUserInfo(user);emit loginSuccessful(user);
     });
 }

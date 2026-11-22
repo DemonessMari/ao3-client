@@ -70,12 +70,13 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "settings" -> vm.settingsReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
+    if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(when(vm.screen) { "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            navigationIcon = { if (vm.screen in listOf("comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        topBar = { TopAppBar(title = { Text(when(vm.screen) { "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            navigationIcon = { if (vm.screen in listOf("archiveBookmark", "comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "archiveBookmark") vm.bookmarkReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             actions = { if(vm.screen !in listOf("login", "settings")) TextButton(onClick = { vm.navigate(if (vm.username == null) "login" else "account") }) { Text(if(vm.username == null) "Sign in" else "Account") } }) },
         bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
             NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
@@ -90,17 +91,18 @@ class MainActivity : ComponentActivity() {
             when(vm.screen) {
                 "home" -> Column(Modifier.fillMaxSize()) {
                     vm.libraryEntries.firstOrNull()?.let { entry -> Button(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth().padding(16.dp)) { Text("Continue · ${entry.fic.title}",maxLines=2,overflow=TextOverflow.Ellipsis) } }
-                    HomeScreen { vm.navigate("search") }
+                    HomeScreen(browse={vm.navigate("search")},website={vm.openWebsite(Archive.BASE+"/")})
                 }
                 "search" -> SearchScreen(vm)
                 "library" -> LibraryScreen(vm)
+                "archiveBookmark" -> ArchiveBookmarkScreen(vm)
                 "comments" -> CommentsScreen(vm)
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
                 "details" -> DetailScreen(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm.username); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -113,10 +115,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-@Composable fun HomeScreen(browse: () -> Unit) {
+@Composable fun HomeScreen(browse: () -> Unit,website:()->Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.Center) {
         Text("AO3 Client", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(28.dp)); Button(onClick = browse, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Default.Search, null); Spacer(Modifier.width(8.dp)); Text("Search") }
+        Spacer(Modifier.height(12.dp));OutlinedButton(onClick=website,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Text("Browse AO3 website")}
     }
 }
 @Composable fun SearchScreen(vm: ClientState) {
@@ -246,7 +249,7 @@ class MainActivity : ComponentActivity() {
         WorkAccountButton(vm,fic.id)
         OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
         OutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
-        Ao3WorkLinks(fic.id)
+        Ao3WorkLinks(vm,fic.id)
 
     }
 }
@@ -258,6 +261,7 @@ class MainActivity : ComponentActivity() {
         OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Username or email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.login(name, password); password = "" }))
         Button(onClick = { keyboard?.hide(); vm.login(name, password); password = "" }, enabled = name.isNotBlank() && password.isNotEmpty() && !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
+        OutlinedButton(onClick={keyboard?.hide();password="";vm.openWebsite(Archive.BASE+"/users/login")},modifier=Modifier.fillMaxWidth()) {Text("Sign in on AO3 website")}
     }
 }
 @Composable fun ReadingAppearanceControls(vm: ClientState) {

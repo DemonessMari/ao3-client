@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file alias="web/session-identity.js">web/session-identity.js</file>
         <file alias="icons/check.png">../icons/check.png</file>
         <file alias="icons/down.png">../icons/down.png</file>
         <file alias="icons/check.svg">../icons/check.svg</file>

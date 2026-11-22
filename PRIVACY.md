@@ -2,7 +2,7 @@
 
 AO3 Client is unofficial and is not affiliated with AO3 or OTW.
 
-Search, suggestions, profiles, works, comments and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Session cookies are stored locally; signing out removes them. Browser sessions are separate.
+Search, suggestions, profiles, works, comments and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Native session cookies are stored locally; native sign-out removes them. The embedded AO3 website and external browsers have separate sign-in sessions. Use the website’s sign-out or Clear website sign-in to clear its cookies. Use website sign-in in reader explicitly copies AO3 cookies into the native client only after a fresh server identity check. This also saves the website user-agent string to keep the imported session consistent. Native sign-out clears the native copy; website sign-out is separate.
 
 There are no ads, analytics, crash-reporting SDKs or developer-operated servers.
 
@@ -14,6 +14,6 @@ Exported backups contain library data and optional downloaded text, but no crede
 
 Removing a download retains history and bookmarks. Clearing Android storage or uninstalling deletes app data. Desktop uninstall retains reading data. Export before clearing data or changing Android signing keys.
 
-Browser links use the browser's own sign-in session and privacy settings.
+The embedded AO3 view runs the official website, including its JavaScript, forms, skins and media. It keeps website cookies, history and cache in app-private storage. Work images or embedded media may contact their hosting services. File uploads use a system picker; only files you choose are provided to the website. It exposes no app bridge or direct access to local files. External links use the browser’s own session and privacy settings.
 
 Report privacy issues through [private security reports](https://github.com/DemonessMari/ao3-client/security/advisories/new). Do not attach credentials, private works or full backups to public issues.

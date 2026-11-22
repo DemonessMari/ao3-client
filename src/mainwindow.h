@@ -8,6 +8,7 @@
 #include <QListWidget>
 #include <QSplitter>
 #include <QLabel>
+#include <QCheckBox>
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QScrollArea>
@@ -20,6 +21,7 @@
 #include "workmodel.h"
 #include "readerwidget.h"
 
+class ArchiveWeb;
 class MainWindow : public QMainWindow {
     Q_OBJECT
     friend class FunctionalTest;
@@ -49,6 +51,23 @@ private slots:
 
 private:
     void setupUI();
+    void openArchiveWebsite(const QUrl &url);
+    ArchiveWeb *m_archiveWebsite=nullptr;
+    int m_archiveWebsiteReturn=0;
+    void editArchiveBookmark(const QString &workId,bool reload=false);
+    void submitArchiveBookmark(bool deleting=false);
+    void clearArchiveBookmark();
+    QWidget *m_archiveBookmarkPage=nullptr,*m_archiveBookmarkFields=nullptr;
+    QTextEdit *m_archiveBookmarkNotes=nullptr;
+    QLineEdit *m_archiveBookmarkTags=nullptr,*m_archiveBookmarkCollections=nullptr;
+    QComboBox *m_archiveBookmarkPseud=nullptr;
+    QCheckBox *m_archiveBookmarkPrivate=nullptr,*m_archiveBookmarkRec=nullptr;
+    QPushButton *m_archiveBookmarkSave=nullptr,*m_archiveBookmarkDelete=nullptr,*m_archiveBookmarkReload=nullptr;
+    QLabel *m_archiveBookmarkStatus=nullptr;
+    ArchiveBookmarkForm m_archiveBookmark;
+    QString m_archiveBookmarkWork;
+    int m_archiveBookmarkReturn=0;
+    bool m_archiveBookmarkSending=false,m_archiveBookmarkUncertain=false;
     void showComments(const QString &workId,int page=1);
     void composeComment(const QString &replyId={});
     QWidget *m_commentEditor=nullptr;

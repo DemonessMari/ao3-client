@@ -1,4 +1,5 @@
 #pragma once
+#include <QUrl>
 
 #include <QWidget>
 #include <QLabel>
@@ -20,6 +21,7 @@ public:
     Work currentWork() const { return m_currentWork; }
 
 signals:
+    void archiveRequested(const QUrl &url);
     void readingActionRequested(const QString &workId);
     void kudosRequested(const QString &workId);
     void workShown(const QString &workId);

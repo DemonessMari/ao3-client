@@ -138,7 +138,7 @@ import kotlinx.coroutines.launch
             MenuRow("Reading and translation settings", onClick = { tools = false; vm.navigate("settings") })
             MenuRow("Save full fic as text", onClick = { tools = false; save.launch(fic.title.replace(Regex("[/\\:*?\"<>|]"), "_") + ".txt") })
             HorizontalDivider()
-            Ao3WorkLinks(fic.id)
+            Ao3WorkLinks(vm,fic.id)
             MenuRow("Start from the beginning", onClick = { tools = false; vm.restart() })
         }
     }

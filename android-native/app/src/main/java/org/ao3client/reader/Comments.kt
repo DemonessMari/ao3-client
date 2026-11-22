@@ -15,7 +15,7 @@ object CommentParser {
         require(html.length<=8*1024*1024) { "Comments page is too large" }
         val doc=Jsoup.parse(html)
         check(doc.select("#comments_placeholder, #feedback, ol.thread, li[id^=comment_]").isNotEmpty()) { "AO3 did not return a comments page. Sign in if the work is restricted." }
-        val comments=doc.select("li[id^=comment_]").filter { it.id().matches(Regex("comment_\\d+")) }.map { element ->
+        val comments=doc.select("li.comment[id^=comment_]").filter { it.id().matches(Regex("comment_\\d+")) && it.parents().none { p->p.id()=="workskin" || p.hasClass("userstuff") } }.map { element ->
             val copy=element.clone();copy.select("ol.thread").remove()
             val heading=copy.selectFirst("h4.byline")
             val date=heading?.selectFirst(".posted.datetime")?.text().orEmpty()
@@ -81,11 +81,11 @@ data class CommentForm(val action:String,val hidden:Map<String,String>,val pseud
 data class CommentSubmission(val notice:String="",val error:String="",val uncertain:Boolean=false)
 fun validCommentAction(action:String):Boolean = try {
     val uri=java.net.URI(Archive.BASE).resolve(action)
-    uri.scheme=="https" && uri.host=="archiveofourown.org" && (uri.port==-1 || uri.port==443) && uri.userInfo==null && uri.path.matches(Regex("/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments"))
+    uri.scheme=="https" && uri.host=="archiveofourown.org" && (uri.port==-1 || uri.port==443) && uri.userInfo==null && uri.rawQuery==null && uri.rawFragment==null && uri.path.matches(Regex("/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments"))
 } catch(_:Exception) { false }
 fun parseCommentForm(html:String):CommentForm {
     val doc=Jsoup.parse(html)
-    val form=doc.select("form").firstOrNull { it.attr("method").equals("post",true) && it.select("textarea[name='comment[comment_content]']").isNotEmpty() }
+    val form=doc.select("form").firstOrNull { it.parents().none {p->p.id()=="workskin" || p.hasClass("userstuff")} && it.attr("method").equals("post",true) && it.select("textarea[name='comment[comment_content]']").isNotEmpty() }
         ?: error("Commenting is unavailable. Check the work's permissions or sign in.")
     check(validCommentAction(form.attr("action"))) { "AO3 returned an invalid comment form" }
     val hidden=linkedMapOf<String,String>()

@@ -155,7 +155,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_kudosButton=new QPushButton("Give kudos",feedback);m_kudosButton->setObjectName("readerKudos");feedbackRow->addWidget(m_kudosButton);
     connect(m_kudosButton,&QPushButton::clicked,this,[this] {if(!m_work.id.isEmpty())emit kudosRequested(m_work.id);});
     connect(comments,&QPushButton::clicked,this,[this] {saveProgress();if(!m_work.id.isEmpty())emit commentsRequested(m_work.id);});
-    if(!mobileUi()) { auto *online=new QPushButton("Open on AO3 (browser)",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) QDesktopServices::openUrl(QUrl("https://archiveofourown.org/works/"+m_work.id+"?show_comments=true#comments")); }); }
+    if(!mobileUi()) { auto *online=new QPushButton("AO3 website",this); desktopOnline=online; layout->addWidget(online); connect(online,&QPushButton::clicked,this,[this] { if(!m_work.id.isEmpty()) emit archiveRequested(QUrl("https://archiveofourown.org/works/"+m_work.id)); }); }
     auto *bottom = new QHBoxLayout;
     m_bottomPrevious = new QPushButton(QStringLiteral("Previous chapter"), this);
     m_bottomNext = new QPushButton(QStringLiteral("Next chapter"), this);

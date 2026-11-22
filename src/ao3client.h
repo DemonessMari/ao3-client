@@ -12,6 +12,8 @@
 #include "kudos.h"
 #include "readingaction.h"
 #include "subscription.h"
+#include "archivebookmark.h"
+#include "websession.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -25,12 +27,16 @@ public:
     void fetchWorkDetails(const QString &workId);
     void fetchWorkContent(const QString &workId);
     void downloadWork(const QString &workId);
+    bool workAccountPending(const QString &id) const {return m_workAccountPending.contains(id);}
+    void fetchArchiveBookmark(const QString &workId);
+    void saveArchiveBookmark(const ArchiveBookmarkForm &draft,bool deleting=false);
     void setWorkSubscribed(const QString &workId,bool subscribed);
     void setMarkedForLater(const QString &workId,bool later);
     void giveKudos(const QString &workId);
     QString kudosStatus(const QString &workId) const { return m_kudosStatus.value(workId); }
     void fetchOfficialDownloads(const QString &workId);
     void saveOfficialDownload(const QString &workId, const QUrl &url, const QString &path);
+    void useWebsiteSession(const QList<QNetworkCookie> &cookies,const QString &agent,const QString &expectedUser);
     void login(const QString &login, const QString &password);
     void checkSession();
     void logout();
@@ -45,6 +51,8 @@ public:
     LoginManager *loginManager() const;
 
 signals:
+    void archiveBookmarkFetched(const ArchiveBookmarkForm &form);
+    void archiveBookmarkSaved(const QString &workId,const ArchiveFormResult &result);
     void accountActionFinished(const QString &workId,const QString &message);
     void kudosChanged(const QString &workId,const QString &status,const QString &message);
     void officialDownloadsFetched(const QString &workId, const QVector<OfficialDownload> &downloads);
@@ -77,8 +85,11 @@ private:
     QString extractCsrfToken(const QString &html);
 
     QNetworkAccessManager *m_manager;
+    QNetworkAccessManager *m_sessionManager;
+    quint64 m_sessionImportGeneration=0;
     LoginManager *m_loginManager;
     QString m_userAgent;
+    quint64 m_bookmarkGeneration=0;
     quint64 m_commentsGeneration = 0;
     quint64 m_commentFormGeneration = 0;
     quint64 m_profileGeneration = 0;

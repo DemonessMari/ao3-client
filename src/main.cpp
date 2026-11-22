@@ -12,9 +12,10 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_ANDROID
     qputenv("ANDROID_OPENSSL_SUFFIX", "_3");
 #endif
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AO3 Client"));
-    app.setApplicationVersion(QStringLiteral("3.1.0"));
+    app.setApplicationVersion(QStringLiteral("3.2.0-rc.1"));
     QCommandLineParser parser; parser.setApplicationDescription("Unofficial AO3 reader"); parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"smoke-test","Open the main window briefly and exit (installation check)."}); parser.process(app);
     app.setOrganizationName(QStringLiteral("AO3Client"));

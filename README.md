@@ -4,15 +4,17 @@ Unofficial AO3 reader for Linux (Qt 6) and Android (Kotlin/Compose). Not affilia
 
 Both editions support search and filters, tag suggestions, sign-in, profiles, offline reading, favorites, bookmarks, progress, appearance settings, fullscreen, paged reading, translation and library backups.
 
-Comments can be read, posted and replied to inside both editions. The current source also adds kudos, official-format downloads, AO3 Mark for Later/Mark as Read actions, and work subscriptions; these additions are not in the 3.1.0 release yet. Account bookmarks, subscription management, series, collections and account settings open in a browser with a separate sign-in. Public bookmark lists show AO3 works only.
+Comments can be read, posted and replied to inside both editions. The current source also adds kudos, official-format downloads, AO3 work bookmarks, Mark for Later/Mark as Read, work subscriptions, and an embedded AO3 view; these additions are not in the 3.1.0 release yet. Native work bookmarks support notes, tags, collections, pseuds, privacy, recommendations and deletion. Public native bookmark lists show AO3 works only.
+
+The AO3 website view provides official account, inbox, comment-management, series, collections, skin and creator tools, plus original work formatting. Website sign-in is separate; use AO3’s Remember me setting for persistence. It requires a connection. If AO3 presents human verification, use Sign in on AO3 website, complete it yourself, then choose More → Use website sign-in in reader. A server check verifies the handoff before replacing the native account. See [feature coverage](FEATURES.md).
 
 3.1.0 is a prerelease. Phone rendering and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 ## Install
 
-Linux: extract the release archive and run `./install.sh`. Requires Python 3 and compatible system Qt/glibc; see the archive's `BUILD-INFO.txt`. Installs under `~/.local` by default.
+Linux: extract the release archive and run `./install.sh`. Requires Python 3 and compatible system Qt, Qt WebEngine and glibc; see the archive's `BUILD-INFO.txt`. Installs under `~/Applications/ao3-client`, with the launcher and command symlink under `~/.local`.
 
-Or build and install from source (C++17, CMake, Qt 6 Core/Gui/Widgets/Network/Test and Python 3):
+Or build and install from source (C++17, CMake, Qt 6 Core/Gui/Widgets/Network/WebEngineWidgets/Test and Python 3):
 
 ```sh
 ./scripts/install-desktop.sh

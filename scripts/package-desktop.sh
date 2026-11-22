@@ -5,20 +5,16 @@ build_dir="${AO3_BUILD_DIR:-$project_dir/build}"
 version="$(sed -n 's/project(ao3-client VERSION \([^ ]*\).*/\1/p' "$project_dir/CMakeLists.txt")"
 stage="$(mktemp -d)"; trap 'rm -rf -- "$stage"' EXIT
 cmake --install "$build_dir" --prefix "$stage/ao3-client-$version/usr"
-cp "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/PRIVACY.md" "$project_dir/THIRD-PARTY-NOTICES.md" "$stage/ao3-client-$version/"
+cp "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/PRIVACY.md" "$project_dir/THIRD-PARTY-NOTICES.md" "$project_dir/FEATURES.md" "$project_dir/RELEASE-CHECKLIST.md" "$project_dir/VERIFICATION.md" "$project_dir/SECURITY.md" "$stage/ao3-client-$version/"
+cp "$project_dir/scripts/install-package.py" "$stage/ao3-client-$version/install-package.py"
 cp "$project_dir/scripts/write-launcher.py" "$stage/ao3-client-$version/write-launcher.py"
 cat > "$stage/ao3-client-$version/install.sh" <<'INSTALL'
 #!/usr/bin/env sh
 set -eu
 archive_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-prefix="${1:-$HOME/.local}"
-mkdir -p "$prefix/bin" "$prefix/share"
-install -m 755 "$archive_dir/usr/bin/ao3-client" "$prefix/bin/.ao3-client-new-$$"
-mv -f "$prefix/bin/.ao3-client-new-$$" "$prefix/bin/ao3-client"
-cp -R "$archive_dir/usr/share/." "$prefix/share/"
-python3 "$archive_dir/write-launcher.py" "$prefix"
-if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$prefix/share/applications"; fi
-printf 'Installed AO3 Client in %s/bin; the launcher resolves it directly.\n' "$prefix"
+application_dir="${1:-$HOME/Applications/ao3-client}"
+python3 "$archive_dir/install-package.py" "$archive_dir/usr" "$application_dir"
+if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$HOME/.local/share/applications"; fi
 INSTALL
 chmod +x "$stage/ao3-client-$version/install.sh"
 {

@@ -107,9 +107,12 @@ object ArchiveParser {
         }
     }
     fun username(html: String): String? {
-        val doc = Jsoup.parse(html)
-        if (doc.select("a[href*=\"/users/logout\"], form[action*=\"/users/logout\"]").isEmpty()) return null
-        return doc.selectFirst("#greeting a[href^=/users/]")?.attr("href")?.substringAfter("/users/")?.substringBefore('/')?.substringBefore('?')
+        val doc=Jsoup.parse(html)
+        fun trusted(node:Element)=node.parents().none {it.id()=="workskin" || it.hasClass("userstuff")}
+        fun path(value:String):String?=runCatching {val u=URI(Archive.BASE).resolve(value);u.path.takeIf {u.scheme=="https" && u.host=="archiveofourown.org" && u.port in listOf(-1,443) && u.userInfo==null}}.getOrNull()
+        val logout=doc.select("a[href], form[action]").any {trusted(it) && path(it.attr(if(it.tagName()=="form") "action" else "href"))=="/users/logout"}
+        if(!logout)return null
+        return doc.select("#greeting a[href]").filter {trusted(it)}.mapNotNull {path(it.attr("href"))?.let {p->Regex("/users/([A-Za-z0-9_]+)").matchEntire(p)?.groupValues?.get(1)}}.firstOrNull {it !in listOf("login","logout")}
     }
 
     fun sessionIdentity(html: String): String? {
@@ -120,7 +123,7 @@ object ArchiveParser {
     }
 }
 
-class Archive(private val prefs: SharedPreferences) {
+class Archive(private val prefs: SharedPreferences,private val websiteProbe:((CookieManager,String)->String)?=null) {
     private val cookieLock = Any()
     @Volatile private var cookieGeneration = 0
     private val cookies = CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER)
@@ -148,24 +151,24 @@ class Archive(private val prefs: SharedPreferences) {
             return "/works/search?" + args.joinToString("&") { encode(it.first) + "=" + encode(it.second) }
         }
     }
-    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null): String {
+    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null, cookieJar:CookieManager=cookies, userAgent:String?=null, persist:Boolean=true): String {
         val generation = expectedGeneration ?: cookieGeneration
         var url = URL(BASE + path)
         var post = form
         repeat(6) {
             if(generation != cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
-            require(url.protocol == "https" && url.host == "archiveofourown.org") { "Unexpected redirect from AO3" }
+            require(url.protocol == "https" && url.host == "archiveofourown.org" && url.port in listOf(-1,443) && url.userInfo==null) { "Unexpected redirect from AO3" }
             val connection = url.openConnection() as HttpURLConnection
             try {
                 connection.instanceFollowRedirects = false
                 connection.useCaches = false
                 connection.setRequestProperty("Cache-Control", "no-cache")
                 connection.connectTimeout = 15000; connection.readTimeout = 30000
-                connection.setRequestProperty("User-Agent", "AO3Client/3.0 (Unofficial Android Reader)")
+                connection.setRequestProperty("User-Agent", userAgent ?: prefs.getString("networkUserAgent",null) ?: "AO3Client/3.0 (Unofficial Android Reader)")
                 connection.setRequestProperty("Accept", if(path.startsWith("/autocomplete/")) "application/json" else "text/html")
                 val cookieHeader = synchronized(cookieLock) {
                     if(generation!=cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
-                    cookies.get(url.toURI(), emptyMap())["Cookie"]
+                    cookieJar.get(url.toURI(), emptyMap())["Cookie"]
                 }
                 if (!cookieHeader.isNullOrEmpty()) connection.setRequestProperty("Cookie", cookieHeader.joinToString("; "))
                 if(referer!=null)connection.setRequestProperty("Referer",BASE+referer)
@@ -177,13 +180,9 @@ class Archive(private val prefs: SharedPreferences) {
                 val status = connection.responseCode
                 synchronized(cookieLock) {
                 if(generation != cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
-                cookies.put(url.toURI(), connection.headerFields.filterKeys { it != null })
-                val saved = JSONArray()
-                cookies.cookieStore.cookies.filterNot { it.hasExpired() }.forEach { cookie ->
-                    val attributes = cookie.toString() + "; Domain=${cookie.domain ?: "archiveofourown.org"}; Path=${cookie.path ?: "/"}" + (if (cookie.secure) "; Secure" else "") + (if (cookie.maxAge >= 0) "; Max-Age=${cookie.maxAge}" else "")
-                    saved.put(JSONObject().put("value", attributes))
-                }
-                prefs.edit().putString("cookies", saved.toString()).apply()
+                cookieJar.put(url.toURI(), connection.headerFields.filterKeys { it != null })
+                if(persist)persistCookies()
+
                 }
                 if (status in 300..399) {
                     url = URL(url, connection.getHeaderField("Location") ?: error("Missing redirect location"))
@@ -209,9 +208,41 @@ class Archive(private val prefs: SharedPreferences) {
         val html = request("/works/$id?view_adult=true&view_full_work=true")
         return ArchiveParser.chapters(html) to html
     }
+    fun downloadSession(item:OfficialDownload,id:String):Pair<String?,String> = synchronized(cookieLock) {
+        require(OfficialDownloads.format(item.url,id)==item.format) {"Invalid AO3 download link"}
+        cookies.get(URI(item.url),emptyMap())["Cookie"]?.joinToString("; ") to (prefs.getString("networkUserAgent",null) ?: "AO3Client/3.0 (Unofficial Android Reader)")
+    }
     fun downloads(id:String):List<OfficialDownload> {
         require(id.matches(Regex("[0-9]+")))
         return OfficialDownloads.parse(request("/works/$id?view_adult=true"),id)
+    }
+    fun archiveBookmark(id:String,expected:String):ArchiveBookmarkForm {
+        require(id.matches(Regex("[0-9]+")))
+        val html=request("/works/$id?view_adult=true")
+        require(ArchiveParser.sessionIdentity(html)==expected) {"Your AO3 session changed. Sign in again."}
+        return ArchiveBookmarks.form(html,id)
+    }
+    fun saveArchiveBookmark(draft:ArchiveBookmarkForm,deleting:Boolean,expected:String):ArchiveFormResult {
+        val generation=cookieGeneration
+        val fresh=archiveBookmark(draft.workId,expected)
+        require(fresh.id==draft.id) {"Your bookmark changed. Reload it before saving."}
+        require(fresh.pseuds.any {it.first==draft.pseud}) {"This pseud is unavailable. Reload the bookmark."}
+        val fields=if(deleting) {
+            require(fresh.id.isNotBlank()) {"No AO3 bookmark to delete"}
+            val html=request("/bookmarks/${fresh.id}/confirm_delete",expectedGeneration=generation)
+            require(ArchiveParser.sessionIdentity(html)==expected) {"Your AO3 session changed. Sign in again."}
+            ArchiveBookmarks.deleteForm(html,fresh.id)
+        } else ArchiveBookmarks.fields(fresh,draft)
+        if(generation!=cookieGeneration)throw java.util.concurrent.CancellationException("Session changed")
+        return try {
+            val html=request(if(deleting) "/bookmarks/${fresh.id}" else fresh.path,fields,generation,"/works/${fresh.workId}?view_adult=true")
+            val unknown=ArchiveFormResult("Could not confirm the change. Check your AO3 bookmarks before trying again.",uncertain=true)
+            val result=if(ArchiveParser.sessionIdentity(html)==expected)ArchiveBookmarks.result(html) else unknown
+            if(!result.success)result
+            else if(deleting) {if(archiveBookmark(draft.workId,expected).id.isEmpty())result else unknown}
+            else if(ArchiveBookmarks.record(html,draft.workId,draft.id))result else unknown
+        } catch(e:java.util.concurrent.CancellationException) {throw e}
+          catch(_:Exception) {ArchiveFormResult("Could not confirm the change. Check your AO3 bookmarks before trying again.",uncertain=true)}
     }
     fun setWorkSubscribed(id:String,subscribed:Boolean,expected:String):String {
         require(id.matches(Regex("[0-9]+")))
@@ -281,6 +312,33 @@ class Archive(private val prefs: SharedPreferences) {
         require(workId.matches(Regex("\\d+")) && page>0)
         return CommentParser.parse(request("/works/$workId/comments?page=$page"),page)
     }
+    private fun persistCookies(user:String?=null,agent:String?=null) {
+        val saved=JSONArray()
+        cookies.cookieStore.cookies.filterNot {it.hasExpired()}.forEach {cookie ->
+            val attributes=cookie.toString()+"; Domain=${cookie.domain ?: "archiveofourown.org"}; Path=${cookie.path ?: "/"}"+(if(cookie.secure) "; Secure" else "")+(if(cookie.isHttpOnly) "; HttpOnly" else "")+(if(cookie.maxAge>=0) "; Max-Age=${cookie.maxAge}" else "")
+            saved.put(JSONObject().put("value",attributes))
+        }
+        val editor=prefs.edit().putString("cookies",saved.toString())
+        if(user!=null)editor.putString("sessionUsername",user)
+        if(agent!=null)editor.putString("networkUserAgent",agent)
+        editor.apply()
+    }
+    fun useWebsiteSession(header:String,agent:String,expected:String):String {
+        require(validWebsiteSessionIdentity(expected,agent)) {"Invalid website session"}
+        val generation=cookieGeneration
+        val staging=CookieManager(null,CookiePolicy.ACCEPT_ORIGINAL_SERVER)
+        val incoming=websiteSessionCookies(header);require(incoming.isNotEmpty()) {"Sign in on the AO3 website first"}
+        incoming.forEach {staging.cookieStore.add(URI(BASE),it)}
+        val html=websiteProbe?.invoke(staging,agent) ?: request("/",expectedGeneration=generation,cookieJar=staging,userAgent=agent,persist=false)
+        require(ArchiveParser.sessionIdentity(html)==expected) {"AO3 could not verify this website session for the native reader. Your existing reader sign-in was kept."}
+        synchronized(cookieLock) {
+            if(generation!=cookieGeneration)throw java.util.concurrent.CancellationException("Session changed")
+            cookieGeneration++;cookies.cookieStore.removeAll()
+            staging.cookieStore.cookies.filter { !it.hasExpired() && it.domain.orEmpty().removePrefix(".").equals("archiveofourown.org",true) }.forEach {cookies.cookieStore.add(URI(BASE),it)}
+            persistCookies(expected,agent)
+        }
+        return expected
+    }
     fun session(): String? {
         val generation = cookieGeneration
         val user = ArchiveParser.sessionIdentity(request("/"))
@@ -297,6 +355,7 @@ class Archive(private val prefs: SharedPreferences) {
         request("/users/login", mapOf("authenticity_token" to token, "user[login]" to name, "user[password]" to password, "user[remember_me]" to "1", "commit" to "Log in"))
         return session() ?: error("Sign-in failed. Check your username and password.")
     }
+    fun cancelRequests() = synchronized(cookieLock) {cookieGeneration++}
     fun logout() = synchronized(cookieLock) { cookieGeneration++; cookies.cookieStore.removeAll(); prefs.edit().remove("cookies").remove("sessionUsername").apply() }
     fun suggest(type: String, term: String): List<String> {
         require(type in listOf("tag", "fandom", "character", "relationship", "freeform"))

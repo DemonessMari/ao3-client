@@ -1,0 +1,11 @@
+<div id="greeting"><a href="/users/Alice">Alice</a><a href="/users/logout">Log out</a></div>
+<div id="feedback"><div id="bookmark-form"><form method="post" action="/works/123/bookmarks">
+<input type="hidden" name="authenticity_token" value="fresh&amp;+token">
+<select name="bookmark[pseud_id]"><option value="9">Alice</option><option value="10" selected>Other Pseud</option></select>
+<textarea name="bookmark[bookmarker_notes]">&lt;p&gt;First &amp; second&lt;/p&gt;
+Next line</textarea>
+<input name="bookmark[tag_string]" value="Favorite, To read"><input name="bookmark[collection_names]" value="ReadingList">
+<input type="hidden" name="bookmark[private]" value="0"><input type="checkbox" name="bookmark[private]" value="1" checked>
+<input type="hidden" name="bookmark[rec]" value="0"><input type="checkbox" name="bookmark[rec]" value="1">
+<input type="hidden" name="unwanted" value="ignore"><input type="submit" name="commit" value="Create">
+</form></div></div>

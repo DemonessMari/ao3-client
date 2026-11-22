@@ -1,4 +1,7 @@
 #include "mainwindow.h"
+#ifdef AO3_WEBENGINE
+#include "archiveweb.h"
+#endif
 #include "readinglibrary.h"
 #include "librarybackup.h"
 #include <QSaveFile>
@@ -31,6 +34,7 @@
 #include <QTextStream>
 #include <QStyle>
 #include <QSettings>
+#include <QFormLayout>
 #include <QEvent>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -67,6 +71,7 @@ MainWindow::MainWindow(QWidget *parent)
         if (m_showingUserWorks) onSearchCompleted(result);
     });
     connect(m_client, &AO3Client::errorOccurred, this, &MainWindow::onError);
+    connect(m_loginView,&LoginDialog::websiteSignInRequested,this,[this]{openArchiveWebsite(QUrl("https://archiveofourown.org/users/login"));});
     connect(m_client, &AO3Client::loginSuccessful, this, &MainWindow::onLoginSuccessful);
     connect(m_client, &AO3Client::loginFailed, this, &MainWindow::onLoginFailed);
     connect(m_client, &AO3Client::sessionChecked, this, &MainWindow::onSessionChecked);
@@ -140,14 +145,17 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+    connect(m_detailWidget,&WorkDetailWidget::archiveRequested,this,&MainWindow::openArchiveWebsite);
+    connect(m_reader,&ReaderWidget::archiveRequested,this,&MainWindow::openArchiveWebsite);
     connect(m_detailWidget, &WorkDetailWidget::profileRequested, this, &MainWindow::showProfile);
     auto accountAction=[this](const QString &id) {
         if(!m_loginManager->isLoggedIn()) {statusBar()->showMessage("Sign in to use AO3 account actions");return;}
-        bool ok=false;const QStringList choices{"Mark for later","Mark as read","Subscribe to work","Unsubscribe from work"};
+        bool ok=false;const QStringList choices{"AO3 bookmark","Mark for later","Mark as read","Subscribe to work","Unsubscribe from work"};
         const auto choice=QInputDialog::getItem(this,"AO3 account","Action",choices,0,false,&ok);
         if(!ok)return;
-        if(choices.indexOf(choice)<2)m_client->setMarkedForLater(id,choice==choices.first());
-        else m_client->setWorkSubscribed(id,choice==choices[2]);
+        if(choice==choices[0])editArchiveBookmark(id);
+        else if(choices.indexOf(choice)<3)m_client->setMarkedForLater(id,choice==choices[1]);
+        else m_client->setWorkSubscribed(id,choice==choices[3]);
     };
     connect(m_detailWidget,&WorkDetailWidget::readingActionRequested,this,accountAction);
     connect(m_reader,&ReaderWidget::readingActionRequested,this,accountAction);
@@ -345,10 +353,10 @@ void MainWindow::setupUI()
     auto *readingSettings = makeNavBtn(QStringLiteral("Reading settings"));
     connect(readingSettings, &QPushButton::clicked, this, [this] { m_reader->showSettings(); });
     navLayout->addWidget(readingSettings);
-    auto *online=makeNavBtn("On AO3 ↗"); auto *onlineMenu=new QMenu(online); online->setMenu(onlineMenu); navLayout->addWidget(online);
-    onlineMenu->addAction("Open AO3 in browser",this,[] { QDesktopServices::openUrl(QUrl("https://archiveofourown.org/")); });
-    for(const auto &item:QVector<QPair<QString,QString>>{{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Account preferences","preferences"}}) {
-        onlineMenu->addAction(item.first+" · browser",this,[this,item] { const QString user=m_loginManager->username(); QDesktopServices::openUrl(QUrl(user.isEmpty()?"https://archiveofourown.org/users/login":"https://archiveofourown.org/users/"+QString::fromLatin1(QUrl::toPercentEncoding(user))+"/"+item.second)); });
+    auto *online=makeNavBtn("AO3 website"); auto *onlineMenu=new QMenu(online); online->setMenu(onlineMenu); navLayout->addWidget(online);
+    onlineMenu->addAction("AO3 website",this,[this] { openArchiveWebsite(QUrl("https://archiveofourown.org/")); });
+    for(const auto &item:QVector<QPair<QString,QString>>{{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Marked for later","readings?show=to-read"},{"Inbox","inbox"},{"Skins","skins"},{"Account preferences","preferences"},{"Drafts","works/drafts"}}) {
+        onlineMenu->addAction(item.first,this,[this,item] { const QString user=m_loginManager->username(); openArchiveWebsite(QUrl(user.isEmpty()?"https://archiveofourown.org/users/login":"https://archiveofourown.org/users/"+QString::fromLatin1(QUrl::toPercentEncoding(user))+"/"+item.second)); });
     }
     if (!mobileUi()) { auto *profile = makeNavBtn("My profile"); navLayout->addWidget(profile); connect(profile, &QPushButton::clicked, this, [this] { if(m_loginManager->isLoggedIn()) showProfile("/users/" + m_loginManager->username()); else showLoginView(); }); }
 
@@ -637,6 +645,40 @@ void MainWindow::setupUI()
         for(const auto &comment:page.comments) html+=QString("<div style='margin-left:%1px'><h3>%2</h3><p>%3</p><p>%4</p><a href=\"reply:%5\">Reply</a></div><hr>").arg(qMin(comment.depth,4)*16).arg(comment.author.toHtmlEscaped(),comment.date.toHtmlEscaped(),QString(comment.text).toHtmlEscaped().replace("\n","<br>"),comment.id);
         m_commentsText->setHtml(html.isEmpty()?"No comments.":html);
     });
+
+    m_archiveBookmarkPage=new QWidget(m_contentStack);auto *bookmarkLayout=new QVBoxLayout(m_archiveBookmarkPage);
+    auto *bookmarkBack=new QPushButton("Back",m_archiveBookmarkPage);bookmarkLayout->addWidget(bookmarkBack,0,Qt::AlignLeft);
+    m_archiveBookmarkStatus=new QLabel(m_archiveBookmarkPage);m_archiveBookmarkStatus->setWordWrap(true);bookmarkLayout->addWidget(m_archiveBookmarkStatus);
+    auto *bookmarkScroll=new QScrollArea(m_archiveBookmarkPage);bookmarkScroll->setWidgetResizable(true);bookmarkLayout->addWidget(bookmarkScroll,1);
+    m_archiveBookmarkFields=new QWidget;auto *bookmarkFields=new QFormLayout(m_archiveBookmarkFields);
+    m_archiveBookmarkPseud=new QComboBox(m_archiveBookmarkFields);bookmarkFields->addRow("Pseud",m_archiveBookmarkPseud);
+    m_archiveBookmarkNotes=new QTextEdit(m_archiveBookmarkFields);m_archiveBookmarkNotes->setAcceptRichText(false);m_archiveBookmarkNotes->setMinimumHeight(180);bookmarkFields->addRow("Notes (HTML allowed)",m_archiveBookmarkNotes);
+    m_archiveBookmarkTags=new QLineEdit(m_archiveBookmarkFields);bookmarkFields->addRow("Tags, comma separated",m_archiveBookmarkTags);
+    m_archiveBookmarkCollections=new QLineEdit(m_archiveBookmarkFields);bookmarkFields->addRow("Collections, comma separated",m_archiveBookmarkCollections);
+    m_archiveBookmarkPrivate=new QCheckBox("Private bookmark",m_archiveBookmarkFields);bookmarkFields->addRow(m_archiveBookmarkPrivate);
+    m_archiveBookmarkRec=new QCheckBox("Recommendation",m_archiveBookmarkFields);bookmarkFields->addRow(m_archiveBookmarkRec);bookmarkScroll->setWidget(m_archiveBookmarkFields);
+    auto *bookmarkButtons=new QHBoxLayout;bookmarkLayout->addLayout(bookmarkButtons);
+    m_archiveBookmarkSave=new QPushButton("Save to AO3",m_archiveBookmarkPage);bookmarkButtons->addWidget(m_archiveBookmarkSave);
+    m_archiveBookmarkDelete=new QPushButton("Delete AO3 bookmark",m_archiveBookmarkPage);bookmarkButtons->addWidget(m_archiveBookmarkDelete);
+    m_archiveBookmarkReload=new QPushButton("Reload from AO3",m_archiveBookmarkPage);bookmarkButtons->addWidget(m_archiveBookmarkReload);bookmarkButtons->addStretch();
+    m_contentStack->addWidget(m_archiveBookmarkPage);
+    connect(bookmarkBack,&QPushButton::clicked,this,[this] {m_contentStack->setCurrentIndex(m_archiveBookmarkReturn);});
+    connect(m_archiveBookmarkSave,&QPushButton::clicked,this,[this] {submitArchiveBookmark();});
+    connect(m_archiveBookmarkDelete,&QPushButton::clicked,this,[this] {if(QMessageBox::question(this,"Delete AO3 bookmark?","Delete your account bookmark, including its notes and tags?")==QMessageBox::Yes)submitArchiveBookmark(true);});
+    connect(m_archiveBookmarkReload,&QPushButton::clicked,this,[this] {if(!m_archiveBookmarkSending && QMessageBox::question(this,"Reload bookmark?","Replace this draft with the bookmark saved on AO3?")==QMessageBox::Yes)editArchiveBookmark(m_archiveBookmarkWork,true);});
+    connect(m_client,&AO3Client::archiveBookmarkFetched,this,[this](const ArchiveBookmarkForm &form) {
+        if(form.workId!=m_archiveBookmarkWork)return;
+        m_archiveBookmarkStatus->setText(form.error.isEmpty()?(form.id.isEmpty()?"New AO3 bookmark":"Edit AO3 bookmark"):form.error);
+        if(!form.error.isEmpty())return;
+        m_archiveBookmark=form;m_archiveBookmarkUncertain=false;m_archiveBookmarkFields->setEnabled(true);m_archiveBookmarkSave->setEnabled(true);m_archiveBookmarkDelete->setEnabled(true);m_archiveBookmarkDelete->setVisible(!form.id.isEmpty());
+        m_archiveBookmarkPseud->clear();for(const auto &p:form.pseuds)m_archiveBookmarkPseud->addItem(p.second,p.first);m_archiveBookmarkPseud->setCurrentIndex(m_archiveBookmarkPseud->findData(form.pseud));if(auto *fields=qobject_cast<QFormLayout *>(m_archiveBookmarkFields->layout()))fields->setRowVisible(m_archiveBookmarkPseud,form.pseuds.size()>1);
+        m_archiveBookmarkNotes->setPlainText(form.notes);m_archiveBookmarkTags->setText(form.tags);m_archiveBookmarkCollections->setText(form.collections);m_archiveBookmarkPrivate->setChecked(form.privateBookmark);m_archiveBookmarkRec->setChecked(form.recommendation);
+    });
+    connect(m_client,&AO3Client::archiveBookmarkSaved,this,[this](const QString &id,const ArchiveFormResult &result) {
+        if(id!=m_archiveBookmarkWork)return;
+        m_archiveBookmarkSending=false;m_archiveBookmarkUncertain=result.uncertain;m_archiveBookmarkFields->setEnabled(true);m_archiveBookmarkSave->setEnabled(!result.uncertain);m_archiveBookmarkDelete->setEnabled(!result.uncertain);m_archiveBookmarkReload->setEnabled(true);m_archiveBookmarkStatus->setText(result.message);
+        if(result.success){if(m_contentStack->currentWidget()==m_archiveBookmarkPage)m_contentStack->setCurrentIndex(m_archiveBookmarkReturn);clearArchiveBookmark();statusBar()->showMessage(result.message);}
+    });
     mainLayout->addWidget(m_contentStack, 1);
     if (mobileUi()) {
         m_mobileStatus = new QLabel(centralWidget); m_mobileStatus->setWordWrap(true);
@@ -758,6 +800,8 @@ void MainWindow::onLoginRequested(const QString &login, const QString &password)
 
 void MainWindow::onLoginSuccessful(const UserInfo &user)
 {
+    clearArchiveBookmark();m_reader->saveProgress();m_reader->clear();m_showingUserWorks=false;m_listingAuthor.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_profileText->clear();m_profileUsername.clear();
+    m_commentSending=false;m_commentUncertain=false;m_commentEditor->setEnabled(true);m_commentEditor->hide();m_commentDraft->clear();m_commentEmail->clear();m_commentsWork.clear();
     m_loginView->clearInputs();
     setLoggedInState(true);
     showDashboard();
@@ -793,6 +837,7 @@ void MainWindow::onLogout()
     if (m_contentStack->currentWidget() == m_reader) closeReader();
     m_reader->clear();
     m_client->logout();
+    clearArchiveBookmark();
     m_commentSending=false;m_commentUncertain=false;m_commentEditor->setEnabled(true);m_commentEditor->hide();m_commentDraft->clear();m_commentEmail->clear();m_commentsWork.clear();
     m_showingUserWorks = false;
     m_currentResult = SearchResult();
@@ -858,6 +903,7 @@ void MainWindow::showLoginView()
 
 void MainWindow::setLoggedInState(bool loggedIn)
 {
+    if(!loggedIn)clearArchiveBookmark();
     m_detailWidget->setKudosStatus(m_client->kudosStatus(m_detailWidget->currentWork().id),!loggedIn);
     m_reader->setKudosStatus(m_client->kudosStatus(m_reader->workId()),!loggedIn);
     m_navWorks->setVisible(mobileUi() || loggedIn);
@@ -968,6 +1014,10 @@ bool MainWindow::navigateBack()
 {
     m_pendingReadId.clear();
     QGuiApplication::inputMethod()->hide();
+#ifdef AO3_WEBENGINE
+    if(m_archiveWebsite && m_contentStack->currentWidget()==m_archiveWebsite) {if(!m_archiveWebsite->back())m_contentStack->setCurrentIndex(m_archiveWebsiteReturn);return true;}
+#endif
+    if (m_contentStack->currentWidget() == m_archiveBookmarkPage) {m_contentStack->setCurrentIndex(m_archiveBookmarkReturn);return true;}
     if (m_contentStack->currentWidget() == m_commentsPage) {m_contentStack->setCurrentIndex(m_commentsReturn);return true;}
     if (m_contentStack->currentWidget() == m_reader && m_reader->closeOptions()) return true;
     if (m_contentStack->currentWidget() == m_reader && isFullScreen()) {
@@ -1047,4 +1097,38 @@ void MainWindow::showComments(const QString &workId,int page) {
 void MainWindow::composeComment(const QString &replyId) {
     if(m_commentSending || m_commentUncertain)return;
     m_commentContext=replyId;m_client->fetchCommentForm(m_commentsWork,replyId);
+}
+
+void MainWindow::clearArchiveBookmark() {
+    m_archiveBookmark={};m_archiveBookmarkWork.clear();m_archiveBookmarkSending=false;m_archiveBookmarkUncertain=false;
+    m_archiveBookmarkNotes->clear();m_archiveBookmarkTags->clear();m_archiveBookmarkCollections->clear();m_archiveBookmarkPseud->clear();m_archiveBookmarkPrivate->setChecked(false);m_archiveBookmarkRec->setChecked(false);
+}
+void MainWindow::editArchiveBookmark(const QString &id,bool reload) {
+    if(!m_loginManager->isLoggedIn() || m_archiveBookmarkSending)return;
+    if(m_contentStack->currentWidget()!=m_archiveBookmarkPage)m_archiveBookmarkReturn=m_contentStack->currentIndex();
+    if(!reload && m_archiveBookmarkWork==id && !m_archiveBookmark.path.isEmpty()){m_contentStack->setCurrentWidget(m_archiveBookmarkPage);return;}
+    clearArchiveBookmark();m_archiveBookmarkWork=id;m_archiveBookmarkStatus->setText("Loading AO3 bookmark…");m_archiveBookmarkFields->setEnabled(false);m_archiveBookmarkSave->setEnabled(false);m_archiveBookmarkDelete->setEnabled(false);m_archiveBookmarkDelete->hide();m_archiveBookmarkReload->setEnabled(true);
+    m_contentStack->setCurrentWidget(m_archiveBookmarkPage);m_client->fetchArchiveBookmark(id);
+}
+void MainWindow::submitArchiveBookmark(bool deleting) {
+    if(m_archiveBookmarkSending || m_archiveBookmarkUncertain || !m_archiveBookmark.error.isEmpty() || m_archiveBookmark.path.isEmpty())return;
+    if(m_client->workAccountPending(m_archiveBookmark.workId)){m_archiveBookmarkStatus->setText("Another AO3 account request is still running. Try again when it finishes.");return;}
+    auto draft=m_archiveBookmark;draft.notes=m_archiveBookmarkNotes->toPlainText();draft.tags=m_archiveBookmarkTags->text();draft.collections=m_archiveBookmarkCollections->text();draft.pseud=m_archiveBookmarkPseud->currentData().toString();draft.privateBookmark=m_archiveBookmarkPrivate->isChecked();draft.recommendation=m_archiveBookmarkRec->isChecked();
+    m_archiveBookmarkSending=true;m_archiveBookmarkFields->setEnabled(false);m_archiveBookmarkSave->setEnabled(false);m_archiveBookmarkDelete->setEnabled(false);m_archiveBookmarkReload->setEnabled(false);m_archiveBookmarkStatus->setText(deleting?"Deleting AO3 bookmark…":"Saving AO3 bookmark…");m_client->saveArchiveBookmark(draft,deleting);
+}
+
+void MainWindow::openArchiveWebsite(const QUrl &url) {
+#ifdef AO3_WEBENGINE
+    if(!archiveWebUrl(url)){statusBar()->showMessage("This address is outside AO3.");return;}
+    if(!m_archiveWebsite) {
+        m_archiveWebsite=new ArchiveWeb(m_contentStack);m_contentStack->addWidget(m_archiveWebsite);
+        connect(m_archiveWebsite,&ArchiveWeb::closeRequested,this,[this]{m_contentStack->setCurrentIndex(m_archiveWebsiteReturn);});
+        connect(m_archiveWebsite,&ArchiveWeb::sessionRequested,this,[this](const QList<QNetworkCookie> &cookies,const QString &agent,const QString &user){statusBar()->showMessage("Checking website sign-in for the native reader…");m_client->useWebsiteSession(cookies,agent,user);});
+        connect(m_archiveWebsite,&ArchiveWeb::message,this,[this](const QString &message){statusBar()->showMessage(message);});
+    }
+    if(m_contentStack->currentWidget()!=m_archiveWebsite)m_archiveWebsiteReturn=m_contentStack->currentIndex();
+    m_contentStack->setCurrentWidget(m_archiveWebsite);m_archiveWebsite->open(url);
+#else
+    QDesktopServices::openUrl(url);
+#endif
 }
