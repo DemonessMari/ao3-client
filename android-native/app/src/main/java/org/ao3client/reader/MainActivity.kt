@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -363,7 +363,7 @@ class MainActivity : ComponentActivity() {
         if(vm.profileTab == "profile") {
             val profile = vm.profile
             LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                item { Text(vm.profileUser, style = MaterialTheme.typography.headlineMedium) }
+                item { Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){ProfilePicture(vm,vm.profileUser,profile?.avatarUrl.orEmpty(),profile?.avatarAlt.orEmpty());Text(vm.profileUser,Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)} }
                 if(profile != null) {
                     if(profile.title.isNotBlank()) item { Text(profile.title, style = MaterialTheme.typography.titleLarge) }
                     if(profile.details.isNotBlank()) item { Text(profile.details) }

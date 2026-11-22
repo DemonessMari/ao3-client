@@ -261,6 +261,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             if(account) accountListing = result else searchListing = result
         }
     }
+    internal fun profilePictureBytes(user:String,url:String?):ByteArray? {val target=url?:archive.profile(user).avatarUrl;return if(target.isEmpty())null else archive.avatar(target)}
     fun showProfile(path: String) {
         val name = Regex("/users/([A-Za-z0-9_]+)(?:/|$)").find(path)?.groupValues?.get(1)
         if(name == null) { error = "This work has no public author profile."; return }

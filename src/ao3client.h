@@ -14,6 +14,7 @@
 #include "subscription.h"
 #include "archivebookmark.h"
 #include "websession.h"
+#include <QImage>
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -45,6 +46,7 @@ public:
     void submitComment(const QString &workId,const CommentForm &form,const QString &text,const QString &pseud={},const QString &guestName={},const QString &guestEmail={});
     void fetchComments(const QString &workId,int page=1);
     void fetchUserWorks(int page = 1);
+    void fetchProfileAvatar(const QString &username,const QUrl &url);
     void fetchAuthorProfile(const QString &username);
     void fetchAuthorWorks(const QString &username, int page = 1, bool bookmarks = false);
 
@@ -73,10 +75,13 @@ signals:
     void sessionChecked(bool valid, const UserInfo &user);
     void loggedOut();
     void userWorksFetched(const SearchResult &result);
+    void profileAvatarFetched(const QString &username,const QImage &image);
     void authorProfileFetched(const AuthorProfile &profile);
     void authorWorksFetched(const QString &username, bool bookmarks, const SearchResult &result);
 
 private:
+    void loadProfileAvatar(const QString &username,const QUrl &url,quint64 revision,quint64 auth,int redirects);
+    quint64 m_avatarRevision=0;
     void verifySession(bool loginAttempt, quint64 generation);
     QNetworkRequest makeRequest(const QUrl &url) const;
     SearchResult parseSearchResults(const QString &html, const QString &query, int page);

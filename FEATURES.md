@@ -1,10 +1,10 @@
 # Feature coverage
 
-Source for 3.2.0-rc.2. The 3.1.0 release excludes the newest native account actions and embedded website view.
+Source for 3.2.0-rc.3. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |
-| Search and discovery | Work search, filters, tag suggestions, profiles, public work/bookmark listings | Tag/people/bookmark search, fandoms, directories, feeds |
+| Search and discovery | Work search, filters, tag suggestions, profiles with AO3 pictures, public work/bookmark listings | Tag/people/bookmark search, fandoms, directories, feeds |
 | Reading | Chapters, notes, inline styles/links, translation, text-only/fullscreen, scrolling/paged reading | Original HTML, images, tables, poetry, media, footnotes and work skins |
 | Offline library | Downloads, progress, favorites, local bookmarks, backups, text export | Website view requires a connection |
 | Account work actions | Kudos, Mark for Later/Read, work subscriptions; AO3 bookmark create/edit/delete with notes, tags, collections, pseuds, privacy and recommendations | Author/series subscriptions, list management, external/series bookmarks |
@@ -20,3 +20,5 @@ Website tools use AO3’s interface and a separate saved website sign-in. The ex
 Still missing from the native reader: faithful offline HTML/media/work skins, and native controls for the website-only areas above. Existing offline copies preserve text, notes and basic inline formatting.
 
 Verification still required: authenticated account writes and role-specific website workflows; phone rendering, accessibility, rotation/Back/file pickers and long reading sessions. Automated fixture tests and builds do not establish full website parity or device acceptance.
+
+Further reader customization not implemented: imported fonts, adjustable margins/paragraph alignment, configurable tap zones or volume-button actions, and automatic system-theme following. Text-to-speech and auto-scroll are also absent. Native app skins currently customize colors; AO3 CSS and layout skins remain in the website view. Profile-picture display is native; changing an AO3 icon uses the website pseud editor.

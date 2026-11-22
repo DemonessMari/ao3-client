@@ -68,4 +68,6 @@ struct AuthorProfile {
     QString details;
     QString biography;
     QString error;
+    QString avatarUrl;
+    QString avatarAlt;
 };

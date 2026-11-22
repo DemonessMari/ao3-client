@@ -55,3 +55,5 @@ For release APK/AAB builds, set `AO3_SIGNING_FILE` and `AO3_SIGNING_PASSWORD` pr
 [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Licenses](THIRD-PARTY-NOTICES.md) · [Release checklist](RELEASE-CHECKLIST.md)
 
 App colors can be edited, previewed and shared between editions using [app skins](SKINS.md). Home shows recent reads and library counts; search filters open using **Filters**.
+
+Native profile views display AO3 profile pictures when available, with an initial as fallback. **Profile pictures** in the account website menu opens AO3’s pseud editor for changing them.

@@ -92,6 +92,7 @@ private:
     void showAuthorListing(bool bookmarks);
     QWidget *m_profilePage = nullptr;
     QTextBrowser *m_profileText = nullptr;
+    QLabel *m_profileAvatar = nullptr;
     QString m_profileUsername;
     QString m_listingAuthor;
     bool m_listingBookmarks = false;

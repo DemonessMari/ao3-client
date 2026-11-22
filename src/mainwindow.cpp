@@ -170,8 +170,11 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(m_client, &AO3Client::authorProfileFetched, this, [this](const AuthorProfile &profile) {
         if(profile.username != m_profileUsername) return;
+        m_profileAvatar->setAccessibleName(profile.avatarAlt.isEmpty()?"Profile picture for "+profile.username:profile.avatarAlt);
+        if(profile.error.isEmpty() && !profile.avatarUrl.isEmpty())m_client->fetchProfileAvatar(profile.username,QUrl(profile.avatarUrl));
         m_profileText->setPlainText(profile.error.isEmpty() ? profile.username + "\n\n" + profile.title + "\n\n" + profile.details + "\n\n" + (profile.biography.isEmpty() ? "No public biography provided." : profile.biography) : profile.error);
     });
+    connect(m_client,&AO3Client::profileAvatarFetched,this,[this](const QString &username,const QImage &image){if(username==m_profileUsername && !image.isNull()){m_profileAvatar->setText({});m_profileAvatar->setPixmap(QPixmap::fromImage(image).scaled(72,72,Qt::KeepAspectRatio,Qt::SmoothTransformation));}});
     connect(m_client, &AO3Client::authorWorksFetched, this, [this](const QString &username, bool bookmarks, const SearchResult &result) {
         if(username == m_listingAuthor && bookmarks == m_listingBookmarks) onSearchCompleted(result);
     });
@@ -302,6 +305,14 @@ void MainWindow::setupUI()
         headerLayout->setContentsMargins(8, 6, 8, 6); headerLayout->setSpacing(6);
     }
 
+    if(!mobileUi()) {
+        delete headerLayout;delete headerSpacer;headerLayout=new QGridLayout(m_headerBar);headerLayout->setContentsMargins(16,8,16,8);headerLayout->setHorizontalSpacing(12);
+        auto *identity=new QWidget(m_headerBar);auto *identityLayout=new QHBoxLayout(identity);identityLayout->setContentsMargins(0,0,0,0);identityLayout->setSpacing(8);identityLayout->addWidget(m_logoLabel);
+        auto *name=new QLabel("AO3 Client",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(16);font.setBold(true);name->setFont(font);identityLayout->addWidget(name);
+        auto *searchGroup=new QWidget(m_headerBar);searchGroup->setObjectName("headerSearch");auto *searchLayout=new QHBoxLayout(searchGroup);searchLayout->setContentsMargins(0,0,0,0);searchLayout->setSpacing(8);m_searchInput->setMinimumWidth(180);searchLayout->addWidget(m_searchInput,1);searchLayout->addWidget(m_searchButton);searchLayout->addWidget(m_filterButton);searchGroup->setMaximumWidth(640);
+        headerLayout->addWidget(identity,0,0,Qt::AlignLeft);headerLayout->addWidget(searchGroup,0,1);headerLayout->addWidget(m_loginButton,0,2,Qt::AlignRight);m_loginButton->setMaximumWidth(190);
+        const int balance=qMax(200,identity->sizeHint().width());headerLayout->setColumnMinimumWidth(0,balance);headerLayout->setColumnMinimumWidth(2,balance);headerLayout->setColumnStretch(0,1);headerLayout->setColumnStretch(1,2);headerLayout->setColumnStretch(2,1);
+    }
     mainLayout->addWidget(m_headerBar);
 
     // ── Navigation ──
@@ -357,7 +368,7 @@ void MainWindow::setupUI()
     navLayout->addWidget(readingSettings);
     auto *online=makeNavBtn("AO3 website"); auto *onlineMenu=new QMenu(online); online->setMenu(onlineMenu); navLayout->addWidget(online);
     onlineMenu->addAction("AO3 website",this,[this] { openArchiveWebsite(QUrl("https://archiveofourown.org/")); });
-    for(const auto &item:QVector<QPair<QString,QString>>{{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Marked for later","readings?show=to-read"},{"Inbox","inbox"},{"Skins","skins"},{"Account preferences","preferences"},{"Drafts","works/drafts"}}) {
+    for(const auto &item:QVector<QPair<QString,QString>>{{"Profile pictures","pseuds"},{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Marked for later","readings?show=to-read"},{"Inbox","inbox"},{"Skins","skins"},{"Account preferences","preferences"},{"Drafts","works/drafts"}}) {
         onlineMenu->addAction(item.first,this,[this,item] { const QString user=m_loginManager->username(); openArchiveWebsite(QUrl(user.isEmpty()?"https://archiveofourown.org/users/login":"https://archiveofourown.org/users/"+QString::fromLatin1(QUrl::toPercentEncoding(user))+"/"+item.second)); });
     }
     if (!mobileUi()) { auto *profile = makeNavBtn("My profile"); navLayout->addWidget(profile); connect(profile, &QPushButton::clicked, this, [this] { if(m_loginManager->isLoggedIn()) showProfile("/users/" + m_loginManager->username()); else showLoginView(); }); }
@@ -593,6 +604,7 @@ void MainWindow::setupUI()
         refreshLibrary();
     });
     m_profilePage = new QWidget(m_contentStack); auto *profileLayout = new QVBoxLayout(m_profilePage);
+    m_profileAvatar=new QLabel(m_profilePage);m_profileAvatar->setObjectName("profileAvatar");m_profileAvatar->setFixedSize(80,80);m_profileAvatar->setAlignment(Qt::AlignCenter);auto avatarFont=m_profileAvatar->font();avatarFont.setPointSize(28);m_profileAvatar->setFont(avatarFont);profileLayout->addWidget(m_profileAvatar);
     auto *profileActions = new QHBoxLayout; auto *authorWorks = new QPushButton("Author's works", m_profilePage); auto *authorBookmarks = new QPushButton("Public AO3 bookmarks", m_profilePage);
     profileActions->addWidget(authorWorks); profileActions->addWidget(authorBookmarks); profileLayout->addLayout(profileActions);
     m_profileText = new QTextBrowser(m_profilePage); profileLayout->addWidget(m_profileText, 1); m_contentStack->addWidget(m_profilePage);
@@ -789,6 +801,7 @@ void MainWindow::onError(const QString &error)
 
 void MainWindow::onLoginClicked()
 {
+    if(!mobileUi() && m_loginManager->isLoggedIn()){showProfile("/users/"+m_loginManager->username());return;}
     if (mobileUi() && m_loginManager->isLoggedIn()) {
         QMenu menu(this); menu.addSection(m_loginManager->username());
         auto *logout = menu.addAction(QStringLiteral("Sign out"));
@@ -806,7 +819,7 @@ void MainWindow::onLoginRequested(const QString &login, const QString &password)
 
 void MainWindow::onLoginSuccessful(const UserInfo &user)
 {
-    clearArchiveBookmark();m_reader->saveProgress();m_reader->clear();m_showingUserWorks=false;m_listingAuthor.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_profileText->clear();m_profileUsername.clear();
+    clearArchiveBookmark();m_reader->saveProgress();m_reader->clear();m_showingUserWorks=false;m_listingAuthor.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_profileText->clear();m_profileAvatar->clear();m_profileUsername.clear();
     m_commentSending=false;m_commentUncertain=false;m_commentEditor->setEnabled(true);m_commentEditor->hide();m_commentDraft->clear();m_commentEmail->clear();m_commentsWork.clear();
     m_loginView->clearInputs();
     setLoggedInState(true);
@@ -918,9 +931,9 @@ void MainWindow::setLoggedInState(bool loggedIn)
 
     if (loggedIn) {
         QString name = m_loginManager->userInfo().username;
-        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : name);
+        m_loginButton->setText(mobileUi() ? QStringLiteral("Account") : m_loginButton->fontMetrics().elidedText(name,Qt::ElideRight,150));
         m_loginButton->setToolTip(name);
-        m_loginButton->setEnabled(mobileUi());
+        m_loginButton->setEnabled(true);
         m_userGreeting->setText(QString());
         m_userGreeting->hide();
     } else {
@@ -1086,7 +1099,7 @@ void MainWindow::showProfile(const QString &authorUrl)
     m_pendingReadId.clear();
     const QStringList path = QUrl(authorUrl).path().split('/', Qt::SkipEmptyParts);
     if(path.size() < 2 || path[0] != "users") { onError("This work has no public author profile."); return; }
-    m_profileUsername = path[1]; m_profileText->setPlainText("Loading profile..."); m_contentStack->setCurrentWidget(m_profilePage); m_client->fetchAuthorProfile(m_profileUsername);
+    m_profileUsername = path[1];m_profileAvatar->clear();m_profileAvatar->setText(m_profileUsername.left(1).toUpper());m_profileAvatar->setAccessibleName("Profile picture for "+m_profileUsername); m_profileText->setPlainText("Loading profile..."); m_contentStack->setCurrentWidget(m_profilePage); m_client->fetchAuthorProfile(m_profileUsername);
 }
 void MainWindow::showAuthorListing(bool bookmarks)
 {

@@ -1,3 +1,5 @@
+#include "profileavatar.h"
+#include <memory>
 #include "ao3client.h"
 #include "workcontent.h"
 #include <QRegularExpression>
@@ -740,7 +742,7 @@ void AO3Client::fetchAuthorProfile(const QString &username)
             auto divs = QRegularExpression("<div\\b([^>]*)>").globalMatch(html); int start = -1;
             while(divs.hasNext()) { const auto div = divs.next(); if(hasClass(div.captured(1), "user") && hasClass(div.captured(1), "profile")) { start = div.capturedEnd(); break; } }
             if(start < 0) profile.error = "AO3 did not return this user's public profile.";
-            else { const QString body = html.mid(start); profile.title = plainHtml(element(body, "h3", "heading")); profile.details = plainHtml(element(body, "dl", "meta")); profile.biography = plainHtml(element(body, "blockquote", "userstuff")); }
+            else { const auto avatar=profileAvatar(html);profile.avatarUrl=avatar.url;profile.avatarAlt=avatar.alt;const QString body = html.mid(start); profile.title = plainHtml(element(body, "h3", "heading")); profile.details = plainHtml(element(body, "dl", "meta")); profile.biography = plainHtml(element(body, "blockquote", "userstuff")); }
         }
         emit authorProfileFetched(profile);
     });
@@ -914,5 +916,21 @@ void AO3Client::useWebsiteSession(const QList<QNetworkCookie> &cookies,const QSt
         const auto verified=jar->cookiesForUrl(source);
         logout();m_userAgent=agent;QSettings().setValue("network/userAgent",agent);m_loginManager->setCookiesFromUrl(verified,source);
         UserInfo user{expectedUser,"https://archiveofourown.org/users/"+expectedUser,true};m_loginManager->setUserInfo(user);emit loginSuccessful(user);
+    });
+}
+
+void AO3Client::fetchProfileAvatar(const QString &username,const QUrl &url) {
+    const auto revision=++m_avatarRevision;
+    if(!QRegularExpression("^[A-Za-z0-9_]+$").match(username).hasMatch() || !avatarUrlAllowed(url)){emit profileAvatarFetched(username,{});return;}
+    loadProfileAvatar(username,url,revision,m_authGeneration,0);
+}
+void AO3Client::loadProfileAvatar(const QString &username,const QUrl &url,quint64 revision,quint64 auth,int redirects) {
+    auto request=makeRequest(url);request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);request.setRawHeader("Accept","image/png,image/jpeg,image/gif");if(url.host()!="archiveofourown.org"){request.setAttribute(QNetworkRequest::CookieLoadControlAttribute,QNetworkRequest::Manual);request.setAttribute(QNetworkRequest::CookieSaveControlAttribute,QNetworkRequest::Manual);}auto *reply=m_manager->get(request);reply->setReadBufferSize(2*1024*1024+1);auto data=std::make_shared<QByteArray>();
+    connect(reply,&QNetworkReply::readyRead,this,[reply,data]{data->append(reply->readAll());if(data->size()>2*1024*1024)reply->abort();});
+    connect(reply,&QNetworkReply::finished,this,[this,reply,data,username,url,revision,auth,redirects]{
+        reply->deleteLater();if(revision!=m_avatarRevision || auth!=m_authGeneration)return;
+        data->append(reply->readAll());const int status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if(status>=300 && status<400 && reply->error()==QNetworkReply::NoError){const auto next=url.resolved(reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl());if(redirects<3 && avatarUrlAllowed(next,true)){loadProfileAvatar(username,next,revision,auth,redirects+1);return;}}
+        const auto image=reply->error()==QNetworkReply::NoError && status==200?decodeProfileAvatar(*data):QImage();emit profileAvatarFetched(username,image);
     });
 }

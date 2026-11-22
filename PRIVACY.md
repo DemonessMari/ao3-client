@@ -4,6 +4,8 @@ AO3 Client is unofficial and is not affiliated with AO3 or OTW.
 
 Search, suggestions, profiles, works, comments and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Native session cookies are stored locally; native sign-out removes them. The embedded AO3 website and external browsers have separate sign-in sessions. Use the website’s sign-out or Clear website sign-in to clear its cookies. Use website sign-in in reader explicitly copies AO3 cookies into the native client only after a fresh server identity check. This also saves the website user-agent string to keep the imported session consistent. Native sign-out clears the native copy; website sign-out is separate.
 
+Native profile pictures load from AO3 and may follow AO3 image redirects to Amazon S3. AO3 cookies are not sent to S3. Missing or unavailable images use an initial.
+
 There are no ads, analytics, crash-reporting SDKs or developer-operated servers.
 
 Translation sends chapter text, the selected language and any configured API key to your LibreTranslate provider after consent. Changing providers resets consent. AO3 credentials are excluded. Remote providers require HTTPS; localhost permits HTTP. The provider controls its own retention and privacy practices.

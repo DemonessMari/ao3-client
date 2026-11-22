@@ -1,3 +1,5 @@
+#include "profileavatar.h"
+#include <QBuffer>
 #include "appskin.h"
 #include <QtTest>
 #include "bookview.h"
@@ -90,6 +92,20 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void headerIdentityAndSearchCentering() {
+        const auto originalPalette=QApplication::palette();auto restore=qScopeGuard([&]{QApplication::setPalette(originalPalette);});applyAppSkin();
+        MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("AO3 Client"));
+        for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
+    }
+    void profilePicturesAreScopedBoundedAndDisplayed() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/profile-avatar.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());const auto avatar=profileAvatar(html);QCOMPARE(avatar.url,QString("https://archiveofourown.org/rails/active_storage/blobs/redirect/abc/avatar.png"));QCOMPARE(avatar.alt,QString("A green & blue icon"));
+        auto spoof=html;spoof.remove(QRegularExpression("<div class=\"primary header module\">.*?</div>"));QVERIFY(profileAvatar(spoof).url.isEmpty());QVERIFY(!avatarUrlAllowed(QUrl("https://example.com/avatar.png")));QVERIFY(!avatarUrlAllowed(QUrl("https://user@archiveofourown.org/system/pseud/icons/a.png")));QVERIFY(!avatarUrlAllowed(QUrl("https://archiveofourown.org/works/1")));QVERIFY(avatarUrlAllowed(QUrl("https://bucket.s3.amazonaws.com/a"),true));
+        QImage source(40,20,QImage::Format_ARGB32);source.fill(Qt::green);QByteArray bytes;QBuffer buffer(&bytes);QVERIFY(buffer.open(QIODevice::WriteOnly));QVERIFY(source.save(&buffer,"PNG"));QVERIFY(!decodeProfileAvatar(bytes).isNull());QVERIFY(decodeProfileAvatar(QByteArray(2*1024*1024+1,'x')).isNull());QVERIFY(decodeProfileAvatar("<html>Unavailable</html>").isNull());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);network->pages={html.toUtf8(),bytes};window.showProfile("/users/Writer");QTRY_VERIFY(!window.m_profileAvatar->pixmap().isNull());QCOMPARE(window.m_profileAvatar->accessibleName(),QString("A green & blue icon"));QVERIFY(window.m_profileText->toPlainText().contains("Biography"));
+        QSignalSpy received(window.m_client,&AO3Client::profileAvatarFetched);const auto count=network->requests.size();window.m_client->fetchProfileAvatar("Writer",QUrl("https://example.com/avatar.png"));QCOMPARE(received.size(),1);QCOMPARE(network->requests.size(),count);
+        received.clear();network->pages={html.toUtf8(),QByteArray("Not an image")};window.showProfile("/users/Other");QTRY_COMPARE(received.size(),1);QVERIFY(window.m_profileAvatar->pixmap().isNull());QCOMPARE(window.m_profileAvatar->text(),QString("O"));QVERIFY(window.m_profileText->toPlainText().contains("Biography"));
+    }
     void appSkinFormatAndContrast() {
         QFile file(QStringLiteral(AO3_FIXTURE_DIR "/app-skin.json"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();AppSkin skin;QString error;QVERIFY2(AppSkin::parse(bytes,skin,error),qPrintable(error));QCOMPARE(skin.name,QString("Blue"));AppSkin copy;QVERIFY(AppSkin::parse(skin.json(),copy,error));QCOMPARE(copy.accent,skin.accent);
         for(int i=0;i<3;++i)QVERIFY2(AppSkin::parse(AppSkin::preset(i).json(),copy,error),qPrintable(error));

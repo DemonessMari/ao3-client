@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 @Composable fun Ao3AccountLinks(vm:ClientState) {
     Text("AO3 website",style=MaterialTheme.typography.titleMedium)
     Text("Website sign-in is separate.",style=MaterialTheme.typography.bodySmall)
-    listOf("AO3 bookmarks" to "bookmarks","Subscriptions" to "subscriptions","Reading history" to "readings","Marked for later" to "readings?show=to-read","Inbox" to "inbox","Skins" to "skins","Preferences" to "preferences","Drafts" to "works/drafts").forEach { (title,path) ->
+    listOf("Profile pictures" to "pseuds","AO3 bookmarks" to "bookmarks","Subscriptions" to "subscriptions","Reading history" to "readings","Marked for later" to "readings?show=to-read","Inbox" to "inbox","Skins" to "skins","Preferences" to "preferences","Drafts" to "works/drafts").forEach { (title,path) ->
         TextButton(onClick={vm.openWebsite(if(vm.username.isNullOrBlank()) Archive.BASE+"/users/login" else Archive.BASE+"/users/${Archive.encode(vm.username.orEmpty())}/$path")}) { Text(title) }
     }
     TextButton(onClick={vm.openWebsite(Archive.BASE+"/")}) {Text("Browse AO3")}

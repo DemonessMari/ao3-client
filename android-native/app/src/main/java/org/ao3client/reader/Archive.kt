@@ -13,7 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "")
-data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String)
+data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String, val avatarUrl:String="",val avatarAlt:String="")
 data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "", internal val styles: List<TextStyleSpan> = emptyList()) {
     fun exportText(): String = listOfNotNull(title,notesBefore.takeIf { it.isNotBlank() }?.let { "Author notes\n\n$it" },text,notesAfter.takeIf { it.isNotBlank() }?.let { "End notes\n\n$it" }).joinToString("\n\n")
     fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter).put("styles",JSONArray().also { array -> styles.forEach { array.put(it.json()) } })
@@ -76,7 +76,8 @@ object ArchiveParser {
     }
     fun profile(html: String, username: String): AuthorProfile {
         val root = Jsoup.parse(html).selectFirst("div.user.profile") ?: error("AO3 did not return this user's public profile.")
-        return AuthorProfile(username, root.selectFirst("h3.heading")?.text().orEmpty(), root.selectFirst("dl.meta")?.text().orEmpty(), root.selectFirst(".bio blockquote.userstuff")?.text().orEmpty())
+        val avatar=profileAvatar(root)
+        return AuthorProfile(username, root.selectFirst("h3.heading")?.text().orEmpty(), root.selectFirst("dl.meta")?.text().orEmpty(), root.selectFirst(".bio blockquote.userstuff")?.text().orEmpty(),avatar.first,avatar.second)
     }
     private fun readableText(element: Element): String = readingText(element).text
     fun chapters(html: String): List<Chapter> {
@@ -200,6 +201,7 @@ class Archive(private val prefs: SharedPreferences,private val websiteProbe:((Co
         error("AO3 redirected too many times")
     }
     fun search(query: String, page: Int, filters: Map<String,List<String>>) = ArchiveParser.listing(request(searchPath(query, page, filters)), page)
+    fun avatar(url:String):ByteArray {require(avatarUrlAllowed(url));val cookie=synchronized(cookieLock){cookies.get(URI(url),emptyMap())["Cookie"]?.joinToString("; ")};return loadAvatarBytes(url,cookie,prefs.getString("networkUserAgent",null)?:"AO3Client/3.0 (Unofficial Android Reader)")}
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }
     fun authorWorks(user: String, page: Int, bookmarks: Boolean): Listing { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.listing(request("/users/${encode(user)}/${if(bookmarks) "bookmarks" else "works"}?page=$page"), page) }
     fun works(user: String, page: Int) = ArchiveParser.listing(request("/users/${encode(user)}/works?page=$page"), page)
