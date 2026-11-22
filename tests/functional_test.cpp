@@ -870,6 +870,22 @@ private slots:
         QSettings().setValue("reader/bookMode",false);
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_BOOK")) { reader.setBookMode(true); reader.grab().save("/tmp/ao3-book-mode.png"); reader.setBookMode(false); }
     }
+    void importedInterfaceFontUpdatesExistingChromeAndWorkPreview() {
+        QSettings settings;const auto previous=settings.value("reader/fontFamily"),enabled=settings.value("reader/useImportedFontInInterface");
+        QString id;auto restore=qScopeGuard([&]{if(previous.isValid())settings.setValue("reader/fontFamily",previous);else settings.remove("reader/fontFamily");if(enabled.isValid())settings.setValue("reader/useImportedFontInInterface",enabled);else settings.remove("reader/useImportedFontInInterface");applyReaderInterfaceFont();if(!id.isEmpty())removeReaderFont(id);});
+        settings.setValue("reader/fontFamily","serif");applyReaderInterfaceFont();const auto systemFamily=QApplication::font().family();
+        MainWindow window;installNetwork(window);window.resize(1100,850);window.show();
+        Work work;work.id="123";work.title="A preview title";work.author="Writer";work.summary="A summary shown before opening the fic.";window.m_detailWidget->showWork(work);
+        auto *name=window.findChild<QLabel *>("appName");QVERIFY(name);const auto size=name->font().pointSizeF();const bool bold=name->font().bold();
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_INTERFACE_FONT"))window.grab().save("/tmp/ao3-interface-font-before.png");
+        QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/reader-test-font.ttf"));QVERIFY(fixture.open(QIODevice::ReadOnly));QString error;id=importReaderFont(fixture.readAll(),error);QVERIFY2(!id.isEmpty(),qPrintable(error));
+        settings.setValue("reader/fontFamily",id);settings.setValue("reader/useImportedFontInInterface",true);applyReaderInterfaceFont();QTest::qWait(30);
+        QCOMPARE(QFontInfo(window.m_searchButton->font()).family(),QString("Reader Test Font"));QCOMPARE(QFontInfo(name->font()).family(),QString("Reader Test Font"));QCOMPARE(name->font().pointSizeF(),size);QCOMPARE(name->font().bold(),bold);
+        bool summary=false;for(auto *browser:window.m_detailWidget->findChildren<QTextBrowser *>())if(browser->toPlainText().contains(work.summary)){summary=true;QCOMPARE(QFontInfo(browser->document()->defaultFont()).family(),QString("Reader Test Font"));}QVERIFY(summary);
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_INTERFACE_FONT"))window.grab().save("/tmp/ao3-interface-font-after.png");
+        settings.setValue("reader/useImportedFontInInterface",false);applyReaderInterfaceFont();QTest::qWait(30);QCOMPARE(window.m_searchButton->font().family(),systemFamily);QCOMPARE(readerFont(id).family(),QString("Reader Test Font"));
+        settings.setValue("reader/useImportedFontInInterface",true);removeReaderFont(id);applyReaderInterfaceFont();QCOMPARE(QApplication::font().family(),systemFamily);id.clear();
+    }
     void importedFontsAreValidatedCopiedAndUsedByTheReader() {
         QSettings settings;const auto previous=settings.value("reader/fontFamily");auto restore=qScopeGuard([&]{if(previous.isValid())settings.setValue("reader/fontFamily",previous);else settings.remove("reader/fontFamily");});
         QFile fixture(QStringLiteral(AO3_FIXTURE_DIR "/reader-test-font.ttf"));QVERIFY(fixture.open(QIODevice::ReadOnly));const auto bytes=fixture.readAll();QString error;

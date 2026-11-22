@@ -1,5 +1,6 @@
 #include "appskin.h"
 #include "readerwidget.h"
+#include "readerfonts.h"
 #include <QApplication>
 #include <QDialog>
 #include <QFormLayout>
@@ -25,7 +26,27 @@ bool readerAppSkin(AppSkin &skin) {
     return customAppSkin(skin);
 }
 
+void applyReaderInterfaceFont() {
+    static const QFont systemFont=QApplication::font();
+    static QString applied;
+    const auto selected=QSettings().value("reader/fontFamily","serif").toString();
+    const bool enabled=QSettings().value("reader/useImportedFontInInterface",true).toBool();
+    bool available=false;
+    if(enabled && readerFontId(selected))for(const auto &font:readerFonts())if(font.id==selected){available=true;break;}
+    const QString target=available?selected:QStringLiteral("system");
+    const auto font=target=="system"?systemFont:readerFont(target);
+    const QString resolved=target+":"+font.family();
+    if(applied==resolved)return;
+    applied=resolved;
+    QFont interfaceFont=systemFont;interfaceFont.setFamilies(font.families());
+    QApplication::setFont(interfaceFont);
+    for(auto *widget:QApplication::allWidgets()) {
+        auto current=widget->font();current.setFamilies(font.families());widget->setFont(current);
+    }
+}
+
 void applyAppSkin() {
+    applyReaderInterfaceFont();
     const auto skin=resolvedAppSkin(QGuiApplication::styleHints()->colorScheme()==Qt::ColorScheme::Dark);
     qApp->setPalette(skin.palette());
     for(auto *w:QApplication::allWidgets()) {w->setPalette(skin.palette());w->update();}

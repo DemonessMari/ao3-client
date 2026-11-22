@@ -69,6 +69,12 @@ class ClientStateTest {
         assertEquals(font.id,state(app).preferences.fontFamily);restored.removeFont(font.id)
         assertEquals("serif",restored.preferences.fontFamily);assertEquals("reader",restored.screen);assertEquals(2,restored.chapter);assertEquals(123,restored.bookOffset)
     }
+    @Test fun interfaceFontOptOutPersistsWithoutChangingReadingFontOrChapter() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app);vm.screen="reader";vm.chapter=2;vm.bookOffset=123;vm.appearance(family="sans-serif")
+        assertTrue(vm.preferences.useImportedFontInInterface);vm.interfaceFont(false)
+        assertFalse(state(app).preferences.useImportedFontInInterface);assertEquals("sans-serif",vm.preferences.fontFamily);assertEquals(2,vm.chapter);assertEquals(123,vm.bookOffset);assertEquals("reader",vm.screen)
+        vm.interfaceFont(true);assertTrue(state(app).preferences.useImportedFontInInterface)
+    }
     @Test fun skinPersistsAndTheEditorReturnsToTheReader() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         assertEquals("home",vm.screen);vm.applySkin(AppSkin.preset("dark"));assertEquals("Dark",state(app).appSkin?.name)

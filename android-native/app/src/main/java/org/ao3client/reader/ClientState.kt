@@ -16,12 +16,12 @@ import java.io.File
 
 internal fun validAlignment(value: String) = value.takeIf { it in listOf("left","justify","center","right") } ?: "left"
 
-data class Preferences(val language: String = "en", val filterLanguage: Boolean = false, val service: String = "", val apiKey: String = "", val fontSize: Int = 19, val theme: String = "light", val fontFamily: String = "serif", val lineSpacing: Float = 1.6f, val margin: Int = 24, val alignment: String = "left")
+data class Preferences(val language: String = "en", val filterLanguage: Boolean = false, val service: String = "", val apiKey: String = "", val fontSize: Int = 19, val theme: String = "light", val fontFamily: String = "serif", val lineSpacing: Float = 1.6f, val margin: Int = 24, val alignment: String = "left", val useImportedFontInInterface: Boolean = true)
 
 class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true) : AndroidViewModel(app) {
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = Archive(storage)
-    var preferences by mutableStateOf(Preferences(storage.getString("language", "en")!!, storage.getBoolean("filterLanguage", false), storage.getString("service", "")!!, storage.getString("apiKey", "")!!, storage.getInt("fontSize", 19), storage.getString("theme", "light")!!, storage.getString("fontFamily", "serif")!!, storage.getFloat("lineSpacing", 1.6f),storage.getInt("margin",24).coerceIn(0,64),validAlignment(storage.getString("alignment","left")!!)))
+    var preferences by mutableStateOf(Preferences(storage.getString("language", "en")!!, storage.getBoolean("filterLanguage", false), storage.getString("service", "")!!, storage.getString("apiKey", "")!!, storage.getInt("fontSize", 19), storage.getString("theme", "light")!!, storage.getString("fontFamily", "serif")!!, storage.getFloat("lineSpacing", 1.6f),storage.getInt("margin",24).coerceIn(0,64),validAlignment(storage.getString("alignment","left")!!),storage.getBoolean("useImportedFontInInterface",true)))
     private val fontStore=ReaderFontStore(File(app.filesDir,"fonts"))
     internal var importedFonts by mutableStateOf(fontStore.list())
         private set
@@ -401,7 +401,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if (!code.matches(Regex("[a-z]{2,3}(?:-[a-z]{2,4})?")) || (value.service.isNotBlank() && !validTranslationService(value.service.trim()))) { error = "Enter a language code and an HTTPS translation URL, or leave it blank. HTTP is allowed for localhost only."; return }
         if(preferences.service!=value.service.trim()) storage.edit().putBoolean("translationConsented",false).apply()
         preferences = value.copy(language = code, service = value.service.trim(), lineSpacing = value.lineSpacing.coerceIn(1.2f, 2.2f),margin=value.margin.coerceIn(0,64),alignment=validAlignment(value.alignment))
-        storage.edit().putString("language", code).putBoolean("filterLanguage", value.filterLanguage).putString("service", value.service.trim()).putString("apiKey", value.apiKey).putInt("fontSize", value.fontSize).putString("theme", value.theme).putString("fontFamily", value.fontFamily).putFloat("lineSpacing", value.lineSpacing.coerceIn(1.2f, 2.2f)).putInt("margin",preferences.margin).putString("alignment",preferences.alignment).apply()
+        storage.edit().putString("language", code).putBoolean("filterLanguage", value.filterLanguage).putString("service", value.service.trim()).putString("apiKey", value.apiKey).putInt("fontSize", value.fontSize).putString("theme", value.theme).putString("fontFamily", value.fontFamily).putFloat("lineSpacing", value.lineSpacing.coerceIn(1.2f, 2.2f)).putInt("margin",preferences.margin).putString("alignment",preferences.alignment).putBoolean("useImportedFontInInterface",preferences.useImportedFontInInterface).apply()
         filters = if (value.filterLanguage) filters + ("language_id" to listOf(code)) else filters - "language_id"
         cancelTranslation(); translation = null; error = null; screen = settingsReturn
         settingsConfirmation = true
@@ -410,6 +410,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if(theme!=preferences.theme) applySkin(null)
         preferences = preferences.copy(theme = theme, fontFamily = family, lineSpacing = spacing.coerceIn(1.2f, 2.2f),margin=margin.coerceIn(0,64),alignment=validAlignment(alignment))
         storage.edit().putString("theme", preferences.theme).putString("fontFamily", preferences.fontFamily).putFloat("lineSpacing", preferences.lineSpacing).putInt("margin",preferences.margin).putString("alignment",preferences.alignment).apply()
+    }
+    fun interfaceFont(enabled: Boolean) {
+        preferences=preferences.copy(useImportedFontInInterface=enabled)
+        storage.edit().putBoolean("useImportedFontInInterface",enabled).apply()
     }
     fun fontSize(value: Int) {
         preferences = preferences.copy(fontSize = value.coerceIn(14, 32))

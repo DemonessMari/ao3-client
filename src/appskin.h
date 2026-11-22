@@ -49,5 +49,6 @@ struct AppSkin {
 inline bool customAppSkin(AppSkin &skin) {QString error;return AppSkin::parse(QSettings().value("appearance/skin").toByteArray(),skin,error);}
 AppSkin resolvedAppSkin(bool dark);
 bool readerAppSkin(AppSkin &skin);
+void applyReaderInterfaceFont();
 void applyAppSkin();
 void editAppSkin(QWidget *parent);

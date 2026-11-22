@@ -51,7 +51,10 @@ class MainActivity : ComponentActivity() {
                 "sepia" -> lightColorScheme(primary = Color(0xFF843D21), background = Color(0xFFF1E3C7), surface = Color(0xFFF1E3C7))
                 else -> lightColorScheme(primary = Color(0xFF920B19), secondary = Color(0xFF76564C), background = Color(0xFFFFF8F5), surface = Color(0xFFFFF8F5))
             }
-            MaterialTheme(colorScheme = model.appSkin?.colorScheme() ?: colors) {
+            val readingFamily=readerFontFamily(model)
+            val interfaceFamily=if(useImportedInterfaceFont(model.preferences))readingFamily else FontFamily.Default
+            val typography=remember(interfaceFamily) {interfaceTypography(interfaceFamily)}
+            MaterialTheme(colorScheme = model.appSkin?.colorScheme() ?: colors,typography=typography) {
                 ClientApp(model)
             }
         }

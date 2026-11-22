@@ -1,12 +1,13 @@
 # Verification
 
-2026-11-22: desktop 3.2.0-rc.5; Android 3.2.0-rc.6.
+2026-11-22: desktop and Android 3.2.0-rc.7.
 
 - Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All five CTest suites passed: content, functional, launcher, WebEngine rendering and installer.
 - Android branding now uses the full site name and logo on main screens, with wrapping text and safe-area insets. Profile/work titles and navigation are retained. Phone rendering and large-system-font checks remain pending.
-- Android release: 76 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 25 warnings (including style suggestions).
+- Android release: 79 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 26 warnings (including style suggestions).
 - The embedded desktop renderer displayed the real AO3 sign-in form. No credentials were entered and no account action was submitted.
 - An earlier separate live Android test passed: two searches returned distinct result sets and a work opened with readable chapter text.
+- Interface-font checks compare the prior system-font interface with the selected imported font. Desktop checks cover existing navigation/buttons, heading size/weight, work-summary document fonts, opt-out and missing-file fallback; before/after desktop captures were inspected. Android tests cover all 15 typography roles and preference persistence; phone appearance remains unverified.
 - Font tests cover bounded/validated imports, duplicate detection, private copies, restart recovery, missing-font fallback and removal without changing the chapter. Desktop rendering uses a licensed test font with a distinct family name. Android storage tests use an injected font validator; platform font loading and the document picker still need phone acceptance. The new desktop font controls were visually inspected.
 - New layout tests cover live paragraph reflow, side margins in scrolling and book mode, book-position preservation, system-theme resolution, and Android preference persistence/bounds without leaving the chapter. The full-name desktop header and scrollable reading settings were inspected. Phone rendering of these new controls remains unverified.
 - Header layout checks passed at 900, 1100 and 1440 pixels. Profile-picture tests cover header scoping, bounded bitmap decoding, native display, missing-image fallback, redirect restrictions and exclusion of AO3 cookies from storage requests.
@@ -15,8 +16,8 @@
 - Session tests cover current AO3 greeting markup, logout links with query parameters, identity mismatch, cancellation and preservation of the previous account on a failed website-session import.
 - Bookmark and comment fixtures cover form scoping, nested threads, fresh identity/token checks and uncertain outcomes. These do not establish live account acceptance.
 
-- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 21 and 16 KB alignment verified. Shared identity script and privacy assets match source.
-- Desktop 3.2.0-rc.5 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
+- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 22 and 16 KB alignment verified. Shared identity script and privacy assets match source.
+- Desktop 3.2.0-rc.7 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
 - Final APK, AAB, desktop archive and checksums are in `~/Downloads`.
 
 Official-source review used `otwcode/otwarchive` revision `452391b648f2fb06b55c36133812449747634504`; production availability may differ.

@@ -28,6 +28,10 @@ import androidx.compose.ui.unit.dp
         OutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()) { Text(vm.importedFonts.firstOrNull { it.id==vm.preferences.fontFamily }?.name ?: "Imported fonts",maxLines=2,overflow=TextOverflow.Ellipsis) }
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {vm.importedFonts.forEach { font -> DropdownMenuItem(text={Text(font.name,maxLines=2,overflow=TextOverflow.Ellipsis)},onClick={expanded=false;vm.appearance(family=font.id)}) }}
     }
+    if(ReaderFontStore.validId(vm.preferences.fontFamily))Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked=vm.preferences.useImportedFontInInterface,onCheckedChange=vm::interfaceFont)
+        Text("Use imported font in interface",Modifier.weight(1f))
+    }
     vm.fontError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
     FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick={picker.launch(arrayOf("*/*"))},enabled=!vm.fontImporting) {Text(if(vm.fontImporting)"Importing…" else "Import font")}

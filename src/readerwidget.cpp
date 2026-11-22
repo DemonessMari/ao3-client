@@ -454,12 +454,13 @@ void ReaderWidget::showSettings()
     theme->addItems({"Light", "Sepia", "Dark"}); theme->setCurrentIndex(qBound(0, settings.value("reader/theme", 0).toInt(), 2));
     auto *family = new QComboBox(&dialog); family->setObjectName("readingFontFamily"); family->addItem("Serif", "serif"); family->addItem("Sans serif", "sans-serif"); for(const auto &font:readerFonts())family->addItem(font.name,font.id);family->setCurrentIndex(qMax(0,family->findData(settings.value("reader/fontFamily","serif"))));
     auto *fontActions=new QWidget(&dialog);auto *fontRow=new QHBoxLayout(fontActions);fontRow->setContentsMargins(0,0,0,0);auto *importFont=new QPushButton("Import font",fontActions);auto *removeFont=new QPushButton("Remove font",fontActions);fontRow->addWidget(importFont);fontRow->addWidget(removeFont);
+    auto *interfaceFont=new QCheckBox("Use imported font in interface",&dialog);interfaceFont->setObjectName("readingInterfaceFont");interfaceFont->setChecked(settings.value("reader/useImportedFontInInterface",true).toBool());
     auto *spacing = new QSpinBox(&dialog); spacing->setObjectName("readingLineSpacing"); spacing->setRange(120, 220); spacing->setSingleStep(10); spacing->setSuffix("%"); spacing->setValue(settings.value("reader/lineSpacing", 160).toInt());
     auto *margin=new QSpinBox(&dialog);margin->setObjectName("readingMargin");margin->setRange(0,64);margin->setSuffix(" px");margin->setValue(settings.value("reader/margin",24).toInt());
     auto *alignment=new QComboBox(&dialog);alignment->setObjectName("readingAlignment");for(const auto &pair:{qMakePair("Left","left"),qMakePair("Justified","justify"),qMakePair("Center","center"),qMakePair("Right","right")})alignment->addItem(pair.first,pair.second);alignment->setCurrentIndex(qMax(0,alignment->findData(settings.value("reader/alignment","left"))));
     auto *useSkin=new QCheckBox("Use app skin colors",&dialog); useSkin->setChecked(settings.value("reader/useAppSkin",true).toBool()); form->addRow(useSkin);
     auto *editSkin=new QPushButton("App skin",&dialog); form->addRow(editSkin); connect(editSkin,&QPushButton::clicked,&dialog,[&]{editAppSkin(this);});
-    form->addRow("Reading theme", theme); form->addRow("Font", family);form->addRow(fontActions); form->addRow("Line spacing", spacing);form->addRow("Side margins",margin);form->addRow("Alignment",alignment);
+    form->addRow("Reading theme", theme); form->addRow("Font", family);form->addRow(fontActions);form->addRow(interfaceFont); form->addRow("Line spacing", spacing);form->addRow("Side margins",margin);form->addRow("Alignment",alignment);
     form->addRow(QStringLiteral("Default language"), language); form->addRow(search);
     form->addRow(QStringLiteral("LibreTranslate URL"), url); form->addRow(QStringLiteral("API key (optional)"), key); layout->addLayout(form);
     auto *size = new QSpinBox(&dialog); size->setObjectName("readingTextSize"); size->setRange(11,32); size->setValue(m_fontSize->value()); form->addRow("Text size",size);
@@ -467,6 +468,8 @@ void ReaderWidget::showSettings()
     auto liveAppearance = [&, this] {
         settings.setValue("reader/useAppSkin",useSkin->isChecked());settings.setValue("reader/margin",margin->value());settings.setValue("reader/alignment",alignment->currentData());
         settings.setValue("reader/theme",theme->currentIndex()); settings.setValue("reader/fontFamily",family->currentData()); settings.setValue("reader/lineSpacing",spacing->value());
+        settings.setValue("reader/useImportedFontInInterface",interfaceFont->isChecked());
+        interfaceFont->setVisible(readerFontId(family->currentData().toString()));applyReaderInterfaceFont();
         m_fontSize->setValue(size->value());
         if(m_index>=0) renderText(m_browser->toPlainText());
         AppSkin previewSkin;const bool custom=useSkin->isChecked() && readerAppSkin(previewSkin);theme->setEnabled(!custom);
@@ -480,6 +483,7 @@ void ReaderWidget::showSettings()
     connect(removeFont,&QPushButton::clicked,&dialog,[&]{const auto id=family->currentData().toString();if(!removeReaderFont(id)){QMessageBox::warning(&dialog,"Font removal failed","Could not remove the font.");return;}const int index=family->currentIndex();family->setCurrentIndex(0);family->removeItem(index);liveAppearance();});
     connect(editSkin,&QPushButton::clicked,&dialog,liveAppearance);
     connect(useSkin,&QCheckBox::toggled,&dialog,liveAppearance);
+    connect(interfaceFont,&QCheckBox::toggled,&dialog,liveAppearance);
     connect(margin,&QSpinBox::valueChanged,&dialog,liveAppearance);connect(alignment,&QComboBox::currentIndexChanged,&dialog,liveAppearance);
     connect(theme,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(family,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(spacing,&QSpinBox::valueChanged,&dialog,liveAppearance); connect(size,&QSpinBox::valueChanged,&dialog,liveAppearance); liveAppearance();
     auto *note = new QLabel(QStringLiteral("HTTPS required except on localhost."), &dialog);
