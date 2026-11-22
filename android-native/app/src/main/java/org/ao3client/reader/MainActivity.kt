@@ -75,9 +75,7 @@ class MainActivity : ComponentActivity() {
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(when(vm.screen) { "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"; "settings" -> "Reading settings"; "details" -> "About this fic"; "login" -> "Sign in"; "library" -> "Your library"; "profile" -> vm.profileUser; else -> "AO3 Client" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            navigationIcon = { if (vm.screen in listOf("skins", "archiveBookmark", "comments", "filters", "details", "login", "profile") || vm.screen == "settings" && vm.settingsReturn == "reader") IconButton(onClick = { vm.navigate(if(vm.screen=="skins")vm.skinReturn else if (vm.screen == "settings") vm.settingsReturn else if(vm.screen == "archiveBookmark") vm.bookmarkReturn else if(vm.screen == "comments") vm.commentsReturn else if(vm.screen == "profile") vm.profileReturn else if(vm.screen == "login") "home" else if(vm.screen == "details") vm.detailsReturn else "search") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-            actions = { if(vm.screen !in listOf("login", "settings")) TextButton(onClick = { vm.navigate(if (vm.username == null) "login" else "account") }) { Text(if(vm.username == null) "Sign in" else "Account") } }) },
+        topBar = { ClientTopBar(vm) },
         bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
             NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
             NavigationBarItem(selected = vm.screen == "search" && !vm.ownWorks, onClick = { vm.ownWorks = false; vm.navigate("search") }, icon = { Icon(Icons.Default.Search, null) }, label = { Text("Search") })
@@ -105,6 +103,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+@Composable private fun ClientTopBar(vm: ClientState) {
+    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile") || vm.screen=="settings" && vm.settingsReturn=="reader"
+    val navigation: @Composable () -> Unit = {
+        if(showBack)IconButton(onClick={vm.navigate(when(vm.screen) {
+            "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
+            "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
+        })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
+    }
+    val account: @Composable () -> Unit = {
+        if(vm.screen !in listOf("login","settings"))TextButton(onClick={vm.navigate(if(vm.username==null)"login" else "account")}) {Text(if(vm.username==null)"Sign in" else "Account")}
+    }
+    if(vm.screen in listOf("home","search","library","settings","account")) {
+        Surface(color=MaterialTheme.colorScheme.surface) {
+            Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top+WindowInsetsSides.Horizontal)).heightIn(min=64.dp).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                navigation()
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.icon),contentDescription=null,modifier=Modifier.size(width=44.dp,height=36.dp),colorFilter=androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary))
+                Text("Archive of Our Own",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+                account()
+            }
+        }
+    } else TopAppBar(title={Text(when(vm.screen) {
+        "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
+        "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
+    },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()})
+}
+
 @Composable fun ErrorCard(message: String, dismiss: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

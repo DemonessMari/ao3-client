@@ -1,6 +1,6 @@
 # Feature coverage
 
-Source for 3.2.0-rc.5. The 3.1.0 release excludes the newest native account actions and embedded website view.
+Desktop source for 3.2.0-rc.5; Android source for 3.2.0-rc.6. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |

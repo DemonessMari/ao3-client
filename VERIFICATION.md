@@ -1,8 +1,9 @@
 # Verification
 
-2026-11-22, version 3.2.0-rc.5.
+2026-11-22: desktop 3.2.0-rc.5; Android 3.2.0-rc.6.
 
 - Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All five CTest suites passed: content, functional, launcher, WebEngine rendering and installer.
+- Android branding now uses the full site name and logo on main screens, with wrapping text and safe-area insets. Profile/work titles and navigation are retained. Phone rendering and large-system-font checks remain pending.
 - Android release: 76 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 25 warnings (including style suggestions).
 - The embedded desktop renderer displayed the real AO3 sign-in form. No credentials were entered and no account action was submitted.
 - An earlier separate live Android test passed: two searches returned distinct result sets and a work opened with readable chapter text.
@@ -14,7 +15,7 @@
 - Session tests cover current AO3 greeting markup, logout links with query parameters, identity mismatch, cancellation and preservation of the previous account on a failed website-session import.
 - Bookmark and comment fixtures cover form scoping, nested threads, fresh identity/token checks and uncertain outcomes. These do not establish live account acceptance.
 
-- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 20 and 16 KB alignment verified. Shared identity script and privacy assets match source.
+- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 21 and 16 KB alignment verified. Shared identity script and privacy assets match source.
 - Desktop 3.2.0-rc.5 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
 - Final APK, AAB, desktop archive and checksums are in `~/Downloads`.
 
