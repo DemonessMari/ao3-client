@@ -94,7 +94,7 @@ class FunctionalTest : public QObject {
 private slots:
     void headerIdentityAndSearchCentering() {
         const auto originalPalette=QApplication::palette();auto restore=qScopeGuard([&]{QApplication::setPalette(originalPalette);});applyAppSkin();
-        MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("AO3 Client"));
+        MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("Archive of Our Own"));
         for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
     }
@@ -868,6 +868,28 @@ private slots:
         QTest::mouseDClick(reader.m_browser->viewport(),Qt::LeftButton); QVERIFY(!reader.m_textOnly);
         QSettings().setValue("reader/bookMode",false);
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_BOOK")) { reader.setBookMode(true); reader.grab().save("/tmp/ao3-book-mode.png"); reader.setBookMode(false); }
+    }
+    void readerMarginsAndAlignmentReflowBothModes() {
+        QSettings settings;const auto oldMargin=settings.value("reader/margin"),oldAlignment=settings.value("reader/alignment");
+        auto restore=qScopeGuard([&]{if(oldMargin.isValid())settings.setValue("reader/margin",oldMargin);else settings.remove("reader/margin");if(oldAlignment.isValid())settings.setValue("reader/alignment",oldAlignment);else settings.remove("reader/alignment");});
+        settings.setValue("reader/margin",0);settings.setValue("reader/alignment","left");
+        ReaderWidget reader;reader.resize(900,800);reader.show();Work work;work.title="Layout";
+        const QString text=QString("A paragraph with enough words to wrap across the reading area. ").repeated(150);
+        reader.openWork(work,{{"One",text}});QTest::qWait(40);const auto width=reader.m_browser->viewport()->width();
+        settings.setValue("reader/margin",64);settings.setValue("reader/alignment","right");reader.renderText(text);QTest::qWait(40);
+        QVERIFY(reader.m_browser->viewport()->width()<width-100);QCOMPARE(reader.m_browser->document()->begin().blockFormat().alignment(),Qt::AlignRight);
+        reader.setBookMode(true);QTest::qWait(40);const auto pages=reader.m_book->pages();QVERIFY(pages>1);
+        reader.m_book->animated=false;reader.m_book->turn(1);const auto anchor=reader.m_book->anchor();QVERIFY(anchor>0);
+        settings.setValue("reader/margin",0);settings.setValue("reader/alignment","justify");reader.renderText(text);QTest::qWait(40);
+        QVERIFY(reader.m_book->pages()<=pages);QVERIFY(reader.m_book->anchor()<=anchor);QCOMPARE(reader.m_browser->toPlainText(),text);
+        QCOMPARE(reader.m_browser->document()->begin().blockFormat().alignment(),Qt::AlignJustify);reader.setBookMode(false);
+    }
+    void systemThemeResolutionPreservesCustomSkin() {
+        QSettings settings;const auto prior=settings.value("appearance/followSystem"),custom=settings.value("appearance/skin");
+        auto restore=qScopeGuard([&]{if(prior.isValid())settings.setValue("appearance/followSystem",prior);else settings.remove("appearance/followSystem");if(custom.isValid())settings.setValue("appearance/skin",custom);else settings.remove("appearance/skin");});
+        settings.setValue("appearance/skin",AppSkin::preset(2).json());settings.setValue("appearance/followSystem",true);
+        QCOMPARE(resolvedAppSkin(true).background,AppSkin::preset(1).background);QCOMPARE(resolvedAppSkin(false).background,AppSkin::preset(0).background);
+        settings.setValue("appearance/followSystem",false);QCOMPARE(resolvedAppSkin(true).background,AppSkin::preset(2).background);
     }
     void appearanceChangesRenderedLayout() {
         QSettings settings;

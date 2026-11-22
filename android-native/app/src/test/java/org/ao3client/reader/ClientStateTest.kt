@@ -52,6 +52,15 @@ class ClientStateTest {
         assertEquals("reader",vm.screen); assertEquals("dark",vm.preferences.theme); assertEquals(27,vm.preferences.fontSize)
         val restored=state(app); assertEquals("dark",restored.preferences.theme); assertEquals("sans-serif",restored.preferences.fontFamily); assertEquals(1.9f,restored.preferences.lineSpacing,.001f); assertEquals(27,restored.preferences.fontSize)
     }
+    @Test fun readerLayoutPersistsAndClampsWithoutLeavingTheChapter() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app);vm.screen="reader";vm.chapter=2;vm.bookOffset=123
+        vm.applySkin(AppSkin.preset("sepia"));vm.appearance(margin=32);assertEquals("Sepia",vm.appSkin?.name)
+        vm.appearance(theme="system",margin=52,alignment="justify");assertNull(vm.appSkin)
+        assertEquals("reader",vm.screen);assertEquals(2,vm.chapter);assertEquals(123,vm.bookOffset)
+        val restored=state(app);assertEquals("system",restored.preferences.theme);assertEquals(52,restored.preferences.margin);assertEquals("justify",restored.preferences.alignment)
+        vm.appearance(margin=999,alignment="invalid");assertEquals(64,vm.preferences.margin);assertEquals("left",vm.preferences.alignment)
+        vm.appearance(margin=-1,alignment="right");assertEquals(0,vm.preferences.margin);assertEquals("right",state(app).preferences.alignment)
+    }
     @Test fun skinPersistsAndTheEditorReturnsToTheReader() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         assertEquals("home",vm.screen);vm.applySkin(AppSkin.preset("dark"));assertEquals("Dark",state(app).appSkin?.name)

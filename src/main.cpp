@@ -7,6 +7,7 @@
 #include <QSettings>
 #include <QCommandLineParser>
 #include <QTimer>
+#include <QStyleHints>
 
 int main(int argc, char *argv[])
 {
@@ -16,7 +17,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("AO3 Client"));
-    app.setApplicationVersion(QStringLiteral("3.2.0-rc.3"));
+    app.setApplicationVersion(QStringLiteral("3.2.0-rc.4"));
     QCommandLineParser parser; parser.setApplicationDescription("Unofficial AO3 reader"); parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"smoke-test","Open the main window briefly and exit (installation check)."}); parser.process(app);
     app.setOrganizationName(QStringLiteral("AO3Client"));
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
     }
     if(QSettings().value("translation/url").toString()=="https://translate.cutie.dating") { QSettings().remove("translation/url"); QSettings().remove("translation/consented"); }
     applyAppSkin();
+    QObject::connect(QGuiApplication::styleHints(),&QStyleHints::colorSchemeChanged,&app,[]{if(QSettings().value("appearance/followSystem",false).toBool())applyAppSkin();});
     MainWindow window;
     if (mobileUi()) {
         applyReadableTheme(&window);

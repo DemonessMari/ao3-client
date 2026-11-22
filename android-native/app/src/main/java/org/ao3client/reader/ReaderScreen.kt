@@ -94,8 +94,8 @@ import kotlinx.coroutines.launch
                 if(vm.translation != null && !vm.textOnly) Text("Machine translation · ${vm.preferences.language}", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
                 if(vm.bookMode) BookReader(vm,text,paragraphs,Modifier.weight(1f).fillMaxWidth(),rich)
                 else SelectionContainer(Modifier.weight(1f)) {
-                    LazyColumn(state = scroll, contentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
-                        itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp) }
+                    LazyColumn(state = scroll, contentPadding = PaddingValues(horizontal = vm.preferences.margin.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize().widthIn(max = 840.dp)) {
+                        itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = if(vm.preferences.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp,modifier=Modifier.fillMaxWidth(),textAlign=readingAlignment(vm.preferences.alignment)) }
                         item {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 TextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }

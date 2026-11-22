@@ -14,6 +14,8 @@
 #include <QPainterPath>
 #include <QTextBlock>
 #include <QTextLayout>
+#include <QSettings>
+#include <QTextFrame>
 
 class BookView : public QWidget {
 public:
@@ -51,6 +53,7 @@ public:
     void setContent(const QTextDocument *source, double fraction, QColor bg, QColor fg) {
         animation.stop(); phase = 1; delete doc; doc = source->clone(this);
         background = bg; foreground = fg; doc->setDocumentMargin(24);
+        auto frame=doc->rootFrame()->frameFormat();const int margin=qBound(0,QSettings().value("reader/margin",24).toInt(),64);frame.setLeftMargin(margin);frame.setRightMargin(margin);doc->rootFrame()->setFrameFormat(frame);
         doc->setPageSize(QSizeF(qMax(100,width()), qMax(100,height())));
         current = qRound(qBound(0.0,fraction,1.0)*(pages()-1)); update(); if(pageChanged) pageChanged();
     }

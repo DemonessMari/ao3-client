@@ -45,9 +45,9 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val prefs = vm.preferences
     val style = TextStyle(fontFamily = if(prefs.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif,
-        fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize*prefs.lineSpacing).sp)
+        fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize*prefs.lineSpacing).sp,textAlign=readingAlignment(prefs.alignment))
     BoxWithConstraints(modifier) {
-        val width = with(density) { (maxWidth-48.dp).roundToPx() }.coerceAtLeast(1)
+        val width = with(density) { (maxWidth-(prefs.margin*2).dp).roundToPx() }.coerceAtLeast(1)
         val height = with(density) { (maxHeight-100.dp).roundToPx() }.coerceAtLeast(1)
         val linePixels = with(density) { (prefs.fontSize*prefs.lineSpacing).sp.toPx() }
         if(width < 60 || height < linePixels) {
@@ -60,7 +60,7 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
             val jobContext=coroutineContext
             paginateBookRanges(text) { chunk,offset ->
                 jobContext.ensureActive()
-                val layout = measurer.measure(rich.subSequence(offset,offset+chunk.length), style, constraints = Constraints(maxWidth = width), maxLines = (height/linePixels).toInt()+3)
+                val layout = measurer.measure(rich.subSequence(offset,offset+chunk.length), style, constraints = Constraints(minWidth = width,maxWidth = width), maxLines = (height/linePixels).toInt()+3)
                 val line = (0 until layout.lineCount).lastOrNull { layout.getLineBottom(it) <= height } ?: 0
                 layout.getLineEnd(line, visibleEnd = false)
             }

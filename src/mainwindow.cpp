@@ -308,7 +308,7 @@ void MainWindow::setupUI()
     if(!mobileUi()) {
         delete headerLayout;delete headerSpacer;headerLayout=new QGridLayout(m_headerBar);headerLayout->setContentsMargins(16,8,16,8);headerLayout->setHorizontalSpacing(12);
         auto *identity=new QWidget(m_headerBar);auto *identityLayout=new QHBoxLayout(identity);identityLayout->setContentsMargins(0,0,0,0);identityLayout->setSpacing(8);identityLayout->addWidget(m_logoLabel);
-        auto *name=new QLabel("AO3 Client",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(16);font.setBold(true);name->setFont(font);identityLayout->addWidget(name);
+        auto *name=new QLabel("Archive of Our Own",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(13);font.setBold(true);name->setFont(font);name->setWordWrap(true);name->setFixedWidth(150);identityLayout->addWidget(name);
         auto *searchGroup=new QWidget(m_headerBar);searchGroup->setObjectName("headerSearch");auto *searchLayout=new QHBoxLayout(searchGroup);searchLayout->setContentsMargins(0,0,0,0);searchLayout->setSpacing(8);m_searchInput->setMinimumWidth(180);searchLayout->addWidget(m_searchInput,1);searchLayout->addWidget(m_searchButton);searchLayout->addWidget(m_filterButton);searchGroup->setMaximumWidth(640);
         headerLayout->addWidget(identity,0,0,Qt::AlignLeft);headerLayout->addWidget(searchGroup,0,1);headerLayout->addWidget(m_loginButton,0,2,Qt::AlignRight);m_loginButton->setMaximumWidth(190);
         const int balance=qMax(200,identity->sizeHint().width());headerLayout->setColumnMinimumWidth(0,balance);headerLayout->setColumnMinimumWidth(2,balance);headerLayout->setColumnStretch(0,1);headerLayout->setColumnStretch(1,2);headerLayout->setColumnStretch(2,1);

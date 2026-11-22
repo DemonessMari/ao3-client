@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         setContent {
-            val colors = when(model.preferences.theme) {
+            val colors = when(if(model.preferences.theme=="system") { if(isSystemInDarkTheme()) "dark" else "light" } else model.preferences.theme) {
                 "dark" -> darkColorScheme(primary = Color(0xFFFFB3B9), background = Color(0xFF191B1E), surface = Color(0xFF191B1E))
                 "sepia" -> lightColorScheme(primary = Color(0xFF843D21), background = Color(0xFFF1E3C7), surface = Color(0xFFF1E3C7))
                 else -> lightColorScheme(primary = Color(0xFF920B19), secondary = Color(0xFF76564C), background = Color(0xFFFFF8F5), surface = Color(0xFFFFF8F5))
@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
     Text("Changes save automatically.", style = MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick=vm::showSkins){Text("App skin" + (vm.appSkin?.let { " · "+it.name } ?: ""))}
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
+        listOf("system" to "System", "light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
             FilterChip(selected = vm.appSkin == null && prefs.theme == value, onClick = { vm.applySkin(null); vm.appearance(theme = value) }, label = { Text(title) })
         }
     }
@@ -285,7 +285,14 @@ class MainActivity : ComponentActivity() {
     Slider(value = prefs.fontSize.toFloat(), onValueChange = { vm.fontSize(it.toInt()) }, valueRange = 14f..32f, steps = 17)
     Text("Line spacing · ${"%.1f".format(prefs.lineSpacing)}")
     Slider(value = prefs.lineSpacing, onValueChange = { vm.appearance(spacing = it) }, valueRange = 1.2f..2.2f, steps = 9)
-    Text("Text preview.\nSecond line of text.",
+    Text("Side margins · ${prefs.margin}")
+    Slider(value=prefs.margin.toFloat(),onValueChange={vm.appearance(margin=it.toInt())},valueRange=0f..64f,steps=15)
+    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        listOf("left" to "Left","justify" to "Justified","center" to "Center","right" to "Right").forEach { (value,title) ->
+            FilterChip(selected=prefs.alignment==value,onClick={vm.appearance(alignment=value)},label={Text(title)})
+        }
+    }
+    Text("Text preview. Change the margins and alignment to see how your reading text will look.\nSecond paragraph of text.",modifier=Modifier.fillMaxWidth().padding(horizontal=prefs.margin.dp),textAlign=readingAlignment(prefs.alignment),
         fontFamily = if(prefs.fontFamily == "sans-serif") FontFamily.SansSerif else FontFamily.Serif,
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize * prefs.lineSpacing).sp)
 }

@@ -355,6 +355,8 @@ void ReaderWidget::renderText(const QString &text, double fraction)
     cursor.select(QTextCursor::Document);
     QTextBlockFormat block;
     block.setLineHeight(spacing, QTextBlockFormat::ProportionalHeight);
+    const QString alignment=settings.value("reader/alignment","left").toString();
+    block.setAlignment(alignment=="justify"?Qt::AlignJustify:alignment=="center"?Qt::AlignHCenter:alignment=="right"?Qt::AlignRight:Qt::AlignLeft);
     cursor.mergeBlockFormat(block);
     QTimer::singleShot(0, this, [this, revision, fraction, anchor] {
         if (revision != m_renderRevision) return;
@@ -452,34 +454,37 @@ void ReaderWidget::showSettings()
     theme->addItems({"Light", "Sepia", "Dark"}); theme->setCurrentIndex(qBound(0, settings.value("reader/theme", 0).toInt(), 2));
     auto *family = new QComboBox(&dialog); family->setObjectName("readingFontFamily"); family->addItem("Serif", "serif"); family->addItem("Sans serif", "sans-serif"); family->setCurrentIndex(settings.value("reader/fontFamily", "serif").toString() == "sans-serif" ? 1 : 0);
     auto *spacing = new QSpinBox(&dialog); spacing->setObjectName("readingLineSpacing"); spacing->setRange(120, 220); spacing->setSingleStep(10); spacing->setSuffix("%"); spacing->setValue(settings.value("reader/lineSpacing", 160).toInt());
+    auto *margin=new QSpinBox(&dialog);margin->setObjectName("readingMargin");margin->setRange(0,64);margin->setSuffix(" px");margin->setValue(settings.value("reader/margin",24).toInt());
+    auto *alignment=new QComboBox(&dialog);alignment->setObjectName("readingAlignment");for(const auto &pair:{qMakePair("Left","left"),qMakePair("Justified","justify"),qMakePair("Center","center"),qMakePair("Right","right")})alignment->addItem(pair.first,pair.second);alignment->setCurrentIndex(qMax(0,alignment->findData(settings.value("reader/alignment","left"))));
     auto *useSkin=new QCheckBox("Use app skin colors",&dialog); useSkin->setChecked(settings.value("reader/useAppSkin",true).toBool()); form->addRow(useSkin);
     auto *editSkin=new QPushButton("App skin",&dialog); form->addRow(editSkin); connect(editSkin,&QPushButton::clicked,&dialog,[&]{editAppSkin(this);});
-    form->addRow("Reading theme", theme); form->addRow("Font", family); form->addRow("Line spacing", spacing);
+    form->addRow("Reading theme", theme); form->addRow("Font", family); form->addRow("Line spacing", spacing);form->addRow("Side margins",margin);form->addRow("Alignment",alignment);
     form->addRow(QStringLiteral("Default language"), language); form->addRow(search);
     form->addRow(QStringLiteral("LibreTranslate URL"), url); form->addRow(QStringLiteral("API key (optional)"), key); layout->addLayout(form);
     auto *size = new QSpinBox(&dialog); size->setObjectName("readingTextSize"); size->setRange(11,32); size->setValue(m_fontSize->value()); form->addRow("Text size",size);
     auto *preview = new QTextBrowser(&dialog); preview->setObjectName("readingPreview"); preview->setMinimumHeight(120); preview->setMaximumHeight(180); layout->addWidget(preview);
     auto liveAppearance = [&, this] {
-        settings.setValue("reader/useAppSkin",useSkin->isChecked());
+        settings.setValue("reader/useAppSkin",useSkin->isChecked());settings.setValue("reader/margin",margin->value());settings.setValue("reader/alignment",alignment->currentData());
         settings.setValue("reader/theme",theme->currentIndex()); settings.setValue("reader/fontFamily",family->currentData()); settings.setValue("reader/lineSpacing",spacing->value());
         m_fontSize->setValue(size->value());
         if(m_index>=0) renderText(m_browser->toPlainText());
-        AppSkin previewSkin;const bool custom=useSkin->isChecked() && customAppSkin(previewSkin);theme->setEnabled(!custom);
-        preview->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; padding: 12px; }").arg(custom?previewSkin.background:theme->currentIndex()==2?"#191b1e":theme->currentIndex()==1?"#f1e3c7":"#faf8f3",custom?previewSkin.text:theme->currentIndex()==2?"#e7e1d8":"#292723"));
+        AppSkin previewSkin;const bool custom=useSkin->isChecked() && readerAppSkin(previewSkin);theme->setEnabled(!custom);
+        preview->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; padding: 12px %3px; }").arg(custom?previewSkin.background:theme->currentIndex()==2?"#191b1e":theme->currentIndex()==1?"#f1e3c7":"#faf8f3",custom?previewSkin.text:theme->currentIndex()==2?"#e7e1d8":"#292723").arg(margin->value()));
         QFont font(family->currentData().toString()); font.setPointSize(size->value()); preview->document()->setDefaultFont(font);
         preview->setPlainText("Text preview.\nSecond line of text.");
-        QTextCursor cursor(preview->document()); cursor.select(QTextCursor::Document); QTextBlockFormat block; block.setLineHeight(spacing->value(),QTextBlockFormat::ProportionalHeight); cursor.mergeBlockFormat(block);
+        QTextCursor cursor(preview->document()); cursor.select(QTextCursor::Document); QTextBlockFormat block; block.setLineHeight(spacing->value(),QTextBlockFormat::ProportionalHeight);block.setAlignment(alignment->currentData()=="justify"?Qt::AlignJustify:alignment->currentData()=="center"?Qt::AlignHCenter:alignment->currentData()=="right"?Qt::AlignRight:Qt::AlignLeft); cursor.mergeBlockFormat(block);
     };
     connect(editSkin,&QPushButton::clicked,&dialog,liveAppearance);
     connect(useSkin,&QCheckBox::toggled,&dialog,liveAppearance);
+    connect(margin,&QSpinBox::valueChanged,&dialog,liveAppearance);connect(alignment,&QComboBox::currentIndexChanged,&dialog,liveAppearance);
     connect(theme,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(family,&QComboBox::currentIndexChanged,&dialog,liveAppearance); connect(spacing,&QSpinBox::valueChanged,&dialog,liveAppearance); connect(size,&QSpinBox::valueChanged,&dialog,liveAppearance); liveAppearance();
     auto *note = new QLabel(QStringLiteral("HTTPS required except on localhost."), &dialog);
     note->setWordWrap(true); note->setMinimumWidth(0);
     note->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); layout->addWidget(note);
     auto *about=new QPushButton("About, privacy and licenses",&dialog); layout->addWidget(about);
     connect(about,&QPushButton::clicked,&dialog,[&] {
-        QDialog info(&dialog); info.setWindowTitle("About AO3 Client 3.0.0"); info.resize(640,500); applyReadableTheme(&info); QVBoxLayout body(&info); QTextBrowser text(&info); text.setOpenExternalLinks(true);
-        QString content="AO3 Client 3.0.0 · Unofficial; not affiliated with AO3 / OTW.\n\n";
+        QDialog info(&dialog); info.setWindowTitle("About AO3 Client "+QCoreApplication::applicationVersion()); info.resize(640,500); applyReadableTheme(&info); QVBoxLayout body(&info); QTextBrowser text(&info); text.setOpenExternalLinks(true);
+        QString content="AO3 Client "+QCoreApplication::applicationVersion()+" · Unofficial; not affiliated with AO3 / OTW.\n\n";
         for(const auto &path:{":/docs/PRIVACY.md",":/docs/THIRD-PARTY-NOTICES.md",":/docs/LICENSE"}) { QFile file(path); if(file.open(QIODevice::ReadOnly)) content+=QString::fromUtf8(file.readAll())+"\n\n"; }
         text.setPlainText(content); body.addWidget(&text); QDialogButtonBox close(QDialogButtonBox::Close,&info); body.addWidget(&close); connect(&close,&QDialogButtonBox::rejected,&info,&QDialog::reject); info.exec();
     });
@@ -532,10 +537,10 @@ void ReaderWidget::refreshSkin() {if(m_index>=0)renderText(m_browser->toPlainTex
 void ReaderWidget::applyAppearance()
 {
     const int theme = QSettings().value("reader/theme", 0).toInt();
-    AppSkin skin;const bool custom=customAppSkin(skin) && QSettings().value("reader/useAppSkin",true).toBool();
+    AppSkin skin;const bool custom=readerAppSkin(skin) && QSettings().value("reader/useAppSkin",true).toBool();
     const QString background = custom ? skin.background : theme == 2 ? "#191b1e" : theme == 1 ? "#f1e3c7" : "#faf8f3";
     const QString foreground = custom ? skin.text : theme == 2 ? "#e7e1d8" : "#292723";
-    m_browser->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; border: none; padding: %3px; }").arg(background, foreground).arg(mobileUi() ? 8 : 24));
+    m_browser->setStyleSheet(QStringLiteral("QTextBrowser { background: %1; color: %2; border: none; padding: %3px %4px; }").arg(background, foreground).arg(mobileUi() ? 8 : 24).arg(qBound(0,QSettings().value("reader/margin",24).toInt(),64)));
 }
 void ReaderWidget::saveText()
 {

@@ -163,9 +163,9 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
     val density=LocalDensity.current
     val uriHandler=LocalUriHandler.current
     val paper=MaterialTheme.colorScheme.surface.copy(alpha=1f); val ink=MaterialTheme.colorScheme.onSurface
-    val old=remember(pages,index,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[index].offset,pages[index].offset+pages[index].text.length),style,constraints=Constraints(maxWidth=textWidth)) }
-    val other=remember(pages,target,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[target].offset,pages[target].offset+pages[target].text.length),style,constraints=Constraints(maxWidth=textWidth)) }
-    val pad=with(density) { Offset(24.dp.toPx(),20.dp.toPx()) }
+    val old=remember(pages,index,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[index].offset,pages[index].offset+pages[index].text.length),style,constraints=Constraints(minWidth=textWidth,maxWidth=textWidth)) }
+    val other=remember(pages,target,style,textWidth,rich) { measurer.measure(rich.subSequence(pages[target].offset,pages[target].offset+pages[target].text.length),style,constraints=Constraints(minWidth=textWidth,maxWidth=textWidth)) }
+    val pad=with(density) { Offset(vm.preferences.margin.dp.toPx(),20.dp.toPx()) }
     LaunchedEffect(index) { changed(index) }
     fun settle(commit:Boolean) { busy=true; scope.launch {
         if(vm.pageAnimation && target!=index) animate(phase,if(commit) 1f else 0f,animationSpec=tween(420)) { value,_->phase=value }
