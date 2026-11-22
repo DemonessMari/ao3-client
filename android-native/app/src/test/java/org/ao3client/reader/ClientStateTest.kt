@@ -21,6 +21,13 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun readerExtrasPersistAndBoundSpeed() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
+        vm.autoScrollSpeed(500);assertEquals(120,vm.autoScrollSpeed);vm.autoScrollSpeed(-1);assertEquals(10,vm.autoScrollSpeed)
+        vm.volumeNavigation(true);vm.keepScreenOn(true)
+        val restored=state(app);assertEquals(10,restored.autoScrollSpeed);assertTrue(restored.volumeNavigation);assertTrue(restored.keepScreenOn)
+        val previous=vm.readerStep.first;vm.stepReading(1);assertEquals(previous+1,vm.readerStep.first);assertEquals(1,vm.readerStep.second)
+    }
     @Test fun androidFactoryCanFindTheApplicationConstructor() {
         assertNotNull(ClientState::class.java.getConstructor(Application::class.java))
     }

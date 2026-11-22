@@ -38,6 +38,7 @@ public:
     QString workId() const { return m_work.id; }
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     bool eventFilter(QObject *, QEvent *) override;
 signals:
     void archiveRequested(const QUrl &url);
@@ -62,7 +63,11 @@ private:
     QPushButton *m_desktopOptionsToggle = nullptr;
     QWidget *m_mobileOptions = nullptr;
     QPushButton *m_optionsToggle = nullptr;
-    QTimer m_progressTimer;
+    QTimer m_progressTimer, m_autoScrollTimer;
+    QPushButton *m_autoScroll=nullptr;
+    QSpinBox *m_autoScrollSpeed=nullptr;
+    double m_autoScrollRemainder=0;
+    void stopAutoScroll();
     quint64 m_renderRevision = 0;
     bool m_restoringPosition = false;
     void translateChapter();

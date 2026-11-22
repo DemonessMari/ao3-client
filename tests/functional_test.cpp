@@ -879,6 +879,16 @@ private slots:
         QSettings().setValue("reader/bookMode",false);
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_BOOK")) { reader.setBookMode(true); reader.grab().save("/tmp/ao3-book-mode.png"); reader.setBookMode(false); }
     }
+    void autoScrollAdvancesAndStopsAtReadingBoundaries() {
+        ReaderWidget reader;reader.resize(900,700);reader.show();Work work;work.id="774422";work.title="Auto-scroll";
+        QSettings().remove("readingProgress/774422");reader.openWork(work,{{"One",QString("A paragraph with enough reading text.\n\n").repeated(180)},{"Two","Second chapter."}});QTest::qWait(80);
+        auto *bar=reader.m_browser->verticalScrollBar();QVERIFY(bar->maximum()>100);bar->setValue(0);reader.m_autoScrollSpeed->setValue(120);reader.m_autoScroll->setChecked(true);
+        QTRY_VERIFY(bar->value()>5);QVERIFY(reader.m_autoScrollTimer.isActive());
+        reader.showChapter(1);QVERIFY(!reader.m_autoScroll->isChecked());QVERIFY(!reader.m_autoScrollTimer.isActive());
+        reader.showChapter(0);QTest::qWait(50);reader.m_autoScroll->setChecked(true);reader.setBookMode(true);QVERIFY(!reader.m_autoScroll->isChecked());QVERIFY(!reader.m_autoScroll->isEnabled());
+        reader.setBookMode(false);QTest::qWait(50);bar->setValue(bar->maximum());reader.m_autoScroll->setChecked(true);QTRY_VERIFY(!reader.m_autoScroll->isChecked());
+        bar->setValue(0);reader.m_autoScroll->setChecked(true);reader.hide();QVERIFY(!reader.m_autoScrollTimer.isActive());
+    }
     void importedInterfaceFontUpdatesExistingChromeAndWorkPreview() {
         QSettings settings;const auto previous=settings.value("reader/fontFamily"),enabled=settings.value("reader/useImportedFontInInterface");
         QString id;auto restore=qScopeGuard([&]{if(previous.isValid())settings.setValue("reader/fontFamily",previous);else settings.remove("reader/fontFamily");if(enabled.isValid())settings.setValue("reader/useImportedFontInInterface",enabled);else settings.remove("reader/useImportedFontInInterface");applyReaderInterfaceFont();if(!id.isEmpty())removeReaderFont(id);});

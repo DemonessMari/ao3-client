@@ -21,6 +21,16 @@ data class Preferences(val language: String = "en", val filterLanguage: Boolean 
 class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true) : AndroidViewModel(app) {
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = Archive(storage)
+    var autoScrollSpeed by mutableIntStateOf(storage.getInt("autoScrollSpeed",30).coerceIn(10,120));private set
+    var volumeNavigation by mutableStateOf(storage.getBoolean("volumeNavigation",false));private set
+    var keepScreenOn by mutableStateOf(storage.getBoolean("keepScreenOn",false));private set
+    internal var readerOverlayOpen=false
+    internal var readerStep by mutableStateOf(0L to 0);private set
+    fun autoScrollSpeed(value:Int) {autoScrollSpeed=value.coerceIn(10,120);storage.edit().putInt("autoScrollSpeed",autoScrollSpeed).apply()}
+    fun volumeNavigation(value:Boolean) {volumeNavigation=value;storage.edit().putBoolean("volumeNavigation",value).apply()}
+    fun keepScreenOn(value:Boolean) {keepScreenOn=value;storage.edit().putBoolean("keepScreenOn",value).apply()}
+    internal fun stepReading(direction:Int) {readerStep=(readerStep.first+1) to direction.coerceIn(-1,1)}
+
     var preferences by mutableStateOf(Preferences(storage.getString("language", "en")!!, storage.getBoolean("filterLanguage", false), storage.getString("service", "")!!, storage.getString("apiKey", "")!!, storage.getInt("fontSize", 19), storage.getString("theme", "light")!!, storage.getString("fontFamily", "serif")!!, storage.getFloat("lineSpacing", 1.6f),storage.getInt("margin",24).coerceIn(0,64),validAlignment(storage.getString("alignment","left")!!),storage.getBoolean("useImportedFontInInterface",true)))
     private val fontStore=ReaderFontStore(File(app.filesDir,"fonts"))
     internal var importedFonts by mutableStateOf(fontStore.list())

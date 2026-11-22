@@ -20,6 +20,8 @@
 #include <QScrollArea>
 #include <QScreen>
 #include <QResizeEvent>
+#include <QHideEvent>
+#include <QApplication>
 #include <QKeyEvent>
 #include <QInputMethod>
 #include <QGuiApplication>
@@ -232,6 +234,20 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     }
     auto *modes = new QBoxLayout(mobileUi()?QBoxLayout::TopToBottom:QBoxLayout::LeftToRight);
     auto *hide = new QPushButton("Text only (F10)", this); hide->setObjectName("textOnlyMode"); modes->addWidget(hide);
+    m_autoScroll=new QPushButton("Auto-scroll",this);m_autoScroll->setObjectName("autoScroll");m_autoScroll->setCheckable(true);modes->addWidget(m_autoScroll);
+    m_autoScrollSpeed=new QSpinBox(this);m_autoScrollSpeed->setObjectName("autoScrollSpeed");m_autoScrollSpeed->setRange(10,120);m_autoScrollSpeed->setSuffix(" px/s");m_autoScrollSpeed->setAccessibleName("Auto-scroll speed");m_autoScrollSpeed->setValue(qBound(10,QSettings().value("reader/autoScrollSpeed",30).toInt(),120));modes->addWidget(m_autoScrollSpeed);
+    connect(m_autoScrollSpeed,qOverload<int>(&QSpinBox::valueChanged),this,[](int speed){QSettings().setValue("reader/autoScrollSpeed",speed);});
+    m_autoScrollTimer.setInterval(33);
+    connect(m_autoScroll,&QPushButton::toggled,this,[this](bool enabled){
+        m_autoScroll->setText(enabled?"Pause auto-scroll":"Auto-scroll");m_autoScrollRemainder=0;
+        if(enabled && !m_bookMode && m_index>=0)m_autoScrollTimer.start();else {m_autoScrollTimer.stop();if(enabled)m_autoScroll->setChecked(false);}
+    });
+    connect(&m_autoScrollTimer,&QTimer::timeout,this,[this]{
+        auto *bar=m_browser->verticalScrollBar();
+        if(!isVisible() || m_bookMode || QApplication::activeModalWidget() || bar->value()>=bar->maximum()){stopAutoScroll();return;}
+        m_autoScrollRemainder+=m_autoScrollSpeed->value()*.033;const int pixels=int(m_autoScrollRemainder);m_autoScrollRemainder-=pixels;bar->setValue(bar->value()+pixels);
+    });
+    connect(qApp,&QGuiApplication::applicationStateChanged,this,[this](Qt::ApplicationState state){if(state!=Qt::ApplicationActive)stopAutoScroll();});
     auto *book = new QCheckBox("Book mode", this); book->setObjectName("bookMode"); modes->addWidget(book);
     auto *flip = new QCheckBox("Animate page turns", this); flip->setChecked(QSettings().value("reader/pageAnimation", true).toBool()); modes->addWidget(flip);
     auto *previousPage = new QPushButton("Previous page", this); auto *nextPage = new QPushButton("Next page", this); modes->addWidget(previousPage); modes->addWidget(nextPage);
@@ -306,6 +322,7 @@ void ReaderWidget::setKudosStatus(const QString &status,bool guest) {
 }
 void ReaderWidget::showChapter(int index)
 {
+    stopAutoScroll();
     if (index < 0 || index >= m_chapters.size()) return;
     saveProgress();
     m_translator->cancel(); m_busy = false; m_index = index;
@@ -319,6 +336,7 @@ void ReaderWidget::showChapter(int index)
 }
 void ReaderWidget::renderText(const QString &text, double fraction)
 {
+    stopAutoScroll();
     auto *bar = m_browser->verticalScrollBar();
     const int anchor=m_bookMode && fraction<0 ? m_book->anchor() : -1;
     if (fraction < 0 && m_bookMode) fraction = m_book->fraction();
@@ -404,6 +422,7 @@ void ReaderWidget::translateChapter()
 }
 void ReaderWidget::clear()
 {
+    stopAutoScroll();
     saveProgress();
     m_progressTimer.stop();
     ++m_renderRevision;
@@ -419,6 +438,7 @@ void ReaderWidget::setFullscreen(bool full) {
 }
 void ReaderWidget::showSettings()
 {
+    stopAutoScroll();
     QSettings settings;
     ReadingSettingsDialog dialog(this); dialog.setWindowTitle(QStringLiteral("Reading settings"));
     applyReadableTheme(&dialog);
@@ -589,6 +609,7 @@ void ReaderWidget::showBookmarks()
 }
 
 void ReaderWidget::setBookMode(bool enabled) {
+    stopAutoScroll();if(m_autoScroll)m_autoScroll->setEnabled(!enabled);
     QSettings().setValue("reader/bookMode",enabled);
     m_bookMode=enabled; m_browser->setVisible(!enabled); m_book->setVisible(enabled);
     if(enabled) { auto *bar=m_browser->verticalScrollBar(); m_book->setContent(m_browser->document(),bar->maximum()>0?double(bar->value())/bar->maximum():0,m_browser->palette().color(QPalette::Base),m_browser->palette().color(QPalette::Text)); m_book->setFocus(); }
@@ -601,7 +622,10 @@ void ReaderWidget::setTextOnly(bool enabled) {
     m_browser->setVerticalScrollBarPolicy(enabled?Qt::ScrollBarAlwaysOff:Qt::ScrollBarAsNeeded);
     if(m_bookMode) m_book->setFocus(); else m_browser->setFocus();
 }
+void ReaderWidget::stopAutoScroll() {if(m_autoScroll)m_autoScroll->setChecked(false);m_autoScrollTimer.stop();}
+void ReaderWidget::hideEvent(QHideEvent *event) {stopAutoScroll();QWidget::hideEvent(event);}
 bool ReaderWidget::eventFilter(QObject *object,QEvent *event) {
+    if(object==m_browser->viewport() && (event->type()==QEvent::Wheel || event->type()==QEvent::MouseButtonPress || event->type()==QEvent::TouchBegin))stopAutoScroll();
     if(object==m_browser->viewport() && event->type()==QEvent::MouseButtonDblClick && m_textOnly) { setTextOnly(false); return true; }
     return QWidget::eventFilter(object,event);
 }

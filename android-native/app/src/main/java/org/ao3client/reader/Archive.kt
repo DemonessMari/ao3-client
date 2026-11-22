@@ -124,7 +124,7 @@ object ArchiveParser {
     }
 }
 
-class Archive(private val prefs: SharedPreferences,private val websiteProbe:((CookieManager,String)->String)?=null) {
+class Archive(private val prefs: SharedPreferences,private val connectionFactory:(URL)->HttpURLConnection={it.openConnection() as HttpURLConnection},private val websiteProbe:((CookieManager,String)->String)?=null) {
     private val cookieLock = Any()
     @Volatile private var cookieGeneration = 0
     private val cookies = CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER)
@@ -162,7 +162,7 @@ class Archive(private val prefs: SharedPreferences,private val websiteProbe:((Co
         repeat(6) {
             if(generation != cookieGeneration) throw java.util.concurrent.CancellationException("Session changed")
             require(url.protocol == "https" && url.host == "archiveofourown.org" && url.port in listOf(-1,443) && url.userInfo==null) { "Unexpected redirect from AO3" }
-            val connection = url.openConnection() as HttpURLConnection
+            val connection = connectionFactory(url)
             try {
                 connection.instanceFollowRedirects = false
                 connection.useCaches = false
@@ -194,8 +194,8 @@ class Archive(private val prefs: SharedPreferences,private val websiteProbe:((Co
                 } else {
                     val body = (if (status >= 400) connection.errorStream else connection.inputStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
                     if (status >= 400) {
-                        if(status==429)error("AO3 rate limit reached (HTTP 429). Wait before trying again.")
-                        if(status==404)error("AO3 could not find this page (HTTP 404). The work may be unavailable or require access through your account.")
+                        if(status==429)error("AO3 rate limit reached (HTTP 429) for ${url.path}. Wait before trying again.")
+                        if(status==404)error("AO3 returned HTTP 404 for ${url.path}. The page was not found; check the same work in the website view.")
                         if (body.contains("archive is down for maintenance", true)) error("AO3 is down for maintenance (HTTP $status). Try again later.")
                         error("AO3 returned HTTP $status. Please try again later.")
                     }

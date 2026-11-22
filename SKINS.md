@@ -24,3 +24,9 @@ Choose **System** in Android reading appearance, or **Follow system theme** in t
 Use **Import font** in Reading settings to select a `.ttf` or `.otf` file (up to 20 MB). The app keeps a local copy and selects it for the preview, scrolling and book mode. Select Serif or Sans serif to switch back, or **Remove font** to delete the selected imported copy. Up to 20 fonts can be kept. Font files are separate from color skins and library backups.
 
 Imported fonts also apply to native menus, titles and work previews by default. Turn off **Use imported font in interface** to keep the system interface font while retaining the imported font for reading. Interface sizes and heading weights are preserved.
+
+## Richer native skins (proposed)
+
+A version 2 JSON skin can extend the current color fields with validated typography, spacing, borders, corner shapes and named component rules (header, buttons, work cards, tags and reader). Each platform would apply these through native drawing, fonts and layout APIs, without CSS selectors, injected stylesheets or executable scripts. Existing version 1 skins would remain supported. This extension is not implemented yet.
+
+Font/image assets could be packaged with the JSON in an `.ao3skin` ZIP, using local asset references. Reader content, chapter parsing and AO3 work CSS would remain separate. A native skin cannot automatically reproduce arbitrary AO3 HTML/CSS layouts.

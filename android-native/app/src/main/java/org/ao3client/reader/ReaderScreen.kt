@@ -29,6 +29,14 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 @Composable fun ReaderScreen(vm: ClientState) {
     val readingFamily=readerFontFamily(vm)
@@ -52,6 +60,36 @@ import kotlinx.coroutines.launch
     val chapterIndex = vm.chapter
     val scroll = key(vm.chapter, vm.readerRevision, vm.bookMode) { rememberLazyListState(vm.positionIndex.coerceIn(paragraphs.indices), vm.positionOffset.coerceAtLeast(0)) }
     val ioScope=rememberCoroutineScope()
+    var autoScroll by remember(vm.chapter,text,vm.bookMode) { mutableStateOf(false) }
+    val dragged by scroll.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(dragged) {if(dragged)autoScroll=false}
+    val density=LocalDensity.current.density
+    val view=LocalView.current
+    SideEffect { vm.readerOverlayOpen=tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent }
+    DisposableEffect(activity,view,vm.keepScreenOn) {
+        val previous=view.keepScreenOn;view.keepScreenOn=vm.keepScreenOn
+        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_PAUSE){autoScroll=false;vm.saveProgress()} }
+        activity.lifecycle.addObserver(observer)
+        onDispose {activity.lifecycle.removeObserver(observer);view.keepScreenOn=previous;vm.readerOverlayOpen=false}
+    }
+    LaunchedEffect(autoScroll,vm.autoScrollSpeed,scroll) {
+        if(!autoScroll)vm.saveProgress()
+        while(autoScroll && !vm.bookMode) {
+            delay(33)
+            if(!scroll.canScrollForward){autoScroll=false;break}
+            if(!scroll.isScrollInProgress)scroll.scrollBy(vm.autoScrollSpeed*density*.033f)
+        }
+    }
+    LaunchedEffect(tools,appearance,notes,chaptersMenu,bookmarksMenu,bookmarkDialog,translationConsent) {
+        if(tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent)autoScroll=false
+    }
+    var consumedStep by remember { mutableLongStateOf(vm.readerStep.first) }
+    LaunchedEffect(vm.readerStep) {
+        if(consumedStep!=vm.readerStep.first){consumedStep=vm.readerStep.first;autoScroll=false
+            if(!vm.bookMode)scroll.animateScrollBy(vm.readerStep.second*(scroll.layoutInfo.viewportEndOffset-scroll.layoutInfo.viewportStartOffset)*.85f)
+        }
+    }
+
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         uri?.let { ioScope.launch { try {
             val content = fic.title + "\nby " + fic.author + "\n\n" + vm.chapters.joinToString("\n\n") { it.exportText() }
@@ -66,7 +104,8 @@ import kotlinx.coroutines.launch
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
     LaunchedEffect(scroll, chapterIndex, vm.translation, vm.bookMode) {
-        snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; vm.saveProgress() } }
+        var lastAutoSave=0L
+        snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; val now=android.os.SystemClock.uptimeMillis();if(!autoScroll || now-lastAutoSave>=1000){vm.saveProgress();lastAutoSave=now} } }
     }
     BackHandler { when { notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
     Scaffold(
@@ -86,6 +125,7 @@ import kotlinx.coroutines.launch
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
                 if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
+                if(autoScroll && !vm.textOnly) TextButton(onClick={autoScroll=false}) {Text("Pause auto-scroll")}
                 if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(currentChapter.title,Modifier.weight(1f).padding(vertical=6.dp),style=MaterialTheme.typography.labelLarge)
                     if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) TextButton(onClick={notes=true}) { Text("Author notes") }
@@ -118,6 +158,14 @@ import kotlinx.coroutines.launch
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Reading options", style = MaterialTheme.typography.titleLarge)
+            if(!vm.bookMode) {
+                MenuRow(if(autoScroll) "Pause auto-scroll" else "Start auto-scroll",onClick={tools=false;autoScroll=!autoScroll})
+                Text("Auto-scroll speed · ${vm.autoScrollSpeed}")
+                Slider(value=vm.autoScrollSpeed.toFloat(),onValueChange={vm.autoScrollSpeed(it.toInt())},valueRange=10f..120f)
+            }
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Volume buttons turn pages",Modifier.weight(1f));Switch(vm.volumeNavigation,{vm.volumeNavigation(it)})}
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Keep screen on",Modifier.weight(1f));Switch(vm.keepScreenOn,{vm.keepScreenOn(it)})}
+
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
             KudosButton(vm,fic.id)
             WorkAccountButton(vm,fic.id)

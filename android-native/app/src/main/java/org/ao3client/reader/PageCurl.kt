@@ -182,6 +182,8 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
             return
         }
         target=(index+delta).coerceIn(pages.indices); if(target!=index) settle(true) }
+    var consumedStep by remember { mutableLongStateOf(vm.readerStep.first) }
+    LaunchedEffect(vm.readerStep) {if(consumedStep!=vm.readerStep.first){consumedStep=vm.readerStep.first;turn(vm.readerStep.second)}}
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             Canvas(Modifier.fillMaxSize().semantics {

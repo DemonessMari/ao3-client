@@ -45,6 +45,19 @@ import kotlinx.coroutines.CancellationException
 
 class MainActivity : ComponentActivity() {
     private val model: ClientState by viewModels()
+    private fun readerVolumeDirection(keyCode:Int):Int? {
+        if(model.screen!="reader" || !model.volumeNavigation || model.readerOverlayOpen)return null
+        return when(keyCode){android.view.KeyEvent.KEYCODE_VOLUME_DOWN->1;android.view.KeyEvent.KEYCODE_VOLUME_UP->-1;else->null}
+    }
+    override fun onKeyDown(keyCode:Int,event:android.view.KeyEvent):Boolean {
+        val direction=readerVolumeDirection(keyCode)
+        if(direction!=null){if(event.repeatCount==0)model.stepReading(direction);return true}
+        return super.onKeyDown(keyCode,event)
+    }
+    override fun onKeyUp(keyCode:Int,event:android.view.KeyEvent):Boolean {
+        if(readerVolumeDirection(keyCode)!=null)return true
+        return super.onKeyUp(keyCode,event)
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         setContent {
@@ -153,7 +166,7 @@ class MainActivity : ComponentActivity() {
 @Composable fun ErrorCard(message: String, dismiss: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+            SelectionContainer(Modifier.weight(1f)) { Text(message, color = MaterialTheme.colorScheme.onErrorContainer) }
             IconButton(onClick = dismiss) { Icon(Icons.Default.Close, "Dismiss error") }
         }
     }

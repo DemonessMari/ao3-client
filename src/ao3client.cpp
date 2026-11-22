@@ -49,7 +49,7 @@ QString ao3NetworkError(QNetworkReply *reply)
 {
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     if(status==429)return QStringLiteral("AO3 rate limit reached (HTTP 429). Wait before trying again.");
-    if(status==404)return QStringLiteral("AO3 could not find this page (HTTP 404). The work may be unavailable or require account access.");
+    if(status==404)return QStringLiteral("AO3 returned HTTP 404 for %1. Check the same work in the website view.").arg(reply->url().path());
     if (status == 418 || status == 503) {
         const QString body = QString::fromUtf8(reply->peek(65536));
         if (body.contains(QStringLiteral("archive is down for maintenance"), Qt::CaseInsensitive))
