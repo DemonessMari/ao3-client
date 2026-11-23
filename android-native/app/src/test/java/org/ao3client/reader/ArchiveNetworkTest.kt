@@ -58,6 +58,17 @@ class ArchiveNetworkTest {
         assertTrue(calls.last().written.toString("UTF-8").contains("fresh%2B%26token"))
         assertEquals("https://archiveofourown.org/users/Writer/subscriptions?page=1",calls.last().getRequestProperty("Referer"))
     }
+    @Test fun batchInboxUsesRepeatedServerRecordIdsAndPostsOnlyOnce() {
+        val fixture=javaClass.classLoader!!.getResource("archive-inbox.html")!!.readText()
+        val item=Regex("""<li id="feedback_comment_55"[\s\S]*?</li>""").find(fixture)!!.value
+        val html=fixture.replace(item,item+item.replace("feedback_comment_55","feedback_comment_56").replace("value=\"77\"","value=\"78\""))
+        val result=html.replace("class=\"unread comment\"","class=\"comment\"")
+        val calls=mutableListOf<Reply>();val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())html else result).also{calls+=it}})
+        assertEquals(2,client.archiveInboxBatch("Writer",1,setOf("55","56"),"Mark read").entries.size)
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod})
+        val fields=calls.last().written.toString("UTF-8")
+        assertTrue(fields.contains("inbox_comments%5B%5D=77"));assertTrue(fields.contains("inbox_comments%5B%5D=78"));assertFalse(fields.contains("inbox_comments%5B%5D=55"))
+    }
     @Test fun readingListsUseOnlyAuthenticatedGetRoutesAndKeepLaterWhenPaging() {
         val html=javaClass.classLoader!!.getResource("account-readings.html")!!.readText();val calls=mutableListOf<Reply>()
         val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,html).also{calls+=it}})

@@ -39,7 +39,7 @@ internal fun readingText(element:Element):ParsedReadingText {
     NodeTraversor.traverse(object:NodeVisitor {
         override fun head(node:Node,depth:Int) {
             if(node is TextNode) text.append(node.wholeText)
-            if(node is Element) { starts[node]=text.length; if(node.normalName()=="br") text.append('\n') }
+            if(node is Element) { starts[node]=text.length; if(node.normalName()=="br") text.append('\n'); if(node.normalName()=="img")text.append("\n["+node.attr("alt").ifBlank{"Image"}+"]\n") }
         }
         override fun tail(node:Node,depth:Int) {
             if(node !is Element) return

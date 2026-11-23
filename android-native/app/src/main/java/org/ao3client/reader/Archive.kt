@@ -14,15 +14,15 @@ import org.json.JSONObject
 
 data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "",val readingInfo:String="")
 data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String, val avatarUrl:String="",val avatarAlt:String="")
-data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "", internal val styles: List<TextStyleSpan> = emptyList()) {
+data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "", internal val styles: List<TextStyleSpan> = emptyList(), val html:String = "", val workCss:String = "") {
     fun exportText(): String = listOfNotNull(title,notesBefore.takeIf { it.isNotBlank() }?.let { "Author notes\n\n$it" },text,notesAfter.takeIf { it.isNotBlank() }?.let { "End notes\n\n$it" }).joinToString("\n\n")
-    fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter).put("styles",JSONArray().also { array -> styles.forEach { array.put(it.json()) } })
+    fun json(): JSONObject = JSONObject().put("title",title).put("text",text).put("notesBefore",notesBefore).put("notesAfter",notesAfter).put("styles",JSONArray().also { array -> styles.forEach { array.put(it.json()) } }).put("html",html).put("workCss",workCss)
     companion object {
         fun fromJson(value: JSONObject): Chapter {
             val text=value.getString("text"); val styles=value.optJSONArray("styles") ?: JSONArray()
             return Chapter(value.optString("title"),text,value.optString("notesBefore"),value.optString("notesAfter"),(0 until styles.length()).mapNotNull { i ->
                 styles.optJSONObject(i)?.let(TextStyleSpan::fromJson)?.takeIf { it.start>=0 && it.end>it.start && it.end<=text.length }
-            })
+            },staticReadingHtml(value.optString("html")),value.optString("workCss").take(262144))
         }
     }
 }
@@ -101,10 +101,11 @@ object ArchiveParser {
                 if (order.getValue(note) < order.getValue(bodies[target])) before[target].add(content) else after[target].add(content)
             }
         }
+        val workCss=doc.select("#work-skin style").joinToString("\n") { it.data() }.take(262144)
         return bodies.mapIndexed { i, el ->
             val title = chapterRoot(el)?.selectFirst("h3.title")?.text()
             val content=readingText(el)
-            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles)
+            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles,staticReadingHtml(el.html()),workCss)
         }
     }
     private fun trustedIdentityNode(node: Element): Boolean =
@@ -181,7 +182,7 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
             return "/works/search?" + args.joinToString("&") { encode(it.first) + "=" + encode(it.second) }
         }
     }
-    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null, cookieJar:CookieManager=cookies, userAgent:String?=null, persist:Boolean=true): String {
+    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null, cookieJar:CookieManager=cookies, userAgent:String?=null, persist:Boolean=true,extraFields:List<Pair<String,String>> = emptyList()): String {
         val generation = expectedGeneration ?: cookieGeneration
         var url = URL(BASE + path)
         var post = form
@@ -205,7 +206,7 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
                 post?.let { values ->
                     connection.requestMethod = "POST"; connection.doOutput = true
                     connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                    connection.outputStream.use { out -> out.write(values.entries.joinToString("&") { encode(it.key) + "=" + encode(it.value) }.toByteArray()) }
+                    connection.outputStream.use { out -> out.write((values.entries.map{it.key to it.value}+extraFields).joinToString("&") { encode(it.first) + "=" + encode(it.second) }.toByteArray()) }
                 }
                 val status = connection.responseCode
                 synchronized(cookieLock) {
@@ -264,6 +265,20 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         val result=try{parseArchivePage(html,kind,user,id,page)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
         val entry=result.entries.firstOrNull{it.id==entryId}
         require(when(label){"Unsubscribe","Delete from inbox"->entry==null;"Mark read"->entry!=null && !entry.unread;"Mark unread"->entry?.unread==true;else->false}){"Could not confirm the change. Refresh the AO3 list before trying again."}
+        return result
+    }
+    internal fun archiveInboxBatch(user:String,page:Int,ids:Set<String>,label:String):ArchivePage {
+        require(ids.isNotEmpty() && ids.size<=100 && label in listOf("Mark read","Mark unread","Delete from inbox"))
+        val generation=cookieGeneration;val route=archivePageRoute("inbox",user)
+        val html=request("$route?page=$page",expectedGeneration=generation)
+        val current=parseArchivePage(html,"inbox",user,"",page)
+        require(ids.all{id->current.entries.any{it.id==id && label in it.actions}}){"The selected entries changed. Refresh the inbox."}
+        val action=pageAction(html,"inbox",user,"",page,ids.first(),label)
+        val fields=action.fields-"inbox_comments[]"
+        val selected=current.entries.filter{it.id in ids}.map{"inbox_comments[]" to it.selection}
+        val response=try{request(action.path,fields,generation,referer="$route?page=$page",extraFields=selected)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the changes. Refresh your inbox before trying again.",e)}
+        val result=parseArchivePage(response,"inbox",user,"",page)
+        require(ids.all{id->val found=result.entries.firstOrNull{it.id==id};when(label){"Delete from inbox"->found==null;"Mark read"->found!=null && !found.unread;else->found?.unread==true}}){"Could not confirm every change. Refresh your inbox before trying again."}
         return result
     }
     internal fun accountReadings(user:String,page:Int,later:Boolean):Listing {

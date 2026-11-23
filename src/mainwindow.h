@@ -62,6 +62,8 @@ private:
     int m_listsReturn=0,m_detailsReturn=-1,m_profileReturn=0;
     Work m_listsOrigin;
     bool m_listsUncertain=false;
+    QSet<QString> m_listsSelected;
+    QString m_listsFilter;
     QVector<QPair<QPair<QString,QString>,int>> m_listsTrail;
     void closeArchiveList();
     void setupUI();

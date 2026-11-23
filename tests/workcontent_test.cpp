@@ -1,4 +1,6 @@
 #include "workcontent.h"
+#include "readinglibrary.h"
+#include <QTemporaryDir>
 #include <QGuiApplication>
 #include <QDebug>
 
@@ -40,5 +42,13 @@ int main(int argc, char **argv)
         qCritical() << "Unexpected single-chapter extraction:" << singleText;
         return 1;
     }
+    const auto formatted=extractWorkChapters("<div id='work-skin'><style>#workskin .poem {white-space:pre-wrap}</style><div id='chapters'><div class='userstuff'><p class='poem'>One<br>Two</p><table><tr><td>Cell</td></tr></table><a href='#note'>Note</a><img src='https://example.org/a.png' alt='Illustration'><script>bad()</script></div></div></div>");
+    if(formatted.size()!=1 || !formatted[0].html.contains("<table>") || !formatted[0].workCss.contains("white-space") || formatted[0].html.contains("<script")){qCritical()<<"Formatted extraction failed";return 1;}
+    const auto page=formattedDocument(formatted[0].html,formatted[0].workCss,"#ffffff","#000000");
+    if(!page.contains("default-src 'none'") || page.contains("<img src=\"https:") || !page.contains("Illustration")){qCritical()<<"Formatted isolation failed";return 1;}
+    const auto hostile=staticReadingHtml("<p onclick='bad()'>Safe</p><a href='javascript:bad()'>Bad</a><img src='file:///secret'><form><input></form>");
+    if(hostile.contains("onclick") || hostile.contains("javascript:") || hostile.contains("file:") || hostile.contains("<form")){qCritical()<<"Static sanitization failed";return 1;}
+    QTemporaryDir directory;ReadingLibrary library(directory.path());Work work;work.id="12";work.title="Formatted";
+    if(!library.saveOffline(work,formatted) || library.load("12").first().html!=formatted.first().html || library.load("12").first().workCss!=formatted.first().workCss){qCritical()<<"Formatted persistence failed";return 1;}
     return 0;
 }

@@ -55,6 +55,7 @@ struct WorkChapter {
     QString notesBefore = {};
     QString notesAfter = {};
     QVector<TextStyleSpan> styles = {};
+    QString html = {}, workCss = {};
     QString exportText() const {
         QStringList sections{title};
         if (!notesBefore.isEmpty()) sections << "Author notes\n\n" + notesBefore;

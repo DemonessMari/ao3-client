@@ -17,7 +17,7 @@ Colors use opaque `#RRGGBB` values. Text must have at least 4.5:1 contrast with 
 }
 ```
 
-AO3 site/work CSS skins apply in the AO3 website view. They cannot be imported as native app skins. Downloaded fics currently preserve text and basic inline formatting, not complete work skins.
+AO3 site/work CSS skins apply in the AO3 website view. They cannot be imported as native app skins. Original formatting preserves chapter HTML and available work-skin CSS in downloaded copies. External CSS resources are blocked; this view does not convert AO3 CSS into native app styling.
 
 Choose **System** in Android reading appearance, or **Follow system theme** in the desktop app-skin editor, to switch between light and dark with the operating system. Desktop keeps the previous custom skin for when you turn this off. Side margins and paragraph alignment are separate reading settings, available inside an open work, with a live preview. They apply in scrolling and book mode.
 

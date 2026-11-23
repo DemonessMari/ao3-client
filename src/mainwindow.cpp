@@ -212,7 +212,7 @@ MainWindow::MainWindow(QWidget *parent)
         if(type=="Series" && m_listsKind=="series" && target==m_listsId){m_listsData.canSubscribe=available;m_listsData.subscribed=subscribed;if(m_contentStack->currentWidget()==m_listsPage)renderArchiveList(m_listsData);}
         if(!message.isEmpty())statusBar()->showMessage(message);
     });
-    connect(m_client,&AO3Client::archivePageFetched,this,[this](const QString &kind,const QString &id,const ArchivePage &page){if(kind==m_listsKind && id==m_listsId && m_contentStack->currentWidget()==m_listsPage){const auto canSubscribe=m_listsData.canSubscribe,subscribed=m_listsData.subscribed;m_listsData=page;m_listsData.canSubscribe=canSubscribe;m_listsData.subscribed=subscribed;renderArchiveList(m_listsData);}});
+    connect(m_client,&AO3Client::archivePageFetched,this,[this](const QString &kind,const QString &id,const ArchivePage &page){if(kind==m_listsKind && id==m_listsId && m_contentStack->currentWidget()==m_listsPage){const auto canSubscribe=m_listsData.canSubscribe,subscribed=m_listsData.subscribed;m_listsSelected.clear();m_listsData=page;m_listsData.canSubscribe=canSubscribe;m_listsData.subscribed=subscribed;renderArchiveList(m_listsData);}});
     connect(m_client,&AO3Client::archiveActionFinished,this,[this](const QString &message,bool uncertain){m_listsUncertain=uncertain;statusBar()->showMessage(message);if(m_listsPage && m_contentStack->currentWidget()==m_listsPage)renderArchiveList(m_listsData);});
     connect(m_client,&AO3Client::workDetailsFetched,this,[this](const Work &work){if(work.id==m_listsWorkTarget && m_contentStack->currentWidget()==m_listsPage){m_listsWorkTarget.clear();m_pendingReadId.clear();m_detailsReturn=m_contentStack->indexOf(m_listsPage);m_detailWidget->showWork(work);m_contentStack->setCurrentIndex(2);}});
     connect(m_client,&AO3Client::accountReadingsFetched,this,[this](bool later,const SearchResult &result) {
@@ -1202,12 +1202,29 @@ void MainWindow::renderArchiveList(const ArchivePage &page)
     auto *back=new QPushButton("Back",m_listsPage);m_listsLayout->addWidget(back);connect(back,&QPushButton::clicked,this,&MainWindow::closeArchiveList);
     auto *refresh=new QPushButton("Refresh",m_listsPage);m_listsLayout->addWidget(refresh);connect(refresh,&QPushButton::clicked,this,[this,page]{showArchiveList(m_listsKind,m_listsId,page.page);});
     auto text=[this](const QString &value){auto *label=new QLabel(value,m_listsPage);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);label->setTextInteractionFlags(Qt::TextSelectableByMouse);m_listsLayout->addWidget(label);};text(page.error.isEmpty()?page.title:page.error);
+    auto *filter=new QLineEdit(m_listsPage);filter->setPlaceholderText("Filter this page");filter->setText(m_listsFilter);m_listsLayout->addWidget(filter);
+    connect(filter,&QLineEdit::textChanged,this,[this](const QString &value){m_listsFilter=value;});
+    if(m_listsKind=="inbox") {
+        auto *count=new QLabel(QString::number(m_listsSelected.size())+" selected",m_listsPage);m_listsLayout->addWidget(count);
+        auto *select=new QPushButton("Select visible",m_listsPage);auto *clear=new QPushButton("Clear selection",m_listsPage);m_listsLayout->addWidget(select);m_listsLayout->addWidget(clear);
+        connect(select,&QPushButton::clicked,this,[this,page,filter]{for(const auto &entry:page.entries)if(!entry.selection.isEmpty() && (entry.title+"\n"+entry.body).contains(filter->text(),Qt::CaseInsensitive))m_listsSelected.insert(entry.id);renderArchiveList(m_listsData);});
+        connect(clear,&QPushButton::clicked,this,[this]{m_listsSelected.clear();renderArchiveList(m_listsData);});
+        for(const auto &action:QStringList{"Mark read","Mark unread","Delete from inbox"}) {
+            auto *button=new QPushButton(action+" selected",m_listsPage);button->setEnabled(!m_listsUncertain && !m_listsSelected.isEmpty());m_listsLayout->addWidget(button);
+            connect(button,&QPushButton::clicked,this,[this,page,action]{QStringList selected;for(const auto &entry:page.entries)if(m_listsSelected.contains(entry.id) && entry.actions.contains(action))selected.append(entry.id);if(selected.isEmpty())return;if(action=="Delete from inbox" && QMessageBox::question(this,"Delete from inbox?",QString("Remove %1 selected comments from your inbox? The comments themselves remain on AO3.").arg(selected.size()))!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction("inbox",{},page.page,selected.first(),action,selected);});
+        }
+    }
     if(!page.description.isEmpty())text(page.description);
     if(page.entries.isEmpty() && page.error.isEmpty() && page.title!="Loading...")text("No entries.");
     if(m_listsKind=="series" && page.canSubscribe){auto *subscribe=new QPushButton(page.subscribed?"Unsubscribe":"Subscribe to series",m_listsPage);m_listsLayout->addWidget(subscribe);connect(subscribe,&QPushButton::clicked,this,[this,page,subscribe]{subscribe->setEnabled(false);m_client->entitySubscription("Series",m_listsId,!page.subscribed);});}
-    for(const auto &entry:page.entries){text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty())text(entry.body);
+    for(const auto &entry:page.entries){
+        const int start=m_listsLayout->count();
+        if(m_listsKind=="inbox" && !entry.selection.isEmpty()){auto *choose=new QCheckBox("Select comment",m_listsPage);choose->setChecked(m_listsSelected.contains(entry.id));m_listsLayout->addWidget(choose);connect(choose,&QCheckBox::toggled,this,[this,entry](bool checked){if(checked)m_listsSelected.insert(entry.id);else m_listsSelected.remove(entry.id);QTimer::singleShot(0,this,[this]{renderArchiveList(m_listsData);});});}
+        text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty())text(entry.body);
         if(!entry.target.isEmpty()){auto *open=new QPushButton(entry.target.startsWith("/comments/")?"Open thread":entry.target.startsWith("/bookmarks/")?"Open on AO3":"Open",m_listsPage);m_listsLayout->addWidget(open);connect(open,&QPushButton::clicked,this,[this,entry]{openArchiveTarget(entry.target);});}
         for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if((action=="Unsubscribe" || action=="Delete from inbox") && QMessageBox::question(this,action+"?",entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
+        QList<QWidget *> entryWidgets;for(int i=start;i<m_listsLayout->count();++i)if(auto *widget=m_listsLayout->itemAt(i)->widget())entryWidgets.append(widget);
+        auto applyFilter=[entry,entryWidgets](const QString &value){const bool visible=(entry.title+"\n"+entry.body).contains(value,Qt::CaseInsensitive);for(auto *widget:entryWidgets)widget->setVisible(visible);};applyFilter(filter->text());connect(filter,&QLineEdit::textChanged,this,applyFilter);
     }
     for(int delta:{-1,1}){auto *button=new QPushButton(delta<0?"Previous":"Next",m_listsPage);button->setEnabled(delta<0?page.page>1:page.page<page.pages);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,page,delta]{showArchiveList(m_listsKind,m_listsId,page.page+delta);});}text(QString::number(page.page)+" / "+QString::number(page.pages));m_listsLayout->addStretch();
 }

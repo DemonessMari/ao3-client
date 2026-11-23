@@ -401,6 +401,11 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         load {val result=withContext(Dispatchers.IO){archive.archivePage(kind,user,id,page)};if(kind=="series" || username==user)archiveList=result}
         if(kind=="series")subscriptionState("Series",id)
     }
+    internal fun actOnInboxSelection(ids:Set<String>,label:String) {
+        if(loading || archiveUncertain || archiveKind!="inbox")return
+        val user=username ?: return;val page=archiveList?.page ?: return
+        load {try {val result=withContext(Dispatchers.IO){archive.archiveInboxBatch(user,page,ids,label)};if(username==user){archiveList=result;notice="Changes confirmed by AO3."}}catch(e:Exception){if(e is CancellationException)throw e;archiveUncertain=true;throw e}}
+    }
     internal fun actOnArchiveEntry(entry:ArchiveEntry,label:String) {
         if(loading || archiveUncertain)return
         val user=username ?: return;val kind=archiveKind;val id=archiveId;val page=archiveList?.page ?: return
@@ -464,10 +469,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     }
     fun refreshLibrary() { try { libraryEntries = library.entries(); if(java.io.File(getApplication<Application>().filesDir,"reading-library").listFiles().orEmpty().any { it.name.contains(".corrupt-") } && !storage.getBoolean("recoveryNoticeShown",false)) { notice="Some damaged library data was preserved and recovered where possible. Check your bookmarks and keep a backup."; storage.edit().putBoolean("recoveryNoticeShown",true).apply() } } catch(e: Exception) { error = e.message } }
     fun openLibrary(entry: LibraryEntry) { selected = entry.fic; readerReturn = "library"; read() }
-    fun saveOffline() {
+    fun saveOffline(images:Boolean=false) {
         val fic = selected ?: return; val content = chapters
         if(content.isEmpty()) return
-        load { withContext(Dispatchers.IO) { library.saveOffline(fic, content) }; refreshLibrary() }
+        load { val saved=withContext(Dispatchers.IO) { val context=currentCoroutineContext();val saved=if(images)cacheChapterImages(content){url->context.ensureActive();fetchReadingImage(url)} else content;context.ensureActive();library.saveOffline(fic, saved);saved }; if(selected?.id==fic.id)chapters=saved; refreshLibrary();notice="Saved offline" }
     }
     fun favorite(ficId: String, value: Boolean) { try { library.favorite(ficId, value); refreshLibrary() } catch(e: Exception) { error = e.message } }
     fun removeOffline(ficId: String) { try { library.removeOffline(ficId); refreshLibrary() } catch(e: Exception) { error = e.message } }

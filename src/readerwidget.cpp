@@ -1,4 +1,7 @@
 #include "readerspeech.h"
+#ifdef AO3_WEBENGINE
+#include "formattedreader.h"
+#endif
 #include "readerwidget.h"
 #include "readerfonts.h"
 #include "bookview.h"
@@ -109,6 +112,13 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
         tools->addStretch(); layout->addLayout(tools);
     }
 
+#ifdef AO3_WEBENGINE
+    auto *formatted=new QPushButton("Original formatting",this);formatted->setObjectName("formattedReading");
+    auto *images=new QPushButton("Save offline with images",this);images->setObjectName("saveOfflineImages");
+    if(desktopLibraryTools){desktopLibraryTools->insertWidget(1,formatted);desktopLibraryTools->insertWidget(2,images);}else {layout->addWidget(formatted);layout->addWidget(images);}
+    connect(formatted,&QPushButton::clicked,this,[this]{if(m_index>=0){saveProgress();showFormattedReader(this,m_work,m_chapters,m_index);}});
+    connect(images,&QPushButton::clicked,this,[this]{if(m_chapters.isEmpty())return;auto saved=m_chapters;QString error;if(!saveFormattedImages(this,saved,error)){m_status->setText(error);return;}if(!ReadingLibrary().saveOffline(m_work,saved)){m_status->setText("Could not save offline copy. Check available storage.");return;}m_chapters=saved;m_status->setText("Saved offline with images");});
+#endif
     auto *navigation = new QHBoxLayout;
     m_previous = new QPushButton(QStringLiteral("Previous chapter"), this);
     m_previous->setObjectName(QStringLiteral("previousChapter")); m_previous->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
@@ -220,6 +230,9 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
         top->addWidget(m_optionsToggle, 0, 1); top->addWidget(m_fullscreen, 0, 2);
         auto *actions = new QHBoxLayout; actions->addWidget(settings); actions->addWidget(restart);
         optionsLayout->addLayout(actions);
+#ifdef AO3_WEBENGINE
+        layout->removeWidget(formatted);layout->removeWidget(images);optionsLayout->addWidget(formatted);optionsLayout->addWidget(images);
+#endif
         layout->removeItem(navigation); optionsLayout->addLayout(navigation);
         layout->removeItem(translation); optionsLayout->addLayout(translation);
         layout->removeWidget(m_status); optionsLayout->addWidget(m_status);

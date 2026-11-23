@@ -116,6 +116,14 @@ private slots:
         network->pages={html.toUtf8(),empty.toUtf8()};QSignalSpy finished(window.m_client,&AO3Client::archiveActionFinished);window.m_client->performArchiveAction("subscriptions",{},1,"4","Unsubscribe");QTRY_COMPARE(finished.size(),1);QVERIFY(!finished.last()[1].toBool());QVERIFY(network->bodies.last().contains("fresh%2B%26token"));QVERIFY(window.m_listsData.entries.isEmpty());
         window.setLoggedInState(false);QVERIFY(window.m_listsData.entries.isEmpty());QVERIFY(window.m_listsKind.isEmpty());
     }
+    void bulkInboxUsesFreshRecordIdsAndChecksEveryResult() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/archive-inbox.html"));QVERIFY(file.open(QIODevice::ReadOnly));QString html=QString::fromUtf8(file.readAll());
+        const QRegularExpression itemRx("<li id=\"feedback_comment_55\"[\\s\\S]*?</li>");const auto match=itemRx.match(html);QVERIFY(match.hasMatch());const auto item=match.captured();html.replace(item,item+QString(item).replace("feedback_comment_55","feedback_comment_56").replace("value=\"77\"","value=\"78\""));
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});
+        network->pages={html.toUtf8(),QString(html).replace("class=\"unread comment\"","class=\"comment\"").toUtf8()};QSignalSpy finished(window.m_client,&AO3Client::archiveActionFinished);
+        window.m_client->performArchiveAction("inbox",{},1,"55","Mark read",{"55","56"});QTRY_COMPARE(finished.size(),1);QVERIFY(!finished.last()[1].toBool());
+        const auto posted=network->bodies.last();QVERIFY(posted.contains("inbox_comments%5B%5D=77"));QVERIFY(posted.contains("inbox_comments%5B%5D=78"));QVERIFY(!posted.contains("inbox_comments%5B%5D=55"));
+    }
     void workActionsWrapInsideNarrowDetails() {
         WorkDetailWidget detail;Work work;work.id="123";work.title="A story";work.author="Writer";detail.showWork(work);detail.resize(380,850);detail.show();QTest::qWait(30);
         auto *actions=detail.findChild<QWidget *>("detailActions");QVERIFY(actions);QVERIFY(actions->layout()->hasHeightForWidth());

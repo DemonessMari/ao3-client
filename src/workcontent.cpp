@@ -1,4 +1,5 @@
 #include "workcontent.h"
+#include "formattedwork.h"
 #include <QRegularExpression>
 #include <QTextDocument>
 #include <QTextBlock>
@@ -134,6 +135,7 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                     }
                     if (title.isEmpty()) title = QStringLiteral("Chapter %1").arg(chapters.size() + 1);
                     WorkChapter chapter{title,text};
+                    chapter.html=staticReadingHtml(body);chapter.workCss=readingWorkCss(html);
                     const int trim = document.toPlainText().indexOf(text);
                     for (auto block = document.begin(); block.isValid(); block = block.next()) {
                         for (auto it = block.begin(); !it.atEnd(); ++it) {

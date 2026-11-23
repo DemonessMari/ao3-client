@@ -55,7 +55,7 @@ public:
     void fetchUserWorks(int page = 1);
     void fetchAccountReadings(bool later,int page=1);
     void fetchArchivePage(const QString &kind,const QString &id={},int page=1);
-    void performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label);
+    void performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label,const QStringList &selection={});
     void fetchProfileAvatar(const QString &username,const QUrl &url);
     void fetchAuthorProfile(const QString &username);
     void fetchAuthorWorks(const QString &username, int page = 1, bool bookmarks = false);

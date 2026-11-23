@@ -8,13 +8,15 @@ Private AO3 bookmark, subscription, history and inbox lists are fetched on reque
 
 Native profile pictures load from AO3 and may follow AO3 image redirects to Amazon S3. AO3 cookies are not sent to S3. Missing or unavailable images use an initial.
 
+Original formatting is a static, isolated view with JavaScript and background network access disabled. Save offline with images explicitly downloads HTTPS chapter images from their hosts without AO3 session cookies; it does not load tracking pixels while reading. Missing images remain labelled. Saved images are embedded in the offline copy and included in backups with downloads.
+
 There are no ads, analytics, crash-reporting SDKs or developer-operated servers.
 
 Translation sends chapter text, the selected language and any configured API key to your LibreTranslate provider after consent. Changing providers resets consent. AO3 credentials are excluded. Remote providers require HTTPS; localhost permits HTTP. The provider controls its own retention and privacy practices.
 
 Preferences, imported fonts, translation keys, history, progress, favorites, bookmarks and downloads are stored locally without additional app-level encryption. Android cloud/device backups are disabled. Desktop data uses Qt's per-user directories.
 
-Exported backups contain library data and optional downloaded text, but no credentials. They are not encrypted. Imports retain existing downloads and progress. Corrupt files are preserved where possible; recovery may lose recent changes. Offline copies do not refresh automatically.
+Exported backups contain library data and optional downloaded text, chapter HTML, work-skin CSS and saved images, but no credentials. They are not encrypted. Imports retain existing downloads and progress. Corrupt files are preserved where possible; recovery may lose recent changes. Offline copies do not refresh automatically.
 
 Removing a download retains history and bookmarks. Clearing Android storage or uninstalling deletes app data. Desktop uninstall retains reading data. Export before clearing data or changing Android signing keys.
 

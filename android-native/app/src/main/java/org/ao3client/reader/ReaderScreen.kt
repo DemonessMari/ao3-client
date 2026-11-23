@@ -45,6 +45,7 @@ import androidx.lifecycle.LifecycleEventObserver
     val activity = LocalContext.current as MainActivity
     val context = LocalContext.current
     var tools by remember { mutableStateOf(false) }
+    var formatted by remember {mutableStateOf(false)}
     var translationConsent by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(false) }
     var speechOptions by remember { mutableStateOf(false) }
@@ -69,7 +70,7 @@ import androidx.lifecycle.LifecycleEventObserver
     LaunchedEffect(dragged) {if(dragged)autoScroll=false}
     val density=LocalDensity.current.density
     val view=LocalView.current
-    SideEffect { vm.readerOverlayOpen=tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent || speechOptions }
+    SideEffect { vm.readerOverlayOpen=formatted || tools || appearance || notes || chaptersMenu || bookmarksMenu || bookmarkDialog || translationConsent || speechOptions }
     DisposableEffect(activity,view,vm.keepScreenOn) {
         val previous=view.keepScreenOn;view.keepScreenOn=vm.keepScreenOn
         val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_PAUSE){autoScroll=false;if(speech.active && !speech.paused)speech.pauseOrResume();vm.saveProgress()} }
@@ -156,6 +157,7 @@ import androidx.lifecycle.LifecycleEventObserver
             if(vm.fullScreen && !vm.textOnly) FilledTonalIconButton(onClick = { vm.fullScreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Icon(Icons.Default.Close, "Exit fullscreen") }
         }
     }
+    if(formatted)FormattedReader(vm){formatted=false}
     if(tools) ModalBottomSheet(
         onDismissRequest = { tools = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -174,6 +176,8 @@ import androidx.lifecycle.LifecycleEventObserver
             if(vm.volumeNavigation)VolumeControls(vm)
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Keep screen on",Modifier.weight(1f));Switch(vm.keepScreenOn,{vm.keepScreenOn(it)})}
 
+            if(currentChapter.html.isNotBlank())MenuRow("Original formatting",supportingText="Tables, poetry, images and work skin",onClick={tools=false;formatted=true})
+            MenuRow("Save offline with images",onClick={tools=false;vm.saveOffline(true)})
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
             KudosButton(vm,fic.id)
             WorkAccountButton(vm,fic.id)

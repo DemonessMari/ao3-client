@@ -382,23 +382,30 @@ void AO3Client::fetchArchivePage(const QString &kind,const QString &id,int page)
         ArchivePage out;if(ao3RequestFailed(reply))out.error=ao3NetworkError(reply);else out=ArchivePages::parse(QString::fromUtf8(reply->readAll()),kind,user,id,page);emit archivePageFetched(kind,id,out);
     });
 }
-void AO3Client::performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label)
+void AO3Client::performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label,const QStringList &selection)
 {
     if(!QStringList{"subscriptions","inbox"}.contains(kind) || !m_loginManager->isLoggedIn())return;
     const auto user=m_loginManager->username();const auto route=ArchivePages::route(kind,user,id);if(route.isEmpty())return;
     const auto key=kind+":"+entry;if(m_listMutations.contains(key))return;m_listMutations.insert(key);const auto auth=m_authGeneration;
     const QUrl source("https://archiveofourown.org"+route+"?page="+QString::number(qBound(1,page,1000000)));
     auto *fresh=m_manager->get(makeRequest(source));
-    connect(fresh,&QNetworkReply::finished,this,[this,fresh,source,kind,id,page,entry,label,user,key,auth]{
+    connect(fresh,&QNetworkReply::finished,this,[this,fresh,source,kind,id,page,entry,label,user,key,auth,selection]{
         fresh->deleteLater();if(auth!=m_authGeneration){m_listMutations.remove(key);return;}
-        PageAction action;if(ao3RequestFailed(fresh))action.error=ao3NetworkError(fresh);else action=ArchivePages::action(QString::fromUtf8(fresh->readAll()),kind,user,id,page,entry,label);
+        const auto freshHtml=QString::fromUtf8(fresh->readAll());PageAction action;if(ao3RequestFailed(fresh))action.error=ao3NetworkError(fresh);else action=ArchivePages::action(freshHtml,kind,user,id,page,entry,label);
+        QStringList selectedKeys;
+        if(!selection.isEmpty() && action.error.isEmpty()) {
+            if(kind!="inbox" || selection.size()>100)action.error="Invalid inbox selection.";
+            else {const auto current=ArchivePages::parse(freshHtml,kind,user,id,page);for(const auto &selected:selection){const ArchiveEntry *found=nullptr;for(const auto &item:current.entries)if(item.id==selected){found=&item;break;}if(!found || !found->actions.contains(label)){action.error="The selected entries changed. Refresh your inbox.";break;}selectedKeys.append(found->selection);}if(action.error.isEmpty())action.fields.remove("inbox_comments[]");}
+        }
         if(!action.error.isEmpty()){m_listMutations.remove(key);emit archiveActionFinished(action.error,false);return;}
         QByteArray data;for(auto it=action.fields.cbegin();it!=action.fields.cend();++it){if(!data.isEmpty())data+='&';data+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        for(const auto &selected:selectedKeys){if(!data.isEmpty())data+='&';data+=QUrl::toPercentEncoding("inbox_comments[]")+'='+QUrl::toPercentEncoding(selected);}
         auto request=makeRequest(QUrl("https://archiveofourown.org"+action.path));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",source.toEncoded());
         auto *posted=m_manager->post(request,data);
-        connect(posted,&QNetworkReply::finished,this,[this,posted,kind,id,page,entry,label,user,key,auth]{
+        connect(posted,&QNetworkReply::finished,this,[this,posted,kind,id,page,entry,label,user,key,auth,selection]{
             posted->deleteLater();m_listMutations.remove(key);if(auth!=m_authGeneration)return;
             ArchivePage out;bool confirmed=false;if(!ao3RequestFailed(posted)){out=ArchivePages::parse(QString::fromUtf8(posted->readAll()),kind,user,id,page);if(out.error.isEmpty()){const ArchiveEntry *found=nullptr;for(const auto &e:out.entries)if(e.id==entry){found=&e;break;}confirmed=(label=="Unsubscribe" || label=="Delete from inbox")?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}}
+            if(confirmed && !selection.isEmpty())for(const auto &selected:selection){const ArchiveEntry *found=nullptr;for(const auto &item:out.entries)if(item.id==selected){found=&item;break;}confirmed &= label=="Delete from inbox"?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}
             if(confirmed){emit archivePageFetched(kind,id,out);emit archiveActionFinished("Change confirmed by AO3.",false);}else emit archiveActionFinished("Could not confirm the change. Refresh the AO3 list before trying again.",true);
         });
     });

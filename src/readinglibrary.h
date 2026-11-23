@@ -1,5 +1,6 @@
 #pragma once
 #include "workmodel.h"
+#include "formattedwork.h"
 #include <QDir>
 #include <QFile>
 #include <QSaveFile>
@@ -47,7 +48,7 @@ public:
     static QJsonObject chapterMetadata(const WorkChapter &chapter) {
         QJsonArray styles;
         for (const auto &s:chapter.styles) styles.append(QJsonObject{{"start",s.start},{"end",s.end},{"bold",s.bold},{"italic",s.italic},{"underline",s.underline},{"strike",s.strike},{"code",s.code},{"url",s.url}});
-        return {{"title",chapter.title},{"text",chapter.text},{"notesBefore",chapter.notesBefore},{"notesAfter",chapter.notesAfter},{"styles",styles}};
+        return {{"title",chapter.title},{"text",chapter.text},{"notesBefore",chapter.notesBefore},{"notesAfter",chapter.notesAfter},{"styles",styles},{"html",chapter.html},{"workCss",chapter.workCss}};
     }
     static WorkChapter readChapter(const QJsonObject &chapter) {
         WorkChapter result{chapter.value("title").toString(),chapter.value("text").toString(),chapter.value("notesBefore").toString(),chapter.value("notesAfter").toString()};
@@ -59,6 +60,8 @@ public:
             if (!readingLink(s.value("url").toString()).isEmpty()) span.url=s.value("url").toString();
             result.styles.append(span);
         }
+        result.html=staticReadingHtml(chapter.value("html").toString());
+        result.workCss=chapter.value("workCss").toString().left(262144);
         return result;
     }
     bool saveOffline(const Work &work, const QVector<WorkChapter> &chapters) {

@@ -15,3 +15,11 @@ Still pending: physical-phone rendering and installation, accessibility, large f
 The earlier phone-wide 404 report has not been reproduced or established as resolved. Current desktop authenticated requests and Android-backend public searches/reading succeed; that does not establish the cause or status on the phone.
 
 Full native website parity remains incomplete. Creator/account-management tools, bulk list management, external/series bookmark editing and faithful HTML/media/work skins use the embedded AO3 website. Offline copies preserve text, notes and basic inline formatting. See [feature coverage](FEATURES.md). Keep releases marked prerelease until device acceptance passes.
+
+## Unreleased source after rc.14
+
+2026-11-23: six desktop suites pass, including 59 functional checks and a rendered original-formatting view above 2 MB. A narrow-layout regression introduced by the new controls was corrected. A test crash from mismatched compiled window layouts no longer occurs after a consistent rebuild.
+
+Android: 115 unit tests pass, one live test is skipped in the offline run, and the separate live test passes with two distinct 20-work searches and a readable chapter. Lint has zero errors, 35 warnings and two hints. Controlled tests cover formatted-content persistence, backup retention, HTML sanitization, image embedding and single-request bulk inbox changes. No production account writes were performed.
+
+The connected phone was on rc.10 and was updated successfully to the verified signed rc.14 APK, code 29, retaining app data. The new source changes are not installed or published. Phone action/404 and visual acceptance checks remain pending. Evidence is in the ignored `.codex-attachments/ao3-next-verification` folder.
