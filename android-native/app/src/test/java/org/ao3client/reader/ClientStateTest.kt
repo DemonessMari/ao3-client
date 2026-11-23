@@ -21,6 +21,21 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun seriesNavigationReturnsToTheOriginalFicAndReadingPosition() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences())
+        val html=javaClass.classLoader!!.getResource("work-series.html")!!.readText()
+        val vm=ClientState(app,false,{prefs->Archive(prefs,connectionFactory={url->object:java.net.HttpURLConnection(url){
+            override fun connect(){};override fun disconnect(){};override fun usingProxy()=false
+            override fun getResponseCode()=200
+            override fun getInputStream()=java.io.ByteArrayInputStream(html.toByteArray())
+            override fun getHeaderFields():Map<String,List<String>> = emptyMap()
+        }})}).also{models+=it}
+        vm.selected=Fic("202","Original","Writer");vm.chapters=listOf(Chapter("One","Original chapter content."));vm.chapter=0;vm.screen="reader";vm.readerReturn="library";vm.bookOffset=12
+        vm.showSeries();awaitLoaded(vm);assertEquals("series",vm.screen);assertEquals(2,vm.workSeries!!.size)
+        vm.openSeriesWork("303");awaitLoaded(vm);assertEquals("details",vm.screen);assertEquals("303",vm.selected!!.id);assertTrue(vm.chapters.isEmpty())
+        vm.navigate("series");vm.navigate(vm.seriesReturn)
+        assertEquals("reader",vm.screen);assertEquals("202",vm.selected!!.id);assertEquals("Original chapter content.",vm.chapters.single().text);assertEquals(12,vm.bookOffset);assertEquals("library",vm.readerReturn)
+    }
     @Test fun readerExtrasPersistAndBoundSpeed() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         vm.autoScrollSpeed(500);assertEquals(120,vm.autoScrollSpeed);vm.autoScrollSpeed(-1);assertEquals(10,vm.autoScrollSpeed)

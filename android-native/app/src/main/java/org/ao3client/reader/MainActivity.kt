@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                 "library" -> LibraryScreen(vm)
                 "archiveBookmark" -> ArchiveBookmarkScreen(vm)
                 "comments" -> CommentsScreen(vm)
+                "series" -> SeriesScreen(vm)
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
                 "details" -> DetailScreen(vm)
@@ -122,11 +123,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 @Composable private fun ClientTopBar(vm: ClientState) {
-    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile") || vm.screen=="settings" && vm.settingsReturn=="reader"
+    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile","series") || vm.screen=="settings" && vm.settingsReturn=="reader"
     val navigation: @Composable () -> Unit = {
         if(showBack)IconButton(onClick={vm.navigate(when(vm.screen) {
             "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
-            "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
+            "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
         })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
     }
     val account: @Composable () -> Unit = {
@@ -160,7 +161,7 @@ class MainActivity : ComponentActivity() {
         }
     } else TopAppBar(title={Text(when(vm.screen) {
         "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
-        "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
+        "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
     },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()})
 }
 
@@ -308,6 +309,7 @@ class MainActivity : ComponentActivity() {
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
         KudosButton(vm,fic.id)
         WorkAccountButton(vm,fic.id)
+        OutlinedButton(onClick={vm.showSeries()},enabled=!vm.loading) { Text("Series") }
         OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
         OutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
         Ao3WorkLinks(vm,fic.id)
@@ -451,6 +453,21 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page + 1) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
                 } }
             }
+        }
+    }
+}
+
+@Composable internal fun SeriesScreen(vm:ClientState) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        Text("Series",style=MaterialTheme.typography.headlineMedium)
+        val entries=vm.workSeries
+        if(entries!=null && entries.isEmpty())Text("This work is not part of a series.")
+        entries?.forEach {entry->
+            Text(entry.position,style=MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/series/"+entry.id)}){Text("View series on AO3")}
+            Button(onClick={entry.previous?.let(vm::openSeriesWork)},enabled=entry.previous!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Previous work")}
+            Button(onClick={entry.next?.let(vm::openSeriesWork)},enabled=entry.next!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Next work")}
+            HorizontalDivider()
         }
     }
 }

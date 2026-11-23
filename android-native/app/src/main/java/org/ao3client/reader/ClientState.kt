@@ -18,9 +18,9 @@ internal fun validAlignment(value: String) = value.takeIf { it in listOf("left",
 
 data class Preferences(val language: String = "en", val filterLanguage: Boolean = false, val service: String = "", val apiKey: String = "", val fontSize: Int = 19, val theme: String = "light", val fontFamily: String = "serif", val lineSpacing: Float = 1.6f, val margin: Int = 24, val alignment: String = "left", val useImportedFontInInterface: Boolean = true)
 
-class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true) : AndroidViewModel(app) {
+class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true, archiveFactory:(android.content.SharedPreferences)->Archive={Archive(it)}) : AndroidViewModel(app) {
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
-    private val archive = Archive(storage)
+    private val archive = archiveFactory(storage)
     var autoScrollSpeed by mutableIntStateOf(storage.getInt("autoScrollSpeed",30).coerceIn(10,120));private set
     var volumeNavigation by mutableStateOf(storage.getBoolean("volumeNavigation",false));private set
     var keepScreenOn by mutableStateOf(storage.getBoolean("keepScreenOn",false));private set
@@ -294,6 +294,16 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun cancelLoad() { ++requestRevision; loadJob?.cancel(); loading=false }
     fun navigate(destination: String) {
         if (screen == "reader") saveProgress()
+        if(screen=="series" && destination==seriesReturn) {
+            seriesOrigin?.let { origin ->
+                selected=origin.fic;chapters=origin.chapters;chapter=origin.chapter;translation=origin.translation
+                detailsReturn=origin.detailsReturn;readerReturn=origin.readerReturn
+                if(chapters.isNotEmpty())restorePosition()
+                readerRevision++
+            }
+            seriesOrigin=null
+        }
+        if(destination in listOf("home","search","library","login"))seriesOrigin=null
         if (destination != "details") officialDownloads=null
         if (destination != "reader") { ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
         error = null
@@ -332,6 +342,21 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun myWorks() {
         if (username == null) { navigate("login"); return }
         ownWorks = true; search(1, false)
+    }
+    private data class SeriesOrigin(val fic:Fic,val chapters:List<Chapter>,val chapter:Int,val translation:String?,val detailsReturn:String,val readerReturn:String)
+    private var seriesOrigin:SeriesOrigin?=null
+    internal var workSeries by mutableStateOf<List<SeriesNavigation>?>(null);private set
+    var seriesReturn="details";private set
+    fun showSeries() {
+        val fic=selected ?: return
+        if(screen=="reader")saveProgress()
+        seriesOrigin=SeriesOrigin(fic,chapters,chapter,translation,if(detailsReturn=="series") "home" else detailsReturn,readerReturn)
+        seriesReturn=screen;workSeries=null;navigate("series")
+        load {workSeries=withContext(Dispatchers.IO){archive.series(fic.id)}}
+    }
+    fun openSeriesWork(id:String) = load {
+        val fic=withContext(Dispatchers.IO){archive.workDetails(id)}
+        officialDownloads=null;translation=null;selected=fic;chapters=emptyList();detailsReturn="series";readerReturn="details";screen="details"
     }
     fun showDetails(fic: Fic) { officialDownloads=null; detailsReturn = screen; readerReturn = "details"; if(selected?.id != fic.id) chapters = emptyList(); selected = fic; navigate("details") }
     fun read() {

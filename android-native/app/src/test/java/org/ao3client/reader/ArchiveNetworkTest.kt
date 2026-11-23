@@ -18,6 +18,16 @@ class ArchiveNetworkTest {
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
     }
+    @Test fun seriesNeighborsOpenTheNativeWorkRouteWithFreshMetadata() {
+        val html=javaClass.classLoader!!.getResource("work-series.html")!!.readText()
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,html).also{calls+=it}})
+        val next=client.series("202").first().next!!
+        val work=client.workDetails(next)
+        assertEquals("303",work.id);assertEquals("A work & its sequel",work.title);assertEquals("Writer",work.author)
+        assertEquals(listOf("/works/202","/works/303"),calls.map{it.url.path})
+        assertTrue(calls.all{it.requestMethod=="GET" && it.closed})
+    }
     @Test fun readingUsesTheListingWorkIdAndFollowsChapterRedirects() {
         val calls=mutableListOf<Reply>()
         val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(calls.isEmpty())302 else 200,"<div id='chapters'><div class='userstuff'><p>Actual chapter content.</p></div></div>","/works/123/chapters/456").also {calls+=it}})

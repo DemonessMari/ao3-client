@@ -126,6 +126,8 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     connect(m_kudosButton,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty())emit kudosRequested(m_currentWork.id); });
     auto *profile = new QPushButton("Author profile", m_buttonBar); profile->setObjectName("authorProfileButton"); profile->setVisible(!mobileUi()); btnLayout->addWidget(profile);
     connect(profile, &QPushButton::clicked, this, [this] { if(!m_currentWork.authorUrl.isEmpty()) emit profileRequested(m_currentWork.authorUrl); });
+    auto *series=new QPushButton("Series",m_buttonBar);series->setObjectName("workSeries");layout->addWidget(series,0,Qt::AlignLeft);
+    connect(series,&QPushButton::clicked,this,[this]{if(!m_currentWork.id.isEmpty())emit seriesRequested(m_currentWork.id);});
     auto *comments = new QPushButton("Comments",m_buttonBar); comments->setObjectName("workComments"); btnLayout->addWidget(comments);
     connect(comments,&QPushButton::clicked,this,[this] {if(!m_currentWork.id.isEmpty())emit commentsRequested(m_currentWork.id);});
     auto *online=new QPushButton("AO3 website",m_buttonBar); btnLayout->addWidget(online); online->setToolTip("Official AO3 forms, series, collections and skins. Website sign-in is separate.");

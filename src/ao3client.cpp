@@ -269,19 +269,37 @@ void AO3Client::search(const QString &query, int page, const SearchFilters &filt
     });
 }
 
+void AO3Client::fetchWorkSeries(const QString &workId)
+{
+    if(!QRegularExpression("^[0-9]+$").match(workId).hasMatch())return;
+    const auto auth=m_authGeneration;
+    auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org/works/"+workId+"?view_adult=true")));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,auth] {
+        reply->deleteLater();if(auth!=m_authGeneration)return;
+        WorkSeries result;
+        if(ao3RequestFailed(reply))result.error=ao3NetworkError(reply);
+        else result=parseWorkSeries(QString::fromUtf8(reply->readAll()));
+        emit workSeriesFetched(workId,result);
+    });
+}
+
 void AO3Client::fetchWorkDetails(const QString &workId)
 {
+    if(!QRegularExpression("^[0-9]+$").match(workId).hasMatch())return;
+    const auto auth=m_authGeneration;
     QNetworkRequest request = makeRequest(
         QStringLiteral("https://archiveofourown.org/works/%1?view_adult=true").arg(workId));
     QNetworkReply *reply = m_manager->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, workId]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, workId, auth]() {
         reply->deleteLater();
+        if(auth!=m_authGeneration)return;
         if (ao3RequestFailed(reply)) {
             emit errorOccurred(ao3NetworkError(reply));
             return;
         }
         QString html = QString::fromUtf8(reply->readAll());
         Work work = parseWorkDetails(html, workId);
+        if(work.title.isEmpty()){emit errorOccurred("AO3 did not return this work. Check whether it loads on the website.");return;}
         emit workDetailsFetched(work);
     });
 }
@@ -558,21 +576,19 @@ Work AO3Client::parseWorkDetails(const QString &html, const QString &workId)
     Work work;
     work.id = workId;
 
-    QRegularExpression titleRx(QStringLiteral(R"regex(<h2\s+class="title[^"]*"[^>]*>(.*?)</h2>)regex"),
-                               QRegularExpression::DotMatchesEverythingOption);
-    QRegularExpressionMatch tm = titleRx.match(html);
-    if (tm.hasMatch()) {
-        work.title = tm.captured(1).trimmed();
-        work.title.replace(QRegularExpression(QStringLiteral("<[^>]*>")), QStringLiteral(""));
+    const auto parts=CommentHtml::nodes(html);
+    QStringList authors;
+    for(int i=0;i<parts.size();++i) {
+        const auto &node=parts[i];bool preface=false,skin=false,story=false,byline=false;
+        for(int p=i;p>=0;p=parts[p].parent){preface|=CommentHtml::hasClass(parts[p],"preface");skin|=parts[p].attrs.value("id")=="workskin";story|=CommentHtml::hasClass(parts[p],"userstuff");byline|=CommentHtml::hasClass(parts[p],"byline");}
+        if(!skin || !preface || story)continue;
+        const auto text=CommentHtml::text(html.mid(node.begin,node.end-node.begin));
+        if(node.tag=="h2" && CommentHtml::hasClass(node,"title") && work.title.isEmpty())work.title=text;
+        if(byline && node.tag=="a" && node.attrs.value("rel").split(' ').contains("author")) {
+            authors.append(text);if(work.authorUrl.isEmpty())work.authorUrl=node.attrs.value("href");
+        }
     }
-
-    QRegularExpression authorRx(QStringLiteral(R"regex(<a\s+rel="author"[^>]*href="([^"]*)"[^>]*>(.*?)</a>)regex"),
-                                QRegularExpression::DotMatchesEverythingOption);
-    QRegularExpressionMatch am = authorRx.match(html);
-    if (am.hasMatch()) {
-        work.authorUrl = am.captured(1).trimmed();
-        work.author = am.captured(2).trimmed();
-    }
+    work.author=authors.isEmpty()?QString("Anonymous"):authors.join(", ");
 
     QRegularExpression summaryRx(QStringLiteral(R"regex(<div\s+class="summary"[^>]*>.*?<blockquote[^>]*>(.*?)</blockquote>)regex"),
                                  QRegularExpression::DotMatchesEverythingOption);

@@ -15,6 +15,7 @@
 #include "archivebookmark.h"
 #include "websession.h"
 #include <QImage>
+#include "seriesnavigation.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -25,6 +26,7 @@ public:
     void search(const QString &query, int page = 1, const SearchFilters &filters = {});
     void fetchSearchOptions();
     void fetchTagSuggestions(const QString &field, const QString &type, const QString &term, quint64 revision);
+    void fetchWorkSeries(const QString &workId);
     void fetchWorkDetails(const QString &workId);
     void fetchWorkContent(const QString &workId);
     void downloadWork(const QString &workId);
@@ -62,6 +64,7 @@ signals:
     void tagSuggestionsFetched(const QString &field, quint64 revision, const QStringList &suggestions, const QString &error);
     void searchOptionsFetched(const SearchOptions &options);
     void searchCompleted(const SearchResult &result);
+    void workSeriesFetched(const QString &workId,const WorkSeries &series);
     void workDetailsFetched(const Work &work);
     void workChaptersFetched(const QString &workId, const QString &title, const QVector<WorkChapter> &chapters);
     void workContentFetched(const QString &workId, const QString &title, const QString &contentHtml);

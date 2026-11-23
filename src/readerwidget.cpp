@@ -236,6 +236,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     m_speech=new ReaderSpeech(this);
     auto *modes = new QBoxLayout(mobileUi()?QBoxLayout::TopToBottom:QBoxLayout::LeftToRight);
     QBoxLayout *extraTools=desktopLibraryTools?static_cast<QBoxLayout *>(desktopLibraryTools):modes;
+    auto *series=new QPushButton("Series",this);series->setObjectName("readerSeries");extraTools->addWidget(series);connect(series,&QPushButton::clicked,this,[this]{if(!m_work.id.isEmpty())emit seriesRequested(m_work.id);});
     auto *speech=new QPushButton("Read aloud",this);extraTools->addWidget(speech);connect(speech,&QPushButton::clicked,this,&ReaderWidget::showSpeech);
     auto *taps=new QPushButton("Tap zones",this);extraTools->addWidget(taps);connect(taps,&QPushButton::clicked,this,&ReaderWidget::showTapZones);
     auto *hide = new QPushButton("Text only (F10)", this); hide->setObjectName("textOnlyMode"); modes->addWidget(hide);

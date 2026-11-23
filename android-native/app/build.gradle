@@ -11,8 +11,8 @@ android {
         applicationId 'org.ao3client.reader'
         minSdk 28
         targetSdk 36
-        versionCode 26
-        versionName '3.2.0-rc.11'
+        versionCode 27
+        versionName '3.2.0-rc.12'
     }
     sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures") }
     signingConfigs {

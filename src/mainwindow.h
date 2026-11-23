@@ -110,6 +110,11 @@ private:
     int m_beforeReader = 2;
     QLabel *m_mobileStatus = nullptr;
     QString m_pendingReadId;
+    void showSeries(const QString &id);
+    QWidget *m_seriesPage=nullptr;
+    QVBoxLayout *m_seriesLayout=nullptr;
+    QString m_seriesWork,m_seriesTarget;
+    int m_seriesReturn=0;
     void openReader(const Work &work, const QVector<WorkChapter> &chapters);
     void closeReader();
     void toggleReaderFullscreen();

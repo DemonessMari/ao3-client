@@ -42,6 +42,7 @@ protected:
     void hideEvent(QHideEvent *event) override;
     bool eventFilter(QObject *, QEvent *) override;
 signals:
+    void seriesRequested(const QString &workId);
     void archiveRequested(const QUrl &url);
     void readingActionRequested(const QString &workId);
     void kudosRequested(const QString &workId);

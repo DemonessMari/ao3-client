@@ -236,6 +236,23 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }
     fun authorWorks(user: String, page: Int, bookmarks: Boolean): Listing { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.listing(request("/users/${encode(user)}/${if(bookmarks) "bookmarks" else "works"}?page=$page"), page) }
     fun works(user: String, page: Int) = ArchiveParser.listing(request("/users/${encode(user)}/works?page=$page"), page)
+    internal fun series(id:String):List<SeriesNavigation> {
+        require(id.matches(Regex("[0-9]+")))
+        return parseWorkSeries(request("/works/$id?view_adult=true"))
+    }
+    internal fun workDetails(id:String):Fic {
+        require(id.matches(Regex("[0-9]+")))
+        val doc=Jsoup.parse(request("/works/$id?view_adult=true"))
+        val title=doc.selectFirst("#workskin .preface h2.title")?.text()?.takeIf{it.isNotBlank()}
+            ?: error("AO3 did not return this work. Check whether it loads on the website.")
+        val meta=doc.selectFirst("dl.work.meta")
+        val author=doc.select("#workskin .preface .byline a[rel=author]")
+        return Fic(id,title,author.text().ifBlank{"Anonymous"},meta?.select("dd.fandom a.tag")?.text().orEmpty(),
+            doc.selectFirst("#workskin .preface .summary blockquote")?.text().orEmpty(),
+            meta?.select("a.tag")?.joinToString(" · "){it.text()}.orEmpty(),meta?.select("dl.stats")?.text().orEmpty(),
+            meta?.select("dd.language")?.text().orEmpty(),author.firstOrNull()?.attr("href").orEmpty(),
+            meta?.select("dd.rating")?.text().orEmpty(),meta?.select("dd.warning")?.text().orEmpty())
+    }
     fun read(id: String): Pair<List<Chapter>,String> {
         require(id.matches(Regex("\\d+")))
         val html = request("/works/$id?view_adult=true&view_full_work=true")

@@ -94,6 +94,24 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void seriesNavigationUsesVisibleNeighborsAndNativeWorkDetails() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/work-series.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        const auto parsed=parseWorkSeries(html);QVERIFY(parsed.error.isEmpty());QCOMPARE(parsed.entries.size(),2);
+        const auto first=parsed.entries[0];QCOMPARE(first.id,QString("42"));QCOMPARE(first.title,QString("First & Second"));QCOMPARE(first.previous,QString("101"));QCOMPARE(first.next,QString("303"));
+        QVERIFY(parsed.entries[1].previous.isEmpty());QVERIFY(parsed.entries[1].next.isEmpty());
+        QVERIFY(parseWorkSeries("<dl class='work meta'></dl>").error.isEmpty());QVERIFY(!parseWorkSeries("<h1>Sign in</h1>").error.isEmpty());
+        QVERIFY(!parseWorkSeries("<div class='userstuff'><dl class='work meta'></dl></div>").error.isEmpty());
+        QVERIFY(archiveNumericId("https://user@archiveofourown.org/works/3","works").isEmpty());QVERIFY(archiveNumericId("/works/3/chapters/4","works").isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);network->page=html.toUtf8();
+        window.m_contentStack->setCurrentIndex(2);window.showSeries("202");
+        QTRY_COMPARE(window.m_seriesPage->findChildren<QPushButton *>().size(),7);
+        QCOMPARE(network->requests.last().path(),QString("/works/202"));
+        QPushButton *next=nullptr;for(auto *button:window.m_seriesPage->findChildren<QPushButton *>())if(button->text()=="Next work" && button->isEnabled())next=button;
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SERIES")){window.resize(1100,850);window.show();QTest::qWait(40);window.grab().save("/tmp/ao3-series-rc12.png");}
+        QVERIFY(next);next->click();QTRY_COMPARE(window.m_detailWidget->currentWork().id,QString("303"));QCOMPARE(window.m_contentStack->currentIndex(),2);
+        QCOMPARE(network->requests.last().path(),QString("/works/303"));QCOMPARE(window.m_detailWidget->currentWork().title,QString("A work & its sequel"));QCOMPARE(window.m_detailWidget->currentWork().author,QString("Writer"));
+        window.showSeries("202");window.navigateBack();QTest::qWait(30);QCOMPARE(window.m_contentStack->currentIndex(),2);QCOMPARE(window.m_detailWidget->currentWork().id,QString("303"));
+    }
     void headerIdentityAndSearchCentering() {
         const auto originalPalette=QApplication::palette();auto restore=qScopeGuard([&]{QApplication::setPalette(originalPalette);});applyAppSkin();
         MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("Archive of Our Own"));

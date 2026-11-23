@@ -94,6 +94,29 @@ MainWindow::MainWindow(QWidget *parent)
         if (!title.isEmpty()) work.title = title;
         openReader(work, chapters);
     });
+    connect(m_detailWidget,&WorkDetailWidget::seriesRequested,this,&MainWindow::showSeries);
+    connect(m_reader,&ReaderWidget::seriesRequested,this,&MainWindow::showSeries);
+    connect(m_client,&AO3Client::workSeriesFetched,this,[this](const QString &id,const WorkSeries &result) {
+        if(id!=m_seriesWork || m_contentStack->currentWidget()!=m_seriesPage)return;
+        while(auto *item=m_seriesLayout->takeAt(1)){if(item->widget())item->widget()->deleteLater();delete item;}
+        auto *message=new QLabel(result.error.isEmpty()?(result.entries.isEmpty()?"This work is not part of a series.":"Series"):result.error,m_seriesPage);
+        message->setWordWrap(true);message->setTextFormat(Qt::PlainText);m_seriesLayout->addWidget(message);
+        for(const auto &entry:result.entries) {
+            auto *label=new QLabel(entry.position,m_seriesPage);label->setWordWrap(true);label->setTextFormat(Qt::PlainText);m_seriesLayout->addWidget(label);
+            auto *site=new QPushButton("View series on AO3",m_seriesPage);m_seriesLayout->addWidget(site);
+            connect(site,&QPushButton::clicked,this,[this,entry]{openArchiveWebsite(QUrl("https://archiveofourown.org/series/"+entry.id));});
+            for(const auto &choice:QVector<QPair<QString,QString>>{{"Previous work",entry.previous},{"Next work",entry.next}}) {
+                auto *button=new QPushButton(choice.first,m_seriesPage);button->setEnabled(!choice.second.isEmpty());m_seriesLayout->addWidget(button);
+                connect(button,&QPushButton::clicked,this,[this,choice]{m_seriesTarget=choice.second;statusBar()->showMessage("Loading work details...");m_client->fetchWorkDetails(choice.second);});
+            }
+        }
+        m_seriesLayout->addStretch();
+    });
+    connect(m_client,&AO3Client::workDetailsFetched,this,[this](const Work &work) {
+        if(work.id!=m_seriesTarget || m_contentStack->currentWidget()!=m_seriesPage)return;
+        m_seriesTarget.clear();m_pendingReadId.clear();
+        m_detailWidget->showWork(work);m_contentStack->setCurrentIndex(2);statusBar()->clearMessage();
+    });
     connect(m_detailWidget, &WorkDetailWidget::readRequested, this, [this](const QString &workId) {
         m_pendingReadId = workId;
         QGuiApplication::inputMethod()->hide();
@@ -1043,6 +1066,7 @@ void MainWindow::resizeWorkItems()
 
 bool MainWindow::navigateBack()
 {
+    if(m_seriesPage && m_contentStack->currentWidget()==m_seriesPage){m_seriesTarget.clear();m_contentStack->setCurrentIndex(m_seriesReturn);return true;}
     m_pendingReadId.clear();
     QGuiApplication::inputMethod()->hide();
 #ifdef AO3_WEBENGINE
@@ -1118,6 +1142,22 @@ void MainWindow::showAuthorListing(bool bookmarks)
     m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
     m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
     statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
+}
+
+void MainWindow::showSeries(const QString &id)
+{
+    if(m_contentStack->currentWidget()==m_reader)m_reader->saveProgress();
+    if(!m_seriesPage) {
+        auto *scroll=new QScrollArea(m_contentStack);scroll->setWidgetResizable(true);m_seriesPage=scroll;
+        auto *body=new QWidget(scroll);m_seriesLayout=new QVBoxLayout(body);m_seriesLayout->setAlignment(Qt::AlignTop);scroll->setWidget(body);
+        auto *back=new QPushButton("Back",body);m_seriesLayout->addWidget(back);
+        connect(back,&QPushButton::clicked,this,[this]{m_seriesTarget.clear();m_contentStack->setCurrentIndex(m_seriesReturn);});
+        m_contentStack->addWidget(m_seriesPage);
+    }
+    while(auto *item=m_seriesLayout->takeAt(1)){if(item->widget())item->widget()->deleteLater();delete item;}
+    m_seriesLayout->addWidget(new QLabel("Loading series...",m_seriesPage));
+    m_seriesReturn=m_contentStack->currentIndex();m_seriesWork=id;m_seriesTarget.clear();
+    m_contentStack->setCurrentWidget(m_seriesPage);m_client->fetchWorkSeries(id);
 }
 
 void MainWindow::showComments(const QString &workId,int page) {
