@@ -76,8 +76,7 @@ ArchiveWeb::ArchiveWeb(QWidget *parent):QWidget(parent) {
     connect(page,&QWebEnginePage::loadingChanged,this,[this](const QWebEngineLoadingInfo &info){
         if(info.status()!=QWebEngineLoadingInfo::LoadFailedStatus)return;
         QString text;
-        if(info.isDownload())text="AO3 download started";
-        else if(info.errorDomain()==QWebEngineLoadingInfo::HttpStatusCodeDomain && info.errorCode()==403)text="AO3 may require human verification. Complete any check on this page.";
+        if(info.errorDomain()==QWebEngineLoadingInfo::HttpStatusCodeDomain && info.errorCode()==403)text="AO3 may require human verification. Complete any check on this page.";
         else if(info.errorDomain()==QWebEngineLoadingInfo::HttpStatusCodeDomain && info.errorCode()==429)text="AO3 rate limit reached. Try again later.";
         if(!text.isEmpty()){m_status->setProperty("loadError",text);m_status->setText(text);}
     });
@@ -92,7 +91,7 @@ ArchiveWeb::ArchiveWeb(QWidget *parent):QWidget(parent) {
         const auto target=QFileDialog::getSaveFileName(this,"Save AO3 download",QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QFileInfo(download->downloadFileName()).fileName()));
         if(target.isEmpty()){download->cancel();return;}
         download->setDownloadDirectory(QFileInfo(target).absolutePath());download->setDownloadFileName(QFileInfo(target).fileName());
-        connect(download,&QWebEngineDownloadRequest::stateChanged,this,[this,download](QWebEngineDownloadRequest::DownloadState state){if(state==QWebEngineDownloadRequest::DownloadCompleted)emit message("Download saved");else if(state==QWebEngineDownloadRequest::DownloadInterrupted)emit message("Download failed: "+download->interruptReasonString());});download->accept();
+        connect(download,&QWebEngineDownloadRequest::stateChanged,this,[this,download](QWebEngineDownloadRequest::DownloadState state){if(state==QWebEngineDownloadRequest::DownloadCompleted)emit message("Download saved");else if(state==QWebEngineDownloadRequest::DownloadInterrupted)emit message("Download failed: "+download->interruptReasonString());});m_status->setProperty("loadError","AO3 download started");m_status->setText("AO3 download started");download->accept();
     });
 }
 void ArchiveWeb::open(const QUrl &url) {if(archiveWebUrl(url))m_view->setUrl(url);else emit message("This address is outside AO3.");}

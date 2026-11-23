@@ -12,9 +12,9 @@ The embedded AO3 website provides creator/account-management tools, bulk list ma
 
 ## Install
 
-Linux: extract the release archive and run `./install.sh`. Requires Python 3 and compatible system Qt 6.5 or newer, Qt WebEngine and glibc; see the archive's `BUILD-INFO.txt`. Installs under `~/Applications/ao3-client`, with the launcher and command symlink under `~/.local`.
+Linux: extract the release archive and run `./install.sh`. Requires Python 3 and compatible system Qt 6.8 or newer, Qt WebEngine and glibc; see the archive's `BUILD-INFO.txt`. Installs under `~/Applications/ao3-client`, with the launcher and command symlink under `~/.local`.
 
-Or build and install from source (C++17, CMake, Qt 6.5+ Core/Gui/Widgets/Network/WebEngineWidgets/Test and Python 3):
+Or build and install from source (C++17, CMake, Qt 6.8+ Core/Gui/Widgets/Network/WebEngineWidgets/Test and Python 3):
 
 ```sh
 ./scripts/install-desktop.sh

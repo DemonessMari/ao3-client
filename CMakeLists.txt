@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS
+find_package(Qt6 6.8 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
@@ -95,7 +95,7 @@ if(BUILD_TESTING AND NOT ANDROID)
 endif()
 
 if(BUILD_TESTING AND NOT ANDROID)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
     add_executable(functional-test
         tests/functional_test.cpp
         src/mainwindow.cpp src/ao3client.cpp src/loginmanager.cpp
@@ -117,7 +117,7 @@ if(BUILD_TESTING AND NOT ANDROID)
 endif()
 
 if(NOT ANDROID)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS WebEngineWidgets)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS WebEngineWidgets)
     target_sources(ao3-client PRIVATE src/archiveweb.cpp src/archiveweb.h)
     target_link_libraries(ao3-client PRIVATE Qt6::WebEngineWidgets)
     target_compile_definitions(ao3-client PRIVATE AO3_WEBENGINE)
