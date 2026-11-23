@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
         Surface(color=MaterialTheme.colorScheme.surface) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top+WindowInsetsSides.Horizontal)).heightIn(min=64.dp).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 navigation()
-                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.icon),contentDescription=null,modifier=Modifier.size(width=44.dp,height=36.dp),colorFilter=androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary))
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.icon),contentDescription=null,modifier=Modifier.size(width=44.dp,height=36.dp))
                 Text("Archive of Our Own",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
                 account()
             }
