@@ -1,10 +1,10 @@
 # Verification
 
-2026-11-23: desktop and Android 3.2.0-rc.10.
+2026-11-23: desktop 3.2.0-rc.10; Android 3.2.0-rc.11.
 
 - Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All five CTest suites passed: content, functional, launcher, WebEngine rendering and installer.
 - Android branding now uses the full site name and logo on main screens, with wrapping text and safe-area insets. Profile/work titles and navigation are retained. Phone rendering and large-system-font checks remain pending.
-- Android release: 87 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 32 warnings (including style suggestions).
+- Android release: 91 unit/fixture tests passed; one live test skipped in the standard suite. Lint: zero errors, 32 warnings (including style suggestions).
 - The embedded desktop renderer displayed the real AO3 sign-in form. No credentials were entered and no account action was submitted.
 - An earlier separate live Android test passed: two searches returned distinct result sets and a work opened with readable chapter text.
 - Interface-font checks compare the prior system-font interface with the selected imported font. Desktop checks cover existing navigation/buttons, heading size/weight, work-summary document fonts, opt-out and missing-file fallback; before/after desktop captures were inspected. Android tests cover all 15 typography roles and preference persistence; Mari confirmed imported fonts now apply on the phone in rc7. Other phone appearance/accessibility checks remain pending.
@@ -16,9 +16,9 @@
 - Session tests cover current AO3 greeting markup, logout links with query parameters, identity mismatch, cancellation and preservation of the previous account on a failed website-session import.
 - Bookmark and comment fixtures cover form scoping, nested threads, fresh identity/token checks and uncertain outcomes. These do not establish live account acceptance.
 
-- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; version code 25 and 16 KB alignment verified. Shared identity script and privacy assets match source.
+- Signed Android APK and AAB builds passed. APK certificate matches 3.1.0; Android rc11 version code 26 and 16 KB alignment verified. Shared identity script and privacy assets match source.
 - Desktop 3.2.0-rc.10 installed under `~/Applications/ao3-client`. The existing launcher resolves correctly, required libraries are present, and startup passed from outside the source folder. The executable has no embedded source-folder path. The previous installation was preserved in Downloads.
-- Final APK, AAB, desktop archive and checksums are in `~/Downloads`.
+- Final APK, AAB, desktop archive and checksums are in `~/Downloads`. Desktop remains rc10; the rc11 sign-in parser fix is Android-specific.
 
 Official-source review used `otwcode/otwarchive` revision `452391b648f2fb06b55c36133812449747634504`; production availability may differ.
 
@@ -37,3 +37,5 @@ Read-aloud: the installed desktop eSpeak NG generated 77,934 bytes of valid WAV 
 Book-mode tap-zone tests verify reversed left/right navigation, disabled center taps and retaining the desktop F10 escape. Android tests cover zone boundaries and persisted assignments/widths; actual phone gestures remain pending. The native account menu now offers an explicit server sign-in check. A controlled request test verifies a 404 work response can coexist with an authenticated root response. The user's across-work 404 cause remains unresolved.
 
 Android privacy assets are now generated from the canonical shared privacy document during preBuild; artifact verification compares the packaged bytes to source.
+
+Android rc11 fixes signed-out session detection for AO3 login URLs with query parameters and canonical absolute URLs. A public anonymous root request with the native user agent returned HTTP 200 and `/users/login?return_to=...` links, which rc10 did not recognize. A separate default-Python-user-agent request returned HTTP 403; this is not evidence of the phone's failure cause. Identity links inside work content and foreign-origin links are ignored; conflicting login/logout controls cannot confirm sign-out. Unrecognized pages preserve saved native identity and give a specific explanation for recognizable challenge, waiting-room or maintenance pages. Website and native sessions remain separate. The reported phone-wide work 404s remain unresolved.

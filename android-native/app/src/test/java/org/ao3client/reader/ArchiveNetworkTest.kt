@@ -38,6 +38,18 @@ class ArchiveNetworkTest {
         val calls=mutableListOf<Reply>();val client=Archive(prefs,connectionFactory={url->Reply(url,if(url.path=="/")200 else 404,"<div id='greeting'><a href='/users/Writer'>Hi</a><a href='/users/logout'>Log out</a></div>").also{calls+=it}})
         assertTrue(runCatching{client.read("123")}.isFailure);assertEquals("Writer",client.session());assertEquals(listOf("/works/123","/"),calls.map{it.url.path});assertTrue(calls.all{it.getRequestProperty("Cookie").orEmpty().contains("_session_id=test")})
     }
+    @Test fun ambiguousSessionResponseKeepsStoredIdentityAndCookies() {
+        val prefs=MemoryPreferences()
+        prefs.edit().putString("sessionUsername","Writer").putString("cookies","""[{"value":"_session_id=test; Path=/; Secure; Domain=archiveofourown.org"}]""").apply()
+        var calls=0
+        val client=Archive(prefs,connectionFactory={url->calls++;Reply(url,200,"<title>Just a moment...</title><form id='challenge-form'></form>")})
+        val failure=runCatching {client.session()}.exceptionOrNull()
+        assertTrue(failure?.message.orEmpty().contains("browser verification"))
+        assertEquals(1,calls)
+        assertEquals("Writer",client.rememberedUsername())
+        assertEquals("Writer",Archive(prefs).rememberedUsername())
+        assertTrue(prefs.getString("cookies",null).orEmpty().contains("_session_id=test"))
+    }
     @Test fun rateLimitStopsWithoutRetryingOrClearingRememberedIdentity() {
         val prefs=MemoryPreferences();prefs.edit().putString("sessionUsername","Writer").putString("cookies","""[{"value":"_session_id=test; Path=/; Secure; Domain=archiveofourown.org"}]""").apply();var calls=0
         val client=Archive(prefs,connectionFactory={url->calls++;Reply(url,429,"ignored")})

@@ -71,6 +71,27 @@ class ArchiveTest {
             assertEquals("Unique story ${i+1}.", chapter.text.trim())
         }
     }
+    @Test fun loginLinksAcceptQueriesAndCanonicalAbsoluteUrls() {
+        assertNull(ArchiveParser.sessionIdentity("<a href='/users/login?return_to=%2F%3Fview_adult%3Dtrue'>Log in</a>"))
+        assertNull(ArchiveParser.sessionIdentity("<form action='https://archiveofourown.org/users/login?return_to=%2F'></form>"))
+    }
+    @Test fun storyAndForeignLoginLinksCannotConfirmLogout() {
+        listOf(
+            "<div id='workskin'><a href='/users/login'>Log in</a></div>",
+            "<a class='userstuff' href='/users/login'>Log in</a>",
+            "<a href='https://example.org/users/login'>Log in</a>",
+            "<a href='/users/login'>Log in</a><a href='/users/logout'>Log out</a>"
+        ).forEach { html ->
+            assertTrue(runCatching { ArchiveParser.sessionIdentity(html) }.isFailure)
+        }
+    }
+    @Test fun unrecognizedResponsesExplainTheProblemWithoutDiscardingLogin() {
+        val challenge = runCatching { ArchiveParser.sessionIdentity("<title>Just a moment...</title><form id='challenge-form'></form>") }.exceptionOrNull()
+        assertTrue(challenge?.message.orEmpty().contains("browser verification"))
+        assertTrue(challenge?.message.orEmpty().contains("saved native sign-in was kept"))
+        val unknown = runCatching { ArchiveParser.sessionIdentity("<h1>Unexpected page</h1>") }.exceptionOrNull()
+        assertTrue(unknown?.message.orEmpty().contains("without recognizable account controls"))
+    }
     @Test(expected = IllegalStateException::class) fun maintenanceIsNotEmptySuccess() { ArchiveParser.listing("<h2>The archive is down for maintenance.</h2>", 1) }
     @Test fun emptySearchIsValid() { assertTrue(ArchiveParser.listing("<h2>Search Results</h2><p>No results found.</p>", 1).works.isEmpty()) }
     @Test fun sessionNeedsConfirmedAccount() {

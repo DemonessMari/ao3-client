@@ -107,21 +107,47 @@ object ArchiveParser {
             Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles)
         }
     }
-    fun username(html: String): String? {
-        val doc=Jsoup.parse(html)
-        fun trusted(node:Element)=node.parents().none {it.id()=="workskin" || it.hasClass("userstuff")}
-        fun path(value:String):String?=runCatching {val u=URI(Archive.BASE).resolve(value);u.path.takeIf {u.scheme=="https" && u.host=="archiveofourown.org" && u.port in listOf(-1,443) && u.userInfo==null}}.getOrNull()
-        val logout=doc.select("a[href], form[action]").any {trusted(it) && path(it.attr(if(it.tagName()=="form") "action" else "href"))=="/users/logout"}
-        if(!logout)return null
-        return doc.select("#greeting a[href]").filter {trusted(it)}.mapNotNull {path(it.attr("href"))?.let {p->Regex("/users/([A-Za-z0-9_]+)").matchEntire(p)?.groupValues?.get(1)}}.firstOrNull {it !in listOf("login","logout")}
+    private fun trustedIdentityNode(node: Element): Boolean =
+        (listOf(node) + node.parents()).none { it.id() == "workskin" || it.hasClass("userstuff") }
+
+    private fun identityPath(value: String): String? = runCatching {
+        val url = URI(Archive.BASE).resolve(value)
+        url.path.takeIf { url.scheme == "https" && url.host == "archiveofourown.org" &&
+            url.port in listOf(-1, 443) && url.userInfo == null }
+    }.getOrNull()
+
+    private fun identityLinks(doc: org.jsoup.nodes.Document): List<String> =
+        doc.select("a[href], form[action]").filter(::trustedIdentityNode).mapNotNull {
+            identityPath(it.attr(if (it.tagName() == "form") "action" else "href"))
+        }
+
+    fun username(html: String): String? = username(Jsoup.parse(html))
+
+    private fun username(doc: org.jsoup.nodes.Document): String? {
+        if ("/users/logout" !in identityLinks(doc)) return null
+        return doc.select("#greeting a[href]").filter(::trustedIdentityNode).mapNotNull {
+            identityPath(it.attr("href"))?.let { path ->
+                Regex("/users/([A-Za-z0-9_]+)").matchEntire(path)?.groupValues?.get(1)
+            }
+        }.firstOrNull { it !in listOf("login", "logout") }
     }
 
     fun sessionIdentity(html: String): String? {
-        username(html)?.takeIf { it.matches(Regex("[A-Za-z0-9_]+")) }?.let { return it }
         val doc = Jsoup.parse(html)
-        if (doc.select("a[href='/users/login'], form[action='/users/login']").isNotEmpty()) return null
-        error("Could not verify session. Try again when AO3 is available.")
+        username(doc)?.let { return it }
+        val links = identityLinks(doc)
+        if ("/users/login" in links && "/users/logout" !in links) return null
+        val title = doc.title().lowercase()
+        val reason = when {
+            doc.select("#challenge-form, #challenge-running, script[src*='/cdn-cgi/challenge-platform/']").isNotEmpty() ||
+                title == "just a moment..." -> "AO3 returned a browser verification page. Open AO3 in the website view and complete any checks, then try again."
+            title.contains("waiting room") -> "AO3 returned a waiting-room page. Wait before trying again."
+            title.contains("maintenance") || title.contains("temporarily unavailable") -> "AO3 returned a maintenance page. Try again later."
+            else -> "AO3 returned a page without recognizable account controls. Open AO3 in the website view to check whether it loads normally, then try again."
+        }
+        error("Could not verify session. $reason Your saved native sign-in was kept.")
     }
+
 }
 
 class Archive(private val prefs: SharedPreferences,private val connectionFactory:(URL)->HttpURLConnection={it.openConnection() as HttpURLConnection},private val websiteProbe:((CookieManager,String)->String)?=null) {
