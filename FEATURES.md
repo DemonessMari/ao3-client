@@ -1,6 +1,6 @@
 # Feature coverage
 
-Source for 3.2.0-rc.12. The 3.1.0 release excludes the newest native account actions and embedded website view.
+Source for 3.2.0-rc.13. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ Source for 3.2.0-rc.12. The 3.1.0 release excludes the newest native account act
 | Account work actions | Kudos, Mark for Later/Read, work subscriptions; AO3 bookmark create/edit/delete with notes, tags, collections, pseuds, privacy and recommendations | Author/series subscriptions, list management, external/series bookmarks |
 | Comments | Reading, paging, posting and replies | Editing/deletion, moderation, freezing and inbox |
 | Series and collections | Series memberships and previous/next visible work navigation from work details and the reader | Full series listings, related works, gifts, collections and challenges |
-| Account | Avatar account menu, sign-in, persistent native session, sign-out, verified website-session handoff | Preferences, profile/pseuds, mute/block, invitations and account management |
+| Account | Avatar account menu, sign-in, persistent native session, sign-out, verified website-session handoff; paginated AO3 Reading History and Marked for Later lists with activity and deleted-work entries | Preferences, profile/pseuds, mute/block, invitations and account management |
 | Appearance | Reader theme/font/spacing/margins/alignment controls; local TrueType/OpenType font importing for reading and native interface text; optional system theme; native app-skin editor, preview and shared JSON import/export | Official site/work skin browsing, selection and editing |
 | Creating works | — | Drafts, preview/post/edit/import, chapters, series, co-creators and permitted participant tools |
 | Help and policies | Privacy/security/license documents | AO3 help, news, support and abuse forms |
@@ -23,10 +23,12 @@ Verification still required: authenticated account writes and role-specific webs
 
 Further reader customization not implemented: remappable volume-button actions. Android has optional fixed volume up/down navigation. Read-aloud uses installed eSpeak NG on desktop and system voices advertised as offline on Android; it stops when leaving the reader or changing chapters. Android pauses when backgrounded and on audio-focus loss. Book-mode tap zones can assign previous/next/controls/no action to left, center and right, with adjustable zone widths. Native app skins currently customize colors; AO3 CSS and layout skins remain in the website view. Profile-picture display is native; changing an AO3 icon uses the website pseud editor.
 
-2026-11-23 source recheck: the official routes and work-search query still expose the gaps above. Highest-priority native reader gaps are full series listings; inbox and comment management; saved subscription/bookmark/history/marked-for-later lists; and faithful work HTML/media/skins. Discovery (tags/people/bookmarks), profile/preferences/mute/block, and creator/collection/challenge tools remain website workflows. A source audit does not verify production account actions.
+2026-11-23 source recheck: the official routes and work-search query still expose the gaps above. Highest-priority native reader gaps are full series listings; inbox and comment management; saved subscription/bookmark lists; and faithful work HTML/media/skins. Discovery (tags/people/bookmarks), profile/preferences/mute/block, and creator/collection/challenge tools remain website workflows. A source audit does not verify production account actions.
 
 Chapter count is separate from the One Shot tag: the native chapter filter uses AO3's expected chapter count, while author-applied tags can be included/excluded through the tag fields. The app cannot infer whether a story is self-contained.
 
 Auto-scroll is opt-in per reading session and stops at the chapter boundary. Speed is saved; starting automatically is not. Android volume navigation is opt-in: volume down advances and volume up goes back, with ordinary volume controls retained outside the reader and while reading dialogs are open. Keep-screen-on applies only while the reader is displayed.
 
 Series navigation fetches AO3 work metadata on request and uses its supplied previous/next visible-work links for each membership. It opens the chosen work in native details before reading. Full series listings still use the website view; offline series browsing and series subscriptions are not implemented. Rich native skins are scheduled last, after the other extras, parity and formatting work.
+
+AO3 Reading History and Marked for Later are fetched on request after verifying the current account in the response. They remain separate from local recent reads. Activity text is displayed in memory and excluded from local library metadata/backups. Viewing these lists does not submit deletion or clear-history forms. Removing history entries, clearing history and changing the AO3 history preference remain website workflows.

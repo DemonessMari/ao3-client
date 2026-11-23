@@ -12,7 +12,7 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "")
+data class Fic(val id: String, val title: String, val author: String, val fandom: String = "", val summary: String = "", val tags: String = "", val stats: String = "", val language: String = "", val authorPath: String = "", val rating: String = "", val warnings: String = "",val readingInfo:String="")
 data class AuthorProfile(val username: String, val title: String, val details: String, val biography: String, val avatarUrl:String="",val avatarAlt:String="")
 data class Chapter(val title: String, val text: String, val notesBefore: String = "", val notesAfter: String = "", internal val styles: List<TextStyleSpan> = emptyList()) {
     fun exportText(): String = listOfNotNull(title,notesBefore.takeIf { it.isNotBlank() }?.let { "Author notes\n\n$it" },text,notesAfter.takeIf { it.isNotBlank() }?.let { "End notes\n\n$it" }).joinToString("\n\n")
@@ -26,7 +26,7 @@ data class Chapter(val title: String, val text: String, val notesBefore: String 
         }
     }
 }
-data class Listing(val works: List<Fic>, val page: Int, val pages: Int, val total: String)
+data class Listing(val works: List<Fic>, val page: Int, val pages: Int, val total: String,val unavailable:List<String> = emptyList())
 data class Choice(val label: String, val value: String)
 data class FilterField(val key: String, val label: String, val hint: String = "", val suggestion: String? = null, val choices: List<Choice> = emptyList(), val multi: Boolean = false)
 
@@ -235,6 +235,10 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
     fun avatar(url:String):ByteArray {require(avatarUrlAllowed(url));val cookie=synchronized(cookieLock){cookies.get(URI(url),emptyMap())["Cookie"]?.joinToString("; ")};return loadAvatarBytes(url,cookie,prefs.getString("networkUserAgent",null)?:"AO3Client/3.0 (Unofficial Android Reader)")}
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }
     fun authorWorks(user: String, page: Int, bookmarks: Boolean): Listing { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.listing(request("/users/${encode(user)}/${if(bookmarks) "bookmarks" else "works"}?page=$page"), page) }
+    internal fun accountReadings(user:String,page:Int,later:Boolean):Listing {
+        require(user.matches(Regex("[A-Za-z0-9_]+")) && page in 1..1000000)
+        return parseAccountReadings(request("/users/$user/readings?page=$page"+if(later) "&show=to-read" else ""),user,page)
+    }
     fun works(user: String, page: Int) = ArchiveParser.listing(request("/users/${encode(user)}/works?page=$page"), page)
     internal fun series(id:String):List<SeriesNavigation> {
         require(id.matches(Regex("[0-9]+")))

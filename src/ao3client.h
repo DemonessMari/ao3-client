@@ -48,6 +48,7 @@ public:
     void submitComment(const QString &workId,const CommentForm &form,const QString &text,const QString &pseud={},const QString &guestName={},const QString &guestEmail={});
     void fetchComments(const QString &workId,int page=1);
     void fetchUserWorks(int page = 1);
+    void fetchAccountReadings(bool later,int page=1);
     void fetchProfileAvatar(const QString &username,const QUrl &url);
     void fetchAuthorProfile(const QString &username);
     void fetchAuthorWorks(const QString &username, int page = 1, bool bookmarks = false);
@@ -77,6 +78,7 @@ signals:
     void loginFailed(const QString &reason);
     void sessionChecked(bool valid, const UserInfo &user);
     void loggedOut();
+    void accountReadingsFetched(bool later,const SearchResult &result);
     void userWorksFetched(const SearchResult &result);
     void profileAvatarFetched(const QString &username,const QImage &image);
     void authorProfileFetched(const AuthorProfile &profile);

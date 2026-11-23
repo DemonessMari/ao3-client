@@ -207,6 +207,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_client, &AO3Client::authorWorksFetched, this, [this](const QString &username, bool bookmarks, const SearchResult &result) {
         if(username == m_listingAuthor && bookmarks == m_listingBookmarks) onSearchCompleted(result);
     });
+    connect(m_client,&AO3Client::accountReadingsFetched,this,[this](bool later,const SearchResult &result) {
+        if(m_readingMode==(later?"later":"history"))onSearchCompleted(result);
+    });
     connect(m_detailWidget, &WorkDetailWidget::downloadRequested, this, [this](const Work &work) {
         statusBar()->showMessage(QStringLiteral("Fetching download formats…"));
         m_client->fetchOfficialDownloads(work.id);
@@ -756,7 +759,6 @@ void MainWindow::setupUI()
 
 void MainWindow::performSearch()
 {
-    m_listingAuthor.clear();
     QGuiApplication::inputMethod()->hide();
     const QString query = m_searchInput->text().trimmed();
     const SearchFilters filters = m_filterPanel->filters();
@@ -770,7 +772,7 @@ void MainWindow::performSearch()
 
 void MainWindow::showSearchView(int page)
 {
-    m_listingAuthor.clear();
+    m_readingMode.clear();m_listingAuthor.clear();
     m_pendingReadId.clear();
     if (m_contentStack->currentWidget() == m_reader) closeReader();
     m_showingUserWorks = false;
@@ -801,11 +803,12 @@ void MainWindow::onSearchCompleted(const SearchResult &result)
     populateWorkList();
 
     if (result.works.isEmpty()) {
+        if(!m_readingMode.isEmpty()){statusBar()->showMessage(result.unavailableWorks.isEmpty()?"No works in this AO3 list.":"This list contains unavailable works.");return;}
         statusBar()->showMessage(m_showingUserWorks ? QStringLiteral("You have no works to display.") : QStringLiteral("No works found. Try another search."));
         return;
     }
     statusBar()->showMessage(
-        QStringLiteral("Found %1 works (page %2 of %3)")
+        (m_readingMode.isEmpty()?QStringLiteral("Found %1 works (page %2 of %3)"):m_readingMode=="later"?QStringLiteral("Marked for Later: %1 works on page %2 of %3"):QStringLiteral("AO3 history: %1 works on page %2 of %3"))
             .arg(QLocale().toString(result.totalResults))
             .arg(result.currentPage)
             .arg(result.totalPages)
@@ -832,10 +835,10 @@ void MainWindow::onLoginClicked()
 {
     if(m_loginManager->isLoggedIn()) {
         QMenu menu(this);menu.addSection(m_loginManager->username());
-        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
+        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *later=menu.addAction("Marked for Later");auto *history=menu.addAction("AO3 reading history");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
         auto *selected=menu.exec(m_loginButton->mapToGlobal(QPoint(0,m_loginButton->height())));
         if(selected==profile)showProfile("/users/"+m_loginManager->username());
-        else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
+        else if(selected==later)showAccountReadings(true);else if(selected==history)showAccountReadings(false);else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
         return;
     }
     showLoginView();
@@ -849,7 +852,7 @@ void MainWindow::onLoginRequested(const QString &login, const QString &password)
 
 void MainWindow::onLoginSuccessful(const UserInfo &user)
 {
-    clearArchiveBookmark();m_reader->saveProgress();m_reader->clear();m_showingUserWorks=false;m_listingAuthor.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_profileText->clear();m_profileAvatar->clear();m_profileUsername.clear();
+    clearArchiveBookmark();m_reader->saveProgress();m_reader->clear();m_showingUserWorks=false;m_readingMode.clear();m_listingAuthor.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_profileText->clear();m_profileAvatar->clear();m_profileUsername.clear();
     m_commentSending=false;m_commentUncertain=false;m_commentEditor->setEnabled(true);m_commentEditor->hide();m_commentDraft->clear();m_commentEmail->clear();m_commentsWork.clear();
     m_loginView->clearInputs();
     setLoggedInState(true);
@@ -907,14 +910,25 @@ void MainWindow::goToPage(int page)
     m_workList->clear();
     m_detailWidget->clear();
     statusBar()->showMessage(QStringLiteral("Loading page %1...").arg(page));
-    if (!m_listingAuthor.isEmpty()) m_client->fetchAuthorWorks(m_listingAuthor, page, m_listingBookmarks);
+    if(!m_readingMode.isEmpty())m_client->fetchAccountReadings(m_readingMode=="later",page);
+    else if (!m_listingAuthor.isEmpty()) m_client->fetchAuthorWorks(m_listingAuthor, page, m_listingBookmarks);
     else if (m_showingUserWorks) m_client->fetchUserWorks(page);
     else m_client->search(m_currentQuery, page, m_currentFilters);
 }
 
+void MainWindow::showAccountReadings(bool later)
+{
+    if(!m_loginManager->isLoggedIn()){showLoginView();return;}
+    if(m_contentStack->currentWidget()==m_reader)closeReader();
+    m_listingAuthor.clear();m_readingMode=later?"later":"history";m_showingUserWorks=false;m_pendingReadId.clear();
+    m_currentResult={};m_currentPage=1;m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();m_contentStack->setCurrentIndex(2);
+    statusBar()->showMessage(later?"Loading Marked for Later...":"Loading AO3 reading history...");
+    m_client->fetchAccountReadings(later);
+}
+
 void MainWindow::showUserWorks()
 {
-    m_listingAuthor.clear();
+    m_readingMode.clear();m_listingAuthor.clear();
     if (m_contentStack->currentWidget() == m_reader) closeReader();
     if (!m_loginManager->isLoggedIn()) {
         showLoginView();
@@ -954,6 +968,8 @@ void MainWindow::showLoginView()
 
 void MainWindow::setLoggedInState(bool loggedIn)
 {
+    if(!loggedIn && !m_readingMode.isEmpty()){m_readingMode.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();}
+
     if(!loggedIn)clearArchiveBookmark();
     m_detailWidget->setKudosStatus(m_client->kudosStatus(m_detailWidget->currentWork().id),!loggedIn);
     m_reader->setKudosStatus(m_client->kudosStatus(m_reader->workId()),!loggedIn);
@@ -1006,6 +1022,7 @@ void MainWindow::populateWorkList()
         m_workList->setItemWidget(item, widget);
     }
 
+    for(const auto &info:m_currentResult.unavailableWorks){auto *item=new QListWidgetItem(info,m_workList);item->setFlags(Qt::ItemIsEnabled);item->setSizeHint(QSize(0,64));}
     resizeWorkItems();
     if (!mobileUi() && !m_currentResult.works.isEmpty()) {
         m_workList->setCurrentRow(0);
@@ -1139,7 +1156,7 @@ void MainWindow::showProfile(const QString &authorUrl)
 void MainWindow::showAuthorListing(bool bookmarks)
 {
     if(m_profileUsername.isEmpty()) return;
-    m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
+    m_readingMode.clear();m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
     m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
     statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
 }

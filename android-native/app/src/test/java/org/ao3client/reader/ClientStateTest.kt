@@ -21,6 +21,21 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun accountListsPageInTheirOwnModeAndClearOnLogout() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val html=javaClass.classLoader!!.getResource("account-readings.html")!!.readText()
+        val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
+        val vm=ClientState(app,false,{prefs->Archive(prefs,connectionFactory={url->calls+=url.file;object:java.net.HttpURLConnection(url){
+            override fun connect(){};override fun disconnect(){};override fun usingProxy()=false
+            override fun getResponseCode()=200
+            override fun getInputStream()=java.io.ByteArrayInputStream(html.toByteArray())
+            override fun getHeaderFields():Map<String,List<String>> = emptyMap()
+        }})}).also{models+=it}
+        vm.username="Writer";vm.showAccountReadings(true);awaitLoaded(vm)
+        assertEquals("later",vm.accountList);assertEquals("123",vm.listing!!.works.single().id)
+        vm.search(2,false);awaitLoaded(vm);assertTrue(calls.last().contains("page=2&show=to-read"))
+        vm.showAccountReadings(false);awaitLoaded(vm);assertEquals("history",vm.accountList);assertFalse(calls.last().contains("show="))
+        vm.logout();assertNull(vm.listing);assertFalse(vm.ownWorks)
+    }
     @Test fun seriesNavigationReturnsToTheOriginalFicAndReadingPosition() {
         val app=TestApp(directory.newFolder(),MemoryPreferences())
         val html=javaClass.classLoader!!.getResource("work-series.html")!!.readText()

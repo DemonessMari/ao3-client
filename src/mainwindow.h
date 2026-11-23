@@ -47,9 +47,11 @@ private slots:
     void showSearchView(int page = 1);
     void showDashboard();
     void showUserWorks();
+    void showAccountReadings(bool later);
     void showLoginView();
 
 private:
+    QString m_readingMode;
     void setupUI();
     void openArchiveWebsite(const QUrl &url);
     ArchiveWeb *m_archiveWebsite=nullptr;

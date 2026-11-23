@@ -31,6 +31,7 @@ struct Work {
     QStringList characters;
     QString bookmarksUrl;
     QString commentsUrl;
+    QString readingInfo;
 };
 
 struct SearchResult {
@@ -39,6 +40,7 @@ struct SearchResult {
     int currentPage = 1;
     int totalPages = 1;
     QString errorMessage;
+    QStringList unavailableWorks;
 };
 
 struct UserInfo {

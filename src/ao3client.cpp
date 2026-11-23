@@ -1,6 +1,7 @@
 #include "profileavatar.h"
 #include <memory>
 #include "ao3client.h"
+#include "accountreadings.h"
 #include "workcontent.h"
 #include <QRegularExpression>
 #include <QUrlQuery>
@@ -368,6 +369,26 @@ void AO3Client::fetchDashboard()
             emit errorOccurred(ao3NetworkError(reply));
             return;
         }
+    });
+}
+
+void AO3Client::fetchAccountReadings(bool later,int page)
+{
+    const auto info=m_loginManager->userInfo();
+    if(!info.isLoggedIn || !QRegularExpression("^[A-Za-z0-9_]+$").match(info.username).hasMatch()){emit errorOccurred("Sign in to view your AO3 reading lists.");return;}
+    const auto generation=++m_listingGeneration;const auto auth=m_authGeneration;page=qBound(1,page,1000000);
+    QUrl url("https://archiveofourown.org/users/"+info.username+"/readings");QUrlQuery query;query.addQueryItem("page",QString::number(page));if(later)query.addQueryItem("show","to-read");url.setQuery(query);
+    auto *reply=m_manager->get(makeRequest(url));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,later,page,info,generation,auth] {
+        reply->deleteLater();if(generation!=m_listingGeneration || auth!=m_authGeneration || !m_loginManager->isLoggedIn() || m_loginManager->username()!=info.username)return;
+        SearchResult result;
+        if(ao3RequestFailed(reply))result.errorMessage=ao3NetworkError(reply);
+        else {
+            const auto document=accountReadingDocument(QString::fromUtf8(reply->readAll()),info.username,page);
+            if(!document.error.isEmpty())result.errorMessage=document.error;
+            else {result=parseSearchResults(document.listingHtml,{},page);result.totalPages=document.pages;result.unavailableWorks=document.unavailable;for(auto &work:result.works)work.readingInfo=document.activity.value(work.id);}
+        }
+        emit accountReadingsFetched(later,result);
     });
 }
 

@@ -18,6 +18,15 @@ class ArchiveNetworkTest {
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
     }
+    @Test fun readingListsUseOnlyAuthenticatedGetRoutesAndKeepLaterWhenPaging() {
+        val html=javaClass.classLoader!!.getResource("account-readings.html")!!.readText();val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,html).also{calls+=it}})
+        assertEquals("123",client.accountReadings("Writer",1,true).works.single().id)
+        client.accountReadings("Writer",2,true);client.accountReadings("Writer",1,false)
+        assertEquals(listOf("/users/Writer/readings?page=1&show=to-read","/users/Writer/readings?page=2&show=to-read","/users/Writer/readings?page=1"),calls.map{it.url.file})
+        assertTrue(calls.all{it.requestMethod=="GET" && it.closed})
+        assertTrue(runCatching{client.accountReadings("Other",1,false)}.isFailure)
+    }
     @Test fun seriesNeighborsOpenTheNativeWorkRouteWithFreshMetadata() {
         val html=javaClass.classLoader!!.getResource("work-series.html")!!.readText()
         val calls=mutableListOf<Reply>()

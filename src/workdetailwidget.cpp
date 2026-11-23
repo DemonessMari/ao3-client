@@ -1,4 +1,5 @@
 #include "workdetailwidget.h"
+#include "flowlayout.h"
 #include "mobileui.h"
 #include <QScrollArea>
 #include <QFrame>
@@ -101,7 +102,8 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
 
     // Buttons
     m_buttonBar = new QWidget(m_detailWidget);
-    auto *btnLayout = new QHBoxLayout(m_buttonBar);
+    m_buttonBar->setObjectName("detailActions");
+    auto *btnLayout = new FlowLayout(m_buttonBar);
     btnLayout->setContentsMargins(0, 4, 0, 4);
     btnLayout->setSpacing(8);
 
@@ -132,7 +134,6 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     connect(comments,&QPushButton::clicked,this,[this] {if(!m_currentWork.id.isEmpty())emit commentsRequested(m_currentWork.id);});
     auto *online=new QPushButton("AO3 website",m_buttonBar); btnLayout->addWidget(online); online->setToolTip("Official AO3 forms, series, collections and skins. Website sign-in is separate.");
     connect(online,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty()) emit archiveRequested(QUrl("https://archiveofourown.org/works/"+m_currentWork.id)); });
-    btnLayout->addStretch();
     layout->addWidget(m_buttonBar);
 
     // Content tabs

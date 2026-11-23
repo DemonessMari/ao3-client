@@ -28,6 +28,8 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
     byline->setStyleSheet(QStringLiteral("color: palette(text); font-size: 10pt;"));
     layout->addWidget(byline);
 
+    if(!work.readingInfo.isEmpty()){auto *activity=new QLabel(work.readingInfo,this);activity->setTextFormat(Qt::PlainText);activity->setWordWrap(true);layout->addWidget(activity);}
+
     QStringList tagParts;
     if (!work.rating.isEmpty()) tagParts << work.rating;
     if (!work.warnings.isEmpty()) tagParts << work.warnings;

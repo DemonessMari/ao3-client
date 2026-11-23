@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; Ao3AccountLinks(vm); OutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; TextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; TextButton(onClick={vm.showAccountReadings(false)}){Text("AO3 reading history")}; Ao3AccountLinks(vm); OutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -143,6 +143,8 @@ class MainActivity : ComponentActivity() {
                         DropdownMenuItem(text={Text("Check native sign-in")},onClick={expanded=false;vm.verifyNativeSession()})
                         DropdownMenuItem(text={Text("Account details")},onClick={expanded=false;vm.navigate("account")})
                         DropdownMenuItem(text={Text("My profile")},onClick={expanded=false;vm.showProfile("/users/$user")})
+                        DropdownMenuItem(text={Text("Marked for Later")},onClick={expanded=false;vm.showAccountReadings(true)})
+                        DropdownMenuItem(text={Text("AO3 reading history")},onClick={expanded=false;vm.showAccountReadings(false)})
                         DropdownMenuItem(text={Text("My works")},onClick={expanded=false;vm.myWorks()})
                         DropdownMenuItem(text={Text("Sign out")},onClick={expanded=false;vm.logout()})
                     }
@@ -198,12 +200,12 @@ class MainActivity : ComponentActivity() {
                 Text("Search", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 FilterChip(selected = vm.filters.isNotEmpty(), onClick = { keyboard?.hide(); vm.navigate("filters") }, label = { Text("Filters${if(vm.filters.isEmpty()) "" else " · ${vm.filters.size}"}") })
             }
-        } else Text("My works", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+        } else Text(vm.accountListTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
         val result = vm.listing
-        if (result == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Enter a search.", Modifier.padding(24.dp)) }
+        if (result == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(if(vm.ownWorks) if(vm.loading) "Loading account list…" else "Account list unavailable." else "Enter a search.", Modifier.padding(24.dp)) }
         else LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (result.total.isNotBlank()) item { Text(result.total, style = MaterialTheme.typography.labelLarge) }
-            if (result.works.isEmpty()) item { Text("No works found.") }
+            if (result.works.isEmpty() && result.unavailable.isEmpty()) item { Text(if(vm.ownWorks) "No works in this list." else "No works found.") }
             items(result.works, key = { it.id }) { fic ->
                 Card(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -212,9 +214,11 @@ class MainActivity : ComponentActivity() {
                         if (fic.fandom.isNotBlank()) Text(fic.fandom, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (fic.summary.isNotBlank()) Text(fic.summary, maxLines = 4, overflow = TextOverflow.Ellipsis)
                         if (fic.stats.isNotBlank()) Text(fic.stats, style = MaterialTheme.typography.bodySmall)
+                        if(fic.readingInfo.isNotBlank())Text(fic.readingInfo,style=MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
+            items(result.unavailable) { info -> Text(info,Modifier.padding(vertical=12.dp)) }
             if(result.pages > 1) item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { vm.search(result.page - 1, false) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }

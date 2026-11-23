@@ -91,6 +91,8 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var profileTab by mutableStateOf("profile")
     var profileListing by mutableStateOf<Listing?>(null)
     var profileReturn = "details"
+    var accountList by mutableStateOf("works");private set
+    val accountListTitle get()=when(accountList){"history"->"AO3 reading history";"later"->"Marked for Later";else->"My works"}
     var ownWorks by mutableStateOf(false)
     var selected by mutableStateOf<Fic?>(null)
     var websiteUrl=Archive.BASE+"/"
@@ -284,7 +286,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var readerRevision by mutableIntStateOf(0)
     private var requestRevision = 0
     private var sessionJob: Job? = null
-    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { username = withContext(Dispatchers.IO) { archive.session() } } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
+    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { val confirmed=withContext(Dispatchers.IO) { archive.session() };if(username!=confirmed){accountListing=null;ownWorks=false};username=confirmed } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
     private fun load(block: suspend () -> Unit) {
         loadJob?.cancel(); val revision = ++requestRevision; error = null; loading = true
         loadJob = viewModelScope.launch {
@@ -316,13 +318,13 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun search(page: Int = 1, fresh: Boolean = true) {
         if (fresh) { appliedFilters = filters; appliedQuery = query.trim(); ownWorks = false; searchListing = null }
         screen = "search"
-        val account = ownWorks; val user = username; val querySnapshot = appliedQuery; val filterSnapshot = appliedFilters
+        val account = ownWorks; val mode=accountList; val user = username; val querySnapshot = appliedQuery; val filterSnapshot = appliedFilters
         load {
             val result = withContext(Dispatchers.IO) {
-                if (account) archive.works(user ?: error("Please sign in first"), page)
+                if (account) {val name=user ?: error("Please sign in first");if(mode=="works")archive.works(name,page) else archive.accountReadings(name,page,mode=="later")}
                 else archive.search(querySnapshot, page, filterSnapshot)
             }
-            if(account) accountListing = result else searchListing = result
+            if(account) {if(username==user && ownWorks && accountList==mode)accountListing = result} else searchListing = result
         }
     }
     internal fun profilePictureBytes(user:String,url:String?):ByteArray? {val target=url?:archive.profile(user).avatarUrl;return if(target.isEmpty())null else archive.avatar(target)}
@@ -341,7 +343,12 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     }
     fun myWorks() {
         if (username == null) { navigate("login"); return }
-        ownWorks = true; search(1, false)
+        accountList="works";accountListing=null;ownWorks = true; search(1, false)
+    }
+    fun showAccountReadings(later:Boolean) {
+        if(username==null){navigate("login");return}
+        if(screen=="reader")saveProgress()
+        cancelTranslation();accountList=if(later)"later" else "history";accountListing=null;ownWorks=true;search(1,false)
     }
     private data class SeriesOrigin(val fic:Fic,val chapters:List<Chapter>,val chapter:Int,val translation:String?,val detailsReturn:String,val readerReturn:String)
     private var seriesOrigin:SeriesOrigin?=null
@@ -438,7 +445,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun login(name: String, password: String) = load {
         ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
         sessionJob?.cancel()
-        username = withContext(Dispatchers.IO) { archive.login(name.trim(), password) }
+        val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };accountListing=null;ownWorks=false;username=confirmed
         screen = "home"
     }
     fun logout() { ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }

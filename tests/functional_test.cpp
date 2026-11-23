@@ -1,4 +1,5 @@
 #include "readerspeech.h"
+#include "accountreadings.h"
 #include "profileavatar.h"
 #include "readerfonts.h"
 #include <QBuffer>
@@ -94,6 +95,31 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void workActionsWrapInsideNarrowDetails() {
+        WorkDetailWidget detail;Work work;work.id="123";work.title="A story";work.author="Writer";detail.showWork(work);detail.resize(380,850);detail.show();QTest::qWait(30);
+        auto *actions=detail.findChild<QWidget *>("detailActions");QVERIFY(actions);QVERIFY(actions->layout()->hasHeightForWidth());
+        int top=-1;bool wrapped=false;
+        for(auto *button:actions->findChildren<QPushButton *>(QString(),Qt::FindDirectChildrenOnly)) {
+            QVERIFY(button->geometry().right()<actions->width());QVERIFY(button->geometry().bottom()<actions->height());
+            if(top<0)top=button->y();else if(button->y()>top)wrapped=true;
+        }
+        QVERIFY(wrapped);
+    }
+    void accountReadingsVerifyIdentityKeepPaginationAndShowDeletedWorks() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/account-readings.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        const auto doc=accountReadingDocument(html,"Writer",1);QVERIFY(doc.error.isEmpty());QCOMPARE(doc.pages,2);QCOMPARE(doc.unavailable.size(),1);QVERIFY(doc.activity.value("123").contains("Update available"));
+        QVERIFY(!accountReadingDocument(html,"Other",1).error.isEmpty());
+        const QString header="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav>";
+        QVERIFY(accountReadingDocument(header+"<div id='main' class='readings-index'></div>","Writer",1).error.isEmpty());
+        QVERIFY(!accountReadingDocument(header+"<div id='main' class='preferences-edit'></div>","Writer",1).error.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});network->page=html.toUtf8();
+        window.showAccountReadings(true);QTRY_COMPARE(window.m_currentResult.works.size(),1);QCOMPARE(window.m_workList->count(),2);QCOMPARE(window.m_detailWidget->currentWork().id,QString("123"));QVERIFY(window.m_currentResult.works.first().readingInfo.contains("Visited twice"));
+        window.m_searchInput->clear();window.m_filterPanel->setFilters({});window.performSearch();QCOMPARE(window.m_readingMode,QString("later"));
+        QCOMPARE(QUrlQuery(network->requests.last()).queryItemValue("show"),QString("to-read"));window.goToPage(2);QTRY_COMPARE(window.m_currentResult.currentPage,2);QCOMPARE(QUrlQuery(network->requests.last()).queryItemValue("show"),QString("to-read"));
+        window.showAccountReadings(false);QTRY_COMPARE(window.m_readingMode,QString("history"));QTRY_COMPARE(window.m_currentResult.works.size(),1);QVERIFY(!QUrlQuery(network->requests.last()).hasQueryItem("show"));
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_READINGS")){window.resize(1100,850);window.show();QTest::qWait(40);window.grab().save("/tmp/ao3-readings-rc13.png");}
+        window.setLoggedInState(false);QVERIFY(window.m_currentResult.works.isEmpty());QCOMPARE(window.m_workList->count(),0);
+    }
     void seriesNavigationUsesVisibleNeighborsAndNativeWorkDetails() {
         QFile file(QStringLiteral(AO3_FIXTURE_DIR "/work-series.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
         const auto parsed=parseWorkSeries(html);QVERIFY(parsed.error.isEmpty());QCOMPARE(parsed.entries.size(),2);
