@@ -15,6 +15,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.core.net.toUri
 
 @Composable internal fun FormattedReader(vm:ClientState,onClose:()->Unit) {
@@ -24,14 +26,16 @@ import androidx.core.net.toUri
     var workSkin by remember {mutableStateOf(vm.storage.getBoolean("formattedWorkSkin",true))}
     val colors=MaterialTheme.colorScheme
     fun hex(value:androidx.compose.ui.graphics.Color)="#%06x".format(value.toArgb() and 0xffffff)
-    val document=remember(chapter,workSkin,vm.preferences,colors.background,colors.onBackground) {formattedDocument(chapter,hex(colors.background),hex(colors.onBackground),vm.preferences.fontSize,vm.preferences.lineSpacing.toDouble(),vm.preferences.margin,workSkin)}
+    val font by produceState<ByteArray?>(null,vm.preferences.fontFamily,vm.importedFonts) {value=withContext(Dispatchers.IO){vm.importedFonts.firstOrNull{it.id==vm.preferences.fontFamily}?.file?.takeIf{it.length()<=ReaderFontStore.MAX_BYTES}?.readBytes()}}
+    val document=remember(chapter,workSkin,vm.preferences,colors.background,colors.onBackground,font) {formattedDocument(chapter,hex(colors.background),hex(colors.onBackground),vm.preferences.fontSize,vm.preferences.lineSpacing.toDouble(),vm.preferences.margin,workSkin,font,vm.preferences.fontFamily)}
     val progressKey="formatted.${fic.id}.${vm.chapter}"
     var restored by remember(vm.chapter){mutableStateOf(false)}
+    var loadGeneration by remember(vm.chapter){mutableIntStateOf(0)}
     val view=remember(vm.chapter) {runCatching {object:WebView(context) {
         override fun onScrollChanged(l:Int,t:Int,oldl:Int,oldt:Int) {
             super.onScrollChanged(l,t,oldl,oldt)
             val range=(contentHeight*scale-height).toInt()
-            if(range>0 && restored)vm.storage.edit().putFloat(progressKey,(t.toFloat()/range).coerceIn(0f,1f)).apply()
+            if(range>0 && restored){val fraction=(t.toFloat()/range).coerceIn(0f,1f);vm.storage.edit().putFloat(progressKey,fraction).apply();vm.formattedProgress(fraction.toDouble())}
         }
     }}.getOrNull()}
     DisposableEffect(view) {onDispose {view?.stopLoading();view?.destroy()}}
@@ -41,7 +45,11 @@ import androidx.core.net.toUri
                 SkinTextButton(onClick=onClose){Text("Back to reader")}
                 SkinTextButton(onClick={workSkin=!workSkin;vm.storage.edit().putBoolean("formattedWorkSkin",workSkin).apply()}){Text(if(workSkin)"Work skin on" else "Work skin off")}
             }
-            Text(chapter.title,Modifier.padding(horizontal=16.dp),style=MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth()) {
+                Text(chapter.title,Modifier.weight(1f).padding(horizontal=16.dp,vertical=12.dp),style=MaterialTheme.typography.titleMedium)
+                SkinTextButton(onClick={vm.fontSize(vm.preferences.fontSize-1)}){Text("A−")}
+                SkinTextButton(onClick={vm.fontSize(vm.preferences.fontSize+1)}){Text("A+")}
+            }
             if(view==null)Text("Android System WebView is unavailable.",Modifier.padding(16.dp))
             else key(view) {AndroidView(modifier=Modifier.weight(1f).fillMaxWidth(),factory={
                 view.apply {
@@ -53,10 +61,10 @@ import androidx.core.net.toUri
                             if(r.hasGesture() && r.url.scheme in listOf("https","http"))runCatching {context.startActivity(Intent(Intent.ACTION_VIEW,r.url))}
                             return true
                         }
-                        override fun onPageFinished(v:WebView,url:String) {val fraction=vm.storage.getFloat(progressKey,0f);v.postDelayed({v.scrollTo(0,((v.contentHeight*v.scale-v.height).coerceAtLeast(0f)*fraction).toInt());restored=true},150)}
+                        override fun onPageFinished(v:WebView,url:String) {val fraction=vm.storage.getFloat(progressKey,readingFraction(chapter.text,vm.positionIndex,vm.bookOffset).toFloat());val generation=loadGeneration;v.postDelayed({if(generation==loadGeneration){v.scrollTo(0,((v.contentHeight*v.scale-v.height).coerceAtLeast(0f)*fraction).toInt());restored=true}},150)}
                     }
                 }
-            },update={if(it.tag!=document){it.tag=document;it.loadDataWithBaseURL("https://archiveofourown.org/works/${fic.id}",document,"text/html","UTF-8",null)}})}
+            },update={if(it.tag!=document){restored=false;loadGeneration++;it.tag=document;it.loadDataWithBaseURL("https://archiveofourown.org/works/${fic.id}",document,"text/html","UTF-8",null)}})}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                 SkinTextButton(onClick={vm.changeChapter(vm.chapter-1)},enabled=vm.chapter>0){Text("Previous chapter")}
                 Text("${vm.chapter+1} / ${vm.chapters.size}",Modifier.padding(vertical=12.dp))

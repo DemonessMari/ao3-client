@@ -8,6 +8,11 @@
 #include <QWebEngineUrlRequestInterceptor>
 #include <QDialog>
 #include <QApplication>
+#include <QSpinBox>
+#include <QRandomGenerator>
+#include <QLabel>
+#include <QTextBrowser>
+#include "readerfonts.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -68,21 +73,36 @@ QByteArray fetchImage(QNetworkAccessManager &network,QUrl url,QProgressDialog &p
     error="Too many image redirects.";return {};
 }
 }
-void showFormattedReader(QWidget *parent,const Work &work,const QVector<WorkChapter> &chapters,int initial) {
-    if(chapters.isEmpty())return;
+FormattedPosition showFormattedReader(QWidget *parent,const Work &work,const QVector<WorkChapter> &chapters,int initial) {
+    if(chapters.isEmpty())return {};
     QDialog dialog(parent);dialog.setWindowTitle(work.title+" — Original formatting");dialog.resize(1000,850);
     QVBoxLayout layout(&dialog);QHBoxLayout controls;QPushButton previous("Previous chapter"),next("Next chapter");QComboBox chapter;QCheckBox workSkin("Work skin");workSkin.setChecked(QSettings().value("reader/formattedWorkSkin",true).toBool());
     for(const auto &entry:chapters)chapter.addItem(entry.title);
     chapter.setCurrentIndex(qBound(0,initial,int(chapters.size())-1));controls.addWidget(&previous);controls.addWidget(&chapter,1);controls.addWidget(&next);controls.addWidget(&workSkin);layout.addLayout(&controls);
+    QHBoxLayout appearance;QLabel sizeLabel("Text size");QSpinBox fontSize;fontSize.setRange(11,32);fontSize.setValue(QSettings().value("reader/fontSize",15).toInt());appearance.addWidget(&sizeLabel);appearance.addWidget(&fontSize);appearance.addStretch();layout.addLayout(&appearance);
+    const auto family=QSettings().value("reader/fontFamily","serif").toString();QByteArray fontBytes;if(readerFontId(family)){QFile file(readerFontDirectory()+"/"+family.mid(5)+".font");if(file.open(QIODevice::ReadOnly))fontBytes=file.read(20*1024*1024+1);}
+    double fraction=0;bool restoring=true;quint64 renderRevision=0;const auto progressKey="formattedProgress/"+work.id+"/";
     QTemporaryDir temporary;const auto documentUrl=QUrl::fromLocalFile(temporary.filePath("chapter.html"));
     ReadingRequests requests;requests.document=documentUrl;QWebEngineProfile profile;profile.setPersistentCookiesPolicy(QWebEngineProfile::NoPersistentCookies);profile.setUrlRequestInterceptor(&requests);
     QWebEngineView view;auto *page=new ReadingPage(&profile,&view);page->document=documentUrl;view.setPage(page);view.settings()->setAttribute(QWebEngineSettings::JavascriptEnabled,false);view.settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls,false);view.settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls,false);view.settings()->setAttribute(QWebEngineSettings::PluginsEnabled,false);view.settings()->setAttribute(QWebEngineSettings::PdfViewerEnabled,false);layout.addWidget(&view,1);
     QDialogButtonBox buttons(QDialogButtonBox::Close);layout.addWidget(&buttons);QObject::connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    auto render=[&]{const int i=chapter.currentIndex();previous.setEnabled(i>0);next.setEnabled(i+1<chapters.size());const auto &c=chapters[i];const auto palette=parent?parent->palette():QApplication::palette();QSaveFile file(documentUrl.toLocalFile());if(!file.open(QIODevice::WriteOnly))return;file.setPermissions(QFile::ReadOwner|QFile::WriteOwner);file.write(formattedDocument(c.html.isEmpty()?c.text.toHtmlEscaped().replace("\n","<br>"):c.html,c.workCss,palette.color(QPalette::Window).name(),palette.color(QPalette::WindowText).name(),QSettings().value("reader/fontSize",15).toInt()*4/3,QSettings().value("reader/lineSpacing",160).toDouble()/100,QSettings().value("reader/margin",24).toInt(),workSkin.isChecked()).toUtf8());if(file.commit())view.load(documentUrl);};
-    QObject::connect(&chapter,&QComboBox::currentIndexChanged,&dialog,[&]{render();});QObject::connect(&workSkin,&QCheckBox::toggled,&dialog,[&]{QSettings().setValue("reader/formattedWorkSkin",workSkin.isChecked());render();});QObject::connect(&previous,&QPushButton::clicked,&dialog,[&]{chapter.setCurrentIndex(chapter.currentIndex()-1);});QObject::connect(&next,&QPushButton::clicked,&dialog,[&]{chapter.setCurrentIndex(chapter.currentIndex()+1);});render();dialog.exec();
+    QObject::connect(page,&QWebEnginePage::scrollPositionChanged,&dialog,[&](const QPointF &position){if(restoring)return;const auto range=page->contentsSize().height()-view.height();if(range>0){fraction=qBound(0.0,position.y()/range,1.0);QSettings().setValue(progressKey+QString::number(chapter.currentIndex()),fraction);}});
+    QObject::connect(&view,&QWebEngineView::loadFinished,&dialog,[&](bool ok){if(ok){const auto revision=renderRevision;QTimer::singleShot(150,&dialog,[&,revision]{if(revision==renderRevision)restoring=false;});}});
+    auto render=[&]{
+        restoring=true;++renderRevision;const int i=chapter.currentIndex();previous.setEnabled(i>0);next.setEnabled(i+1<chapters.size());const auto &c=chapters[i];
+        fraction=QSettings().value(progressKey+QString::number(i),QSettings().value("readingProgress/"+work.id+"/positions/"+QString::number(i),0.0)).toDouble();
+        auto *reader=parent?parent->findChild<QTextBrowser *>():nullptr;const auto palette=reader?reader->palette():parent?parent->palette():QApplication::palette();
+        auto html=formattedDocument(c.html.isEmpty()?c.text.toHtmlEscaped().replace("\n","<br>"):c.html,c.workCss,palette.color(reader?QPalette::Base:QPalette::Window).name(),palette.color(reader?QPalette::Text:QPalette::WindowText).name(),fontSize.value()*4/3,QSettings().value("reader/lineSpacing",160).toDouble()/100,QSettings().value("reader/margin",24).toInt(),workSkin.isChecked(),fontBytes,family);
+        const QRegularExpression blocks("<(?:p|h[1-6]|li|tr|br)\\b",QRegularExpression::CaseInsensitiveOption);auto matches=blocks.globalMatch(html,html.indexOf("<body>"));QVector<int> starts;while(matches.hasNext())starts.append(matches.next().capturedStart());
+        const auto index=qBound(0,qRound(fraction*qMax(0,int(starts.size())-1)),qMax(0,int(starts.size())-1));auto location=documentUrl;
+        if(fraction>0 && !starts.isEmpty()){const auto id="ao3-client-reading-position-"+QString::number(QRandomGenerator::global()->generate64(),16);html.insert(starts[index],"<span id=\""+QString(id)+"\"></span>");location.setFragment(id);}
+        QSaveFile file(documentUrl.toLocalFile());if(!file.open(QIODevice::WriteOnly))return;file.setPermissions(QFile::ReadOwner|QFile::WriteOwner);file.write(html.toUtf8());if(file.commit())view.load(location);
+    };
+    QObject::connect(&chapter,&QComboBox::currentIndexChanged,&dialog,[&]{render();});QObject::connect(&workSkin,&QCheckBox::toggled,&dialog,[&]{QSettings().setValue("reader/formattedWorkSkin",workSkin.isChecked());render();});QObject::connect(&fontSize,&QSpinBox::valueChanged,&dialog,[&]{QSettings().setValue("reader/fontSize",fontSize.value());render();});QObject::connect(&previous,&QPushButton::clicked,&dialog,[&]{chapter.setCurrentIndex(chapter.currentIndex()-1);});QObject::connect(&next,&QPushButton::clicked,&dialog,[&]{chapter.setCurrentIndex(chapter.currentIndex()+1);});render();dialog.exec();
+    return {chapter.currentIndex(),fraction};
 }
 bool saveFormattedImages(QWidget *parent,QVector<WorkChapter> &chapters,QString &error) {
-    auto saved=chapters;QMap<QString,QString> cache;qsizetype total=0;QNetworkAccessManager network;QProgressDialog progress("Saving images…","Cancel",0,0,parent);progress.setWindowModality(Qt::WindowModal);progress.setMinimumDuration(0);progress.show();
+    auto saved=chapters;QMap<QString,QString> cache;qsizetype total=0,htmlTotal=0;QNetworkAccessManager network;QProgressDialog progress("Saving images…","Cancel",0,0,parent);progress.setWindowModality(Qt::WindowModal);progress.setMinimumDuration(0);progress.show();
     const QRegularExpression images("<img\\b[^>]*>",QRegularExpression::CaseInsensitiveOption);
     for(auto &chapter:saved) {
         const QString source=staticReadingHtml(chapter.html);auto matches=images.globalMatch(source);QVector<QPair<QPair<int,int>,QString>> changes;
@@ -100,6 +120,7 @@ bool saveFormattedImages(QWidget *parent,QVector<WorkChapter> &chapters,QString 
             auto attrs=nodes[0].attrs;attrs["src"]=cache[key];QString tag="<img";for(auto it=attrs.begin();it!=attrs.end();++it)tag+=" "+it.key()+"=\""+it.value().toHtmlEscaped()+"\"";tag+=">";changes.prepend({{int(m.capturedStart()),int(m.capturedLength())},tag});
         }
         chapter.html=source;for(const auto &change:changes)chapter.html.replace(change.first.first,change.first.second,change.second);
+        htmlTotal+=chapter.html.toUtf8().size();if(htmlTotal>48*1024*1024){error="Formatted content exceeds the 48 MB offline limit. Your previous copy was kept.";return false;}
     }
     chapters=saved;return true;
 }

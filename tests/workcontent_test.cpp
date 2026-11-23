@@ -48,6 +48,10 @@ int main(int argc, char **argv)
     if(!page.contains("default-src 'none'") || page.contains("<img src=\"https:") || !page.contains("Illustration")){qCritical()<<"Formatted isolation failed";return 1;}
     const auto hostile=staticReadingHtml("<p onclick='bad()'>Safe</p><a href='javascript:bad()'>Bad</a><img src='file:///secret'><form><input></form>");
     if(hostile.contains("onclick") || hostile.contains("javascript:") || hostile.contains("file:") || hostile.contains("<form")){qCritical()<<"Static sanitization failed";return 1;}
+    const auto literal=formattedDocument("<p>Literal %1 and %8</p>",{},"#ffffff","#000000");
+    if(!literal.contains("Literal %1 and %8")){qCritical()<<"Percent tokens changed story text";return 1;}
+    const auto fontPage=formattedDocument("<p>Text</p>",{},"#ffffff","#000000",18,1.6,24,true,QByteArray::fromHex("000100000000000000000000"));
+    if(!fontPage.contains("data:font/ttf;base64,")){qCritical()<<"Imported font missing from formatted document";return 1;}
     QTemporaryDir directory;ReadingLibrary library(directory.path());Work work;work.id="12";work.title="Formatted";
     if(!library.saveOffline(work,formatted) || library.load("12").first().html!=formatted.first().html || library.load("12").first().workCss!=formatted.first().workCss){qCritical()<<"Formatted persistence failed";return 1;}
     return 0;

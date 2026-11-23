@@ -71,8 +71,8 @@ class MainActivity : ComponentActivity() {
             val typography=remember(interfaceFamily) {interfaceTypography(interfaceFamily)}
             val skin=model.appSkin
             val density=androidx.compose.ui.platform.LocalDensity.current
-            androidx.compose.runtime.CompositionLocalProvider(LocalSkinRadius provides skin?.takeIf{it.version==2}?.cornerRadius, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(skin?.uiScale ?: 1.0).toFloat(),density.fontScale)) {
-                MaterialTheme(colorScheme = skin?.colorScheme() ?: colors,typography=typography,shapes=skin?.takeIf{it.version==2}?.shapes() ?: Shapes()) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalSkinTypography provides typography, LocalAppSkin provides skin, LocalSkinRadius provides skin?.takeIf{it.version>=2}?.cornerRadius, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(skin?.uiScale ?: 1.0).toFloat(),density.fontScale)) {
+                MaterialTheme(colorScheme = skin?.colorScheme() ?: colors,typography=typography,shapes=skin?.takeIf{it.version>=2}?.shapes() ?: Shapes()) {
                     ClientApp(model)
                 }
             }
@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    SkinHeader {
     if(vm.screen in listOf("home","search","library","settings","account")) {
         Surface(color=MaterialTheme.colorScheme.surface) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top+WindowInsetsSides.Horizontal)).heightIn(min=64.dp).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -171,6 +172,7 @@ class MainActivity : ComponentActivity() {
         "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
         "archiveList" -> vm.archiveList?.title.orEmpty(); "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
     },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()})
+    }
 }
 
 @Composable fun ErrorCard(message: String, dismiss: () -> Unit) {
@@ -188,7 +190,7 @@ class MainActivity : ComponentActivity() {
         item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){SkinButton(onClick={vm.navigate("search")}){Text("Search")};SkinOutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};SkinOutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
         item {Text("Recent reads",style=MaterialTheme.typography.titleLarge)}
         if(vm.libraryEntries.isEmpty())item{Text("Your recent reads will appear here.")}
-        items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->Card(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
+        items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->SkinCard(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
         item {SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/")},modifier=Modifier.fillMaxWidth()){Text("Browse AO3 website")}}
     }
 }
@@ -198,7 +200,7 @@ class MainActivity : ComponentActivity() {
     Column(Modifier.fillMaxSize()) {
         if (!vm.ownWorks) {
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
+                SkinOutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); vm.search() }))
                 IconButton(onClick = { keyboard?.hide(); vm.search() }, enabled = !vm.loading) { Icon(Icons.Default.Search, "Search AO3") }
             }
@@ -213,7 +215,7 @@ class MainActivity : ComponentActivity() {
             if (result.total.isNotBlank()) item { Text(result.total, style = MaterialTheme.typography.labelLarge) }
             if (result.works.isEmpty() && result.unavailable.isEmpty()) item { Text(if(vm.ownWorks) "No works in this list." else "No works found.") }
             items(result.works, key = { it.id }) { fic ->
-                Card(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
+                SkinCard(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(fic.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Text("by ${fic.author}", style = MaterialTheme.typography.bodyMedium)
@@ -273,7 +275,7 @@ class MainActivity : ComponentActivity() {
         } else {
             var input by remember(field.key) { mutableStateOf(TextFieldValue(value)) }
             LaunchedEffect(value) { if(input.text != value) input = TextFieldValue(value, TextRange(value.length)) }
-            OutlinedTextField(input, { requestSuggestions = true; input = it; update(if(it.text.isBlank()) emptyList() else listOf(it.text)) }, Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }, label = { Text(field.label) }, placeholder = { Text(field.hint) }, singleLine = true)
+            SkinOutlinedTextField(input, { requestSuggestions = true; input = it; update(if(it.text.isBlank()) emptyList() else listOf(it.text)) }, Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }, label = { Text(field.label) }, placeholder = { Text(field.hint) }, singleLine = true)
             val term = activeTagToken(value, input.selection.end).term
             LaunchedEffect(value, input.selection.end, focused, requestSuggestions) {
                 suggestions = emptyList()
@@ -331,8 +333,8 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("Sign in to AO3", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Username or email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.login(name, password); password = "" }))
+        SkinOutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Username or email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
+        SkinOutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.login(name, password); password = "" }))
         SkinButton(onClick = { keyboard?.hide(); vm.login(name, password); password = "" }, enabled = name.isNotBlank() && password.isNotEmpty() && !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
         SkinOutlinedButton(onClick={keyboard?.hide();password="";vm.openWebsite(Archive.BASE+"/users/login")},modifier=Modifier.fillMaxWidth()) {Text("Sign in on AO3 website")}
     }
@@ -381,11 +383,11 @@ class MainActivity : ComponentActivity() {
         AboutControls()
         HorizontalDivider()
         Text("Language", style = MaterialTheme.typography.titleLarge)
-        OutlinedTextField(language, { language = it }, Modifier.fillMaxWidth(), label = { Text("Default language code") }, supportingText = { Text("For example: en, et, es, fr, de, ja") }, singleLine = true)
+        SkinOutlinedTextField(language, { language = it }, Modifier.fillMaxWidth(), label = { Text("Default language code") }, supportingText = { Text("For example: en, et, es, fr, de, ja") }, singleLine = true)
         Row(Modifier.fillMaxWidth().clickable { filter = !filter }, verticalAlignment = Alignment.CenterVertically) { Checkbox(filter, { filter = it }); Text("Use this language for new searches", Modifier.weight(1f)) }
         HorizontalDivider(); Text("Translation service", style = MaterialTheme.typography.titleLarge)
-        OutlinedTextField(service, { service = it }, Modifier.fillMaxWidth(), label = { Text("LibreTranslate URL") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
-        OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key (optional)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+        SkinOutlinedTextField(service, { service = it }, Modifier.fillMaxWidth(), label = { Text("LibreTranslate URL") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
+        SkinOutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key (optional)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
         SkinButton(onClick = { vm.savePreferences(vm.preferences.copy(language = language, filterLanguage = filter, service = service, apiKey = apiKey)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save language and translation") }
     }
 }
@@ -410,13 +412,13 @@ class MainActivity : ComponentActivity() {
     var query by rememberSaveable { mutableStateOf("") }
     val entries = vm.libraryEntries.filter { (filter != "offline" || it.offline) && (filter != "favorites" || it.favorite) && (it.fic.title.contains(query, true) || it.fic.author.contains(query, true)) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search library") }, singleLine = true) }
+        item { SkinOutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search library") }, singleLine = true) }
         item { FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("recent" to "Recent", "offline" to "Offline", "favorites" to "Favorites").forEach { (value, title) -> FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(title) }) }
         } }
         if(entries.isEmpty()) item { Text("No works.") }
         items(entries, key = { it.fic.id }) { entry ->
-            Card(onClick = { vm.openLibrary(entry) }, modifier = Modifier.fillMaxWidth()) {
+            SkinCard(onClick = { vm.openLibrary(entry) }, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(entry.fic.title, style = MaterialTheme.typography.titleLarge)
                     Text("by ${entry.fic.author}")
@@ -455,7 +457,7 @@ class MainActivity : ComponentActivity() {
             val result = vm.profileListing
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if(result?.works?.isEmpty() == true) item { Text("No public fics in this view.") }
-                items(result?.works.orEmpty(), key = { it.id }) { fic -> Card(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
+                items(result?.works.orEmpty(), key = { it.id }) { fic -> SkinCard(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(fic.title, style = MaterialTheme.typography.titleLarge); Text("by ${fic.author}"); if(fic.summary.isNotBlank()) Text(fic.summary, maxLines = 4, overflow = TextOverflow.Ellipsis); Text(fic.stats, style = MaterialTheme.typography.bodySmall) }
                 } }
                 if(result != null && result.pages > 1) item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

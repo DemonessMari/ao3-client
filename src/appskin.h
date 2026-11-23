@@ -11,7 +11,9 @@ class QWidget;
 struct AppSkin {
     QString name="Light", background="#fff8f5", surface="#ffffff", text="#292723", accent="#920b19", onAccent="#ffffff";
     double uiScale=1.0;int cornerRadius=8,version=1;
-    QByteArray json() const { QJsonObject o{{"format","ao3-client-skin"},{"version",version},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}};if(version==2){o["uiScale"]=uiScale;o["cornerRadius"]=cornerRadius;}return QJsonDocument(o).toJson(); }
+    QJsonObject components;
+    QJsonObject component(const QString &role) const {return components.value(role).toObject();}
+    QByteArray json() const { QJsonObject o{{"format","ao3-client-skin"},{"version",version},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}};if(version>=2){o["uiScale"]=uiScale;o["cornerRadius"]=cornerRadius;}if(version>=3)o["components"]=components;return QJsonDocument(o).toJson(); }
     static AppSkin preset(int index) {
         if(index==1)return {"Dark","#191b1e","#25272b","#e7e1d8","#ffb3b9","#350009"};
         if(index==2)return {"Sepia","#f1e3c7","#fff2d9","#292723","#843d21","#ffffff"};
@@ -25,17 +27,41 @@ struct AppSkin {
     static bool parse(const QByteArray &bytes,AppSkin &skin,QString &error) {
         if(bytes.size()>16384){error="Skin files must be smaller than 16 KB.";return false;}
         QJsonParseError e;const auto doc=QJsonDocument::fromJson(bytes,&e);const auto o=doc.object();
-        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || (o.value("version").toDouble()!=1 && o.value("version").toDouble()!=2)){error="Choose an AO3 Client skin JSON file (version 1 or 2).";return false;}
-        QStringList keys={"format","version","name","background","surface","text","accent","onAccent"};if(o.value("version").toInt()==2)keys.append({"uiScale","cornerRadius"});
+        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || (o.value("version").toDouble()!=1 && o.value("version").toDouble()!=2 && o.value("version").toDouble()!=3)){error="Choose an AO3 Client skin JSON file (version 1, 2 or 3).";return false;}
+        QStringList keys={"format","version","name","background","surface","text","accent","onAccent"};if(o.value("version").toInt()>=2)keys.append({"uiScale","cornerRadius"});
+        if(o.value("version").toInt()==3)keys.append("components");
         for(auto it=o.begin();it!=o.end();++it)if(!keys.contains(it.key())){error="Unknown skin field: "+it.key();return false;}
         AppSkin candidate;candidate.version=o.value("version").toInt();
-        if(candidate.version==2){const auto scale=o.value("uiScale"),radius=o.value("cornerRadius");if(!scale.isDouble() || !radius.isDouble() || !std::isfinite(scale.toDouble()) || scale.toDouble()<1 || scale.toDouble()>1.5 || radius.toDouble()<0 || radius.toDouble()>24 || radius.toDouble()!=std::floor(radius.toDouble())){error="Interface scale must be 1–1.5; corner radius must be a whole number from 0 to 24.";return false;}candidate.uiScale=scale.toDouble();candidate.cornerRadius=radius.toInt();}
+        if(candidate.version>=2){const auto scale=o.value("uiScale"),radius=o.value("cornerRadius");if(!scale.isDouble() || !radius.isDouble() || !std::isfinite(scale.toDouble()) || scale.toDouble()<1 || scale.toDouble()>1.5 || radius.toDouble()<0 || radius.toDouble()>24 || radius.toDouble()!=std::floor(radius.toDouble())){error="Interface scale must be 1–1.5; corner radius must be a whole number from 0 to 24.";return false;}candidate.uiScale=scale.toDouble();candidate.cornerRadius=radius.toInt();}
         candidate.name=o.value("name").toString().trimmed();
         if(candidate.name.isEmpty() || candidate.name.size()>60 || candidate.name.contains(QRegularExpression("[\\x00-\\x1f\\x7f]"))){error="Give the skin a name of 1–60 characters.";return false;}
         for(auto pair:{qMakePair(QString("background"),&candidate.background),qMakePair(QString("surface"),&candidate.surface),qMakePair(QString("text"),&candidate.text),qMakePair(QString("accent"),&candidate.accent),qMakePair(QString("onAccent"),&candidate.onAccent)}){
             const auto value=o.value(pair.first).toString();if(!QRegularExpression("^#[0-9a-fA-F]{6}$").match(value).hasMatch()){error="Use opaque #RRGGBB colors for "+pair.first+".";return false;}*pair.second=value.toLower();
         }
         if(contrast(candidate.text,candidate.background)<4.5 || contrast(candidate.text,candidate.surface)<4.5 || contrast(candidate.onAccent,candidate.accent)<4.5 || contrast(candidate.accent,candidate.background)<4.5 || contrast(candidate.accent,candidate.surface)<4.5){error="Increase contrast: text and accents need 4.5:1 against their backgrounds.";return false;}
+        if(candidate.version==3){
+            if(!o.value("components").isObject()){error="Components must be an object.";return false;}
+            candidate.components=o.value("components").toObject();
+            for(auto it=candidate.components.begin();it!=candidate.components.end();++it){
+                if(!QStringList{"buttons","inputs","cards","header"}.contains(it.key()) || !it.value().isObject()){error="Unknown component: "+it.key();return false;}
+                auto rule=it.value().toObject();
+                for(auto f=rule.begin();f!=rule.end();++f){
+                    const auto key=f.key();const auto v=f.value();
+                    if(QStringList{"background","text","border"}.contains(key)){
+                        if(!v.isString() || !QRegularExpression("^#[0-9a-fA-F]{6}$").match(v.toString()).hasMatch()){error="Use opaque #RRGGBB component colors.";return false;}
+                        rule[key]=v.toString().toLower();
+                    }else if(QStringList{"cornerRadius","padding","textScale","borderWidth"}.contains(key)){
+                        const double n=v.toDouble(-1),low=key=="textScale"?.85:0,high=key=="textScale"?1.5:key=="borderWidth"?3:24;
+                        if(!v.isDouble() || !std::isfinite(n) || n<low || n>high || (key!="textScale" && n!=std::floor(n))){error="Component size is outside its allowed range.";return false;}
+                    }else {error="Unknown component field: "+key;return false;}
+                }
+                const auto bg=rule.value("background").toString(it.key()=="buttons"?candidate.accent:it.key()=="header"?candidate.background:candidate.surface);
+                const auto fg=rule.value("text").toString(it.key()=="buttons"?candidate.onAccent:candidate.text);
+                if(contrast(bg,fg)<4.5){error="Component text needs 4.5:1 contrast against its background.";return false;}
+                if(rule.contains("border") && contrast(rule.value("border").toString(),bg)<3){error="Component borders need 3:1 contrast against their background.";return false;}
+                it.value()=rule;
+            }
+        }
         skin=candidate;error.clear();return true;
     }
     QPalette palette() const {

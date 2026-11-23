@@ -26,6 +26,20 @@ class FormattedWorkTest {
         assertTrue(page.contains("default-src 'none'"));assertTrue(page.contains("img-src data:"));assertFalse(page.contains("<img src=\"https:"));assertTrue(page.contains("Illustration"))
         assertFalse(formattedDocument(chapter,"#fff","#000",19,1.6,24,false).contains("#workskin .poem"))
     }
+    @Test fun formattedFontsUseOnlyLocalDataAndSafeFamilies() {
+        val chapter=Chapter("One","Text",html="<p>Text</p>")
+        val font=byteArrayOf(0,1,0,0,0,0,0,0,0,0,0,0)
+        val page=formattedDocument(chapter,"#fff","#000",19,1.6,24,font=font)
+        assertTrue(page.contains("data:font/ttf;base64,"));assertTrue(page.contains("font-family:Ao3Imported"))
+        assertFalse(formattedDocument(chapter,"#fff","#000",19,1.6,24,fontFamily="url(https://bad.example)").contains("bad.example"))
+    }
+    @Test fun repeatedImagesCannotBypassTheTotalHtmlBudget() {
+        val chapter=ArchiveParser.chapters(original).single();val png=byteArrayOf(-119,80,78,71,13,10,26,10)
+        val saved=cacheChapterImages(listOf(chapter)){png}.single()
+        val one=saved.html.toByteArray().size
+        val failure=runCatching{cacheChapterImages(listOf(chapter,chapter),one+1){png}}.exceptionOrNull()
+        assertTrue(failure?.message.orEmpty().contains("offline limit"));assertTrue(chapter.html.contains("https://example.org/picture.png"))
+    }
     @Test fun imagesAreEmbeddedOnceAndFailurePreservesTheSource() {
         val chapter=ArchiveParser.chapters(original).single();var calls=0
         val png=byteArrayOf(-119,80,78,71,13,10,26,10)

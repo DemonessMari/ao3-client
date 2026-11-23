@@ -9,6 +9,7 @@ WorkItemWidget::WorkItemWidget(const Work &work, QWidget *parent)
     : QWidget(parent)
     , m_work(work)
 {
+    setProperty("skinRole","cards");
     auto *layout = new QVBoxLayout(this);
     layout->setSpacing(2);
     layout->setContentsMargins(mobileUi() ? 16 : 10, mobileUi() ? 14 : 8, mobileUi() ? 16 : 10, mobileUi() ? 14 : 8);

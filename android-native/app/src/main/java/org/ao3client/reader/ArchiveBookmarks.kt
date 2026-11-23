@@ -77,9 +77,9 @@ fun ArchiveBookmarkScreen(vm:ClientState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text(if(form.id.isEmpty()) "New AO3 bookmark" else "Edit AO3 bookmark",style=MaterialTheme.typography.titleLarge)
         if(form.pseuds.size>1)form.pseuds.forEach { (id,name)->Row(Modifier.fillMaxWidth().selectable(selected=form.pseud==id,enabled=!vm.bookmarkSending,role=Role.RadioButton,onClick={update(form.copy(pseud=id))}),verticalAlignment=Alignment.CenterVertically) {RadioButton(selected=form.pseud==id,onClick=null,enabled=!vm.bookmarkSending);Text(name)} }
-        OutlinedTextField(form.notes,{update(form.copy(notes=it))},label={Text("Notes (HTML allowed)")},minLines=4,modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
-        OutlinedTextField(form.tags,{update(form.copy(tags=it))},label={Text("Tags, comma separated")},modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
-        OutlinedTextField(form.collections,{update(form.copy(collections=it))},label={Text("Collections, comma separated")},modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
+        SkinOutlinedTextField(form.notes,{update(form.copy(notes=it))},label={Text("Notes (HTML allowed)")},minLines=4,modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
+        SkinOutlinedTextField(form.tags,{update(form.copy(tags=it))},label={Text("Tags, comma separated")},modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
+        SkinOutlinedTextField(form.collections,{update(form.copy(collections=it))},label={Text("Collections, comma separated")},modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
         Row(Modifier.fillMaxWidth().toggleable(value=form.privateBookmark,enabled=!vm.bookmarkSending,role=Role.Checkbox,onValueChange={update(form.copy(privateBookmark=it))}),verticalAlignment=Alignment.CenterVertically) {Checkbox(form.privateBookmark,null,enabled=!vm.bookmarkSending);Text("Private bookmark")}
         Row(Modifier.fillMaxWidth().toggleable(value=form.recommendation,enabled=!vm.bookmarkSending,role=Role.Checkbox,onValueChange={update(form.copy(recommendation=it))}),verticalAlignment=Alignment.CenterVertically) {Checkbox(form.recommendation,null,enabled=!vm.bookmarkSending);Text("Recommendation")}
         SkinButton(onClick={vm.saveArchiveBookmark()},enabled=!vm.bookmarkSending && !vm.bookmarkUncertain) {Text(if(vm.bookmarkSending) "Saving…" else "Save to AO3")}

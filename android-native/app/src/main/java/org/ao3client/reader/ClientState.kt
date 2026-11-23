@@ -27,6 +27,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var volumeDown by mutableIntStateOf(storage.getInt("volumeDown",1).coerceIn(-1,1));private set
     fun volumeAction(down:Boolean,value:Int){val bounded=value.coerceIn(-1,1);if(down)volumeDown=bounded else volumeUp=bounded;storage.edit().putInt(if(down)"volumeDown" else "volumeUp",bounded).apply()}
     internal fun volumeStep(down:Boolean):Int?=(if(down)volumeDown else volumeUp).takeIf{volumeNavigation && it!=0}
+    var formattedReading by mutableStateOf(false)
     var keepScreenOn by mutableStateOf(storage.getBoolean("keepScreenOn",false));private set
     var tapLeft by mutableIntStateOf(storage.getInt("tapLeft",-1).coerceIn(-1,2));private set
     var tapCenter by mutableIntStateOf(storage.getInt("tapCenter",2).coerceIn(-1,2));private set
@@ -327,7 +328,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if(destination in listOf("home","search","library","login"))seriesOrigin=null
         if(destination=="home" || destination=="login"){archiveList=null;archiveKind="";archiveTrail.clear();archiveOrigin=null;archiveUncertain=false}
         if (destination != "details") officialDownloads=null
-        if (destination != "reader") { ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
+        if (destination != "reader") { formattedReading=false; ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
         error = null
         if (destination == "filters" && screen != "filters") filterDraft = filters
         if (destination == "library" || destination == "home") refreshLibrary()
@@ -451,7 +452,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             storage.edit().putString("lastFic",fic.id).putBoolean("resumeReader",true).apply()
             refreshLibrary(); refreshBookmarks()
             chapter = storage.getInt("progress.${fic.id}.chapter", 0).coerceIn(chapters.indices)
-            restorePosition(); translation = null; screen = "reader"; fullScreen = false
+            restorePosition(); translation = null; formattedReading=false; screen = "reader"; fullScreen = false
         }
     }
 
@@ -499,6 +500,12 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         positionIndex = 0; positionOffset = 0; bookOffset = 0
         if(fromEnd) { bookOffset = (chapters[index].text.length - 1).coerceAtLeast(0); positionIndex = 0; positionOffset = 0 }
         readerRevision++
+    }
+    fun closeFormattedReading() {formattedReading=false;restorePosition();readerRevision++}
+    internal fun formattedProgress(fraction:Double) {
+        if(!formattedReading || selected==null || chapter !in chapters.indices || !fraction.isFinite())return
+        val text=chapters[chapter].text;bookOffset=(text.length*fraction.coerceIn(0.0,1.0)).toInt()
+        positionIndex=paragraphStarts(text).indexOfLast{it<=bookOffset}.coerceAtLeast(0);positionOffset=0;saveProgress()
     }
     fun restorePosition() {
         val key = "progress.${selected?.id}.$chapter"

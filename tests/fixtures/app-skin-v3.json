@@ -1,0 +1,18 @@
+{
+  "format": "ao3-client-skin",
+  "version": 3,
+  "name": "Independent components",
+  "background": "#fff8f5",
+  "surface": "#ffffff",
+  "text": "#292723",
+  "accent": "#920b19",
+  "onAccent": "#ffffff",
+  "uiScale": 1,
+  "cornerRadius": 8,
+  "components": {
+    "buttons": {"background":"#174a8b","text":"#ffffff","cornerRadius":0,"padding":10,"textScale":1.1},
+    "inputs": {"background":"#f5f9ff","text":"#17243a","border":"#174a8b","cornerRadius":4,"borderWidth":2},
+    "cards": {"background":"#f1e3c7","text":"#292723","cornerRadius":12,"padding":16},
+    "header": {"background":"#17243a","text":"#ffffff","cornerRadius":0,"padding":8,"textScale":1.05}
+  }
+}

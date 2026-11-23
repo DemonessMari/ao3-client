@@ -40,6 +40,7 @@
 #include <QTextBrowser>
 #include <QSpinBox>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QScrollBar>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -116,7 +117,7 @@ ReaderWidget::ReaderWidget(QWidget *parent) : QWidget(parent), m_translator(new 
     auto *formatted=new QPushButton("Original formatting",this);formatted->setObjectName("formattedReading");
     auto *images=new QPushButton("Save offline with images",this);images->setObjectName("saveOfflineImages");
     if(desktopLibraryTools){desktopLibraryTools->insertWidget(1,formatted);desktopLibraryTools->insertWidget(2,images);}else {layout->addWidget(formatted);layout->addWidget(images);}
-    connect(formatted,&QPushButton::clicked,this,[this]{if(m_index>=0){saveProgress();showFormattedReader(this,m_work,m_chapters,m_index);}});
+    connect(formatted,&QPushButton::clicked,this,[this]{if(m_index>=0){saveProgress();const auto position=showFormattedReader(this,m_work,m_chapters,m_index);if(position.chapter>=0){QSettings().setValue(progressKey()+"positions/"+QString::number(position.chapter),position.fraction);QSignalBlocker block(m_fontSize);m_fontSize->setValue(QSettings().value("reader/fontSize",15).toInt());m_restoringPosition=true;showChapter(position.chapter);}}});
     connect(images,&QPushButton::clicked,this,[this]{if(m_chapters.isEmpty())return;auto saved=m_chapters;QString error;if(!saveFormattedImages(this,saved,error)){m_status->setText(error);return;}if(!ReadingLibrary().saveOffline(m_work,saved)){m_status->setText("Could not save offline copy. Check available storage.");return;}m_chapters=saved;m_status->setText("Saved offline with images");});
 #endif
     auto *navigation = new QHBoxLayout;

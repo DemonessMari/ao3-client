@@ -20,4 +20,18 @@ class AppSkinTest {
         for(bad in listOf(skin.copy(uiScale=.5),skin.copy(uiScale=2.0),skin.copy(cornerRadius=-1),skin.copy(cornerRadius=25)))assertTrue(runCatching{AppSkin.parse(bad.json().toByteArray())}.isFailure)
         assertTrue(runCatching{AppSkin.parse(skin.json().replace("\"cornerRadius\": 0","\"cornerRadius\": 1.5").toByteArray())}.isFailure)
     }
+    @Test fun independentComponentsRoundTripAndRejectUnsafeRules() {
+        val bytes=javaClass.classLoader!!.getResourceAsStream("app-skin-v3.json")!!.use{it.readBytes()}
+        val skin=AppSkin.parse(bytes)
+        assertEquals(3,skin.version);assertEquals(4,skin.components.size)
+        assertEquals(skin,AppSkin.parse(skin.json().toByteArray()))
+        assertEquals(0,skin.components.getValue("buttons")["cornerRadius"])
+        assertEquals(12,skin.components.getValue("cards")["cornerRadius"])
+        fun rejects(role:String,key:String,value:Any){val o=JSONObject(String(bytes));o.getJSONObject("components").getJSONObject(role).put(key,value);assertTrue("$role/$key",runCatching{AppSkin.parse(o.toString().toByteArray())}.isFailure)}
+        rejects("buttons","text","#174a8b");rejects("inputs","border","#f5f9ff")
+        rejects("cards","padding",25);rejects("cards","padding",1.5);rejects("header","textScale",.5)
+        rejects("buttons","borderWidth",4);rejects("inputs","css","display:none")
+        val o=JSONObject(String(bytes));o.getJSONObject("components").put("menus",JSONObject())
+        assertTrue(runCatching{AppSkin.parse(o.toString().toByteArray())}.isFailure)
+    }
 }

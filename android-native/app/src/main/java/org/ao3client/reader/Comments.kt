@@ -48,10 +48,10 @@ fun CommentsScreen(vm:ClientState) {
                 if(form.notice.isNotBlank()) Text(form.notice)
                 if(form.pseuds.size>1) form.pseuds.forEach { (id,label) -> Row { RadioButton(selected=vm.commentPseud==id,onClick={vm.commentPseud=id},enabled=!vm.commentSending);Text(label) } }
                 if(form.guest) {
-                    OutlinedTextField(value=vm.commentName,onValueChange={vm.commentName=it},label={Text("Name")},enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
-                    OutlinedTextField(value=vm.commentEmail,onValueChange={vm.commentEmail=it},label={Text("Email (not displayed)")},enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
+                    SkinOutlinedTextField(value=vm.commentName,onValueChange={vm.commentName=it},label={Text("Name")},enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
+                    SkinOutlinedTextField(value=vm.commentEmail,onValueChange={vm.commentEmail=it},label={Text("Email (not displayed)")},enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
                 }
-                OutlinedTextField(value=vm.commentDraft,onValueChange={vm.commentDraft=it},label={Text("Comment")},minLines=4,enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
+                SkinOutlinedTextField(value=vm.commentDraft,onValueChange={vm.commentDraft=it},label={Text("Comment")},minLines=4,enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     SkinButton(onClick={vm.sendComment()},enabled=!vm.commentSending && !vm.commentUncertain && vm.commentDraft.isNotBlank() && (!form.guest || (vm.commentName.isNotBlank() && vm.commentEmail.isNotBlank()))) { Text(if(vm.commentSending) "Saving…" else if(form.editing)"Save changes" else "Post") }
                     SkinTextButton(onClick={vm.closeComment()},enabled=!vm.commentSending) { Text("Close") }

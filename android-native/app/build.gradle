@@ -7,12 +7,15 @@ android {
     namespace 'org.ao3client.reader'
     compileSdk 36
     buildToolsVersion '36.0.0'
+    testBuildType project.findProperty('ao3DeviceTestBuildType') ?: 'debug'
     defaultConfig {
         applicationId 'org.ao3client.reader'
+        testApplicationId 'org.ao3client.reader.devicecheck'
+        testInstrumentationRunner 'org.ao3client.reader.DeviceNetworkInstrumentation'
         minSdk 28
         targetSdk 36
-        versionCode 29
-        versionName '3.2.0-rc.14'
+        versionCode 30
+        versionName '3.2.0-rc.15'
     }
     sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures") }
     signingConfigs {

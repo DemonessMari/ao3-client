@@ -45,7 +45,7 @@ import androidx.lifecycle.LifecycleEventObserver
     val activity = LocalContext.current as MainActivity
     val context = LocalContext.current
     var tools by remember { mutableStateOf(false) }
-    var formatted by remember {mutableStateOf(false)}
+    val formatted=vm.formattedReading
     var translationConsent by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(false) }
     var speechOptions by remember { mutableStateOf(false) }
@@ -114,7 +114,7 @@ import androidx.lifecycle.LifecycleEventObserver
     }
     BackHandler { when { speechOptions -> speechOptions=false; notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
     Scaffold(
-        topBar = { if(!hideChrome) TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } }) },
+        topBar = { if(!hideChrome) SkinHeader {TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } })} },
         bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 IconButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous chapter") }
@@ -157,7 +157,7 @@ import androidx.lifecycle.LifecycleEventObserver
             if(vm.fullScreen && !vm.textOnly) FilledTonalIconButton(onClick = { vm.fullScreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Icon(Icons.Default.Close, "Exit fullscreen") }
         }
     }
-    if(formatted)FormattedReader(vm){formatted=false}
+    if(formatted)FormattedReader(vm,vm::closeFormattedReading)
     if(tools) ModalBottomSheet(
         onDismissRequest = { tools = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -176,7 +176,7 @@ import androidx.lifecycle.LifecycleEventObserver
             if(vm.volumeNavigation)VolumeControls(vm)
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Keep screen on",Modifier.weight(1f));Switch(vm.keepScreenOn,{vm.keepScreenOn(it)})}
 
-            if(currentChapter.html.isNotBlank())MenuRow("Original formatting",supportingText="Tables, poetry, images and work skin",onClick={tools=false;formatted=true})
+            if(currentChapter.html.isNotBlank())MenuRow("Original formatting",supportingText="Tables, poetry, images and work skin",onClick={tools=false;vm.formattedReading=true})
             MenuRow("Save offline with images",onClick={tools=false;vm.saveOffline(true)})
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
             KudosButton(vm,fic.id)
@@ -209,7 +209,7 @@ import androidx.lifecycle.LifecycleEventObserver
         var rate by remember {mutableFloatStateOf(vm.storage.getFloat("speechRate",1f).coerceIn(.5f,2f))}
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text("Read aloud",style=MaterialTheme.typography.titleLarge)
-            OutlinedTextField(language,{language=it.take(16)},label={Text("Speech language, e.g. en or es")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            SkinOutlinedTextField(language,{language=it.take(16)},label={Text("Speech language, e.g. en or es")},singleLine=true,modifier=Modifier.fillMaxWidth())
             Text("Speech rate · ${"%.1f".format(rate)}×");Slider(rate,{rate=it},valueRange=.5f..2f)
             speech.error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
             SkinButton(onClick={vm.storage.edit().putString("speechLanguage",language.trim()).putFloat("speechRate",rate).apply();val offset=if(vm.bookMode)vm.bookOffset.coerceAtLeast(0) else paragraphOffsets.getOrElse(scroll.firstVisibleItemIndex){text.length};speech.start(text,offset,language.trim(),rate)},modifier=Modifier.fillMaxWidth()){Text("Read from here")}
@@ -241,7 +241,7 @@ import androidx.lifecycle.LifecycleEventObserver
         }
     }
     if(bookmarkDialog) AlertDialog(onDismissRequest = { bookmarkDialog = false }, title = { Text("Add bookmark") }, text = {
-        OutlinedTextField(bookmarkName, { bookmarkName = it }, label = { Text("Bookmark name") }, singleLine = true)
+        SkinOutlinedTextField(bookmarkName, { bookmarkName = it }, label = { Text("Bookmark name") }, singleLine = true)
     }, confirmButton = { SkinTextButton(onClick = { vm.addBookmark(bookmarkName); bookmarkDialog = false }, enabled = bookmarkName.isNotBlank()) { Text("Save bookmark") } }, dismissButton = { SkinTextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") } })
     if(bookmarksMenu) ModalBottomSheet(onDismissRequest = { bookmarksMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
         LazyColumn(contentPadding = PaddingValues(16.dp)) {

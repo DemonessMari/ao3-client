@@ -17,11 +17,14 @@ internal fun staticReadingHtml(html:String):String {
     return doc.body().html()
 }
 internal const val READING_CSP="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; media-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
-internal fun formattedDocument(chapter:Chapter,background:String,text:String,size:Int,spacing:Double,margin:Int,workSkin:Boolean=true):String {
+internal fun formattedDocument(chapter:Chapter,background:String,text:String,size:Int,spacing:Double,margin:Int,workSkin:Boolean=true,font:ByteArray?=null,fontFamily:String="serif"):String {
     val body=Jsoup.parseBodyFragment(staticReadingHtml(chapter.html));body.outputSettings().prettyPrint(false)
     body.select("img").forEach { if(!it.attr("src").startsWith("data:image/",true)){it.replaceWith(org.jsoup.nodes.Element("p").text(it.attr("alt").ifBlank{"Image not saved. Save offline with images to include it."}))} }
+    val family=fontFamily.takeIf{it in listOf("serif","sans-serif","monospace")} ?: "serif"
+    val validFont=font?.takeIf{it.size in 12..ReaderFontStore.MAX_BYTES && (it.take(4).toByteArray().contentEquals(byteArrayOf(0,1,0,0)) || it.copyOfRange(0,4).toString(Charsets.US_ASCII)=="OTTO")}
+    val fontCss=if(validFont!=null)"@font-face{font-family:Ao3Imported;src:url(data:font/ttf;base64,"+java.util.Base64.getEncoder().encodeToString(validFont)+")}body{font-family:Ao3Imported,serif}" else "body{font-family:$family}"
     val css=if(workSkin)chapter.workCss.replace("</", "<\\/") else ""
-    return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$READING_CSP"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{background:$background;color:$text}body{margin:${margin}px;font: ${size}px serif;line-height:$spacing;overflow-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}th,td{padding:.3em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline}.landmark,.hidden{display:none}</style><style>$css</style></head><body><div id="workskin"><div id="chapters"><div class="userstuff">${body.body().html()}</div></div></div></body></html>"""
+    return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$READING_CSP"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{background:$background;color:$text}body{margin:${margin}px;font: ${size}px serif;line-height:$spacing;overflow-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}th,td{padding:.3em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline}.landmark,.hidden{display:none}</style><style>$css</style><style>$fontCss</style></head><body><div id="workskin"><div id="chapters"><div class="userstuff">${body.body().html()}</div></div></div></body></html>"""
 }
 internal fun publicImageUrl(value:String):String?=runCatching {
     val u=URI(Archive.BASE).resolve(value)
@@ -29,8 +32,9 @@ internal fun publicImageUrl(value:String):String?=runCatching {
     val host=u.host.lowercase().removeSuffix(".");require(host!="localhost" && !host.endsWith(".localhost") && !host.endsWith(".local"))
     u.toASCIIString()
 }.getOrNull()
-internal fun cacheChapterImages(chapters:List<Chapter>,fetch:(String)->ByteArray):List<Chapter> {
-    val cache=mutableMapOf<String,String>();var total=0
+internal fun cacheChapterImages(chapters:List<Chapter>,maxHtmlBytes:Int=48*1024*1024,fetch:(String)->ByteArray):List<Chapter> {
+    require(maxHtmlBytes in 1..48*1024*1024)
+    val cache=mutableMapOf<String,String>();var total=0;var htmlTotal=0L
     return chapters.map { chapter ->
         val doc=Jsoup.parseBodyFragment(staticReadingHtml(chapter.html));doc.outputSettings().prettyPrint(false)
         doc.select("img[src]").forEach { image ->
@@ -45,7 +49,9 @@ internal fun cacheChapterImages(chapters:List<Chapter>,fetch:(String)->ByteArray
                 image.attr("src",data)
             }
         }
-        chapter.copy(html=doc.body().html())
+        val html=doc.body().html();htmlTotal+=html.toByteArray(Charsets.UTF_8).size
+        require(htmlTotal<=maxHtmlBytes){"Formatted content exceeds the 48 MB offline limit. Your previous copy was kept."}
+        chapter.copy(html=html)
     }
 }
 internal fun imageMime(b:ByteArray):String?=when {

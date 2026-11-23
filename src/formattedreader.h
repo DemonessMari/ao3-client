@@ -1,5 +1,6 @@
 #pragma once
 #include "workmodel.h"
 class QWidget;
-void showFormattedReader(QWidget *parent,const Work &work,const QVector<WorkChapter> &chapters,int initial);
+struct FormattedPosition {int chapter=-1;double fraction=0;};
+FormattedPosition showFormattedReader(QWidget *parent,const Work &work,const QVector<WorkChapter> &chapters,int initial);
 bool saveFormattedImages(QWidget *parent,QVector<WorkChapter> &chapters,QString &error);

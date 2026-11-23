@@ -73,6 +73,13 @@ class ClientStateTest {
         vm.jumpBookmark(ReadingBookmark("id","Imported",0,0,0,-1,.8))
         assertTrue(vm.positionIndex>0); assertTrue(vm.bookOffset>0)
     }
+    @Test fun formattedModeSurvivesChapterChangesAndKeepsCanonicalProgress() {
+        val vm=state(TestApp(directory.newFolder(),MemoryPreferences()));vm.selected=Fic("123","Title","Writer");vm.chapters=listOf(Chapter("One","First paragraph.\n\nSecond paragraph.\n\nThird paragraph."),Chapter("Two","Different chapter"));vm.screen="reader";vm.formattedReading=true
+        vm.formattedProgress(.8);assertTrue(vm.positionIndex>0);assertTrue(vm.bookOffset>0)
+        val position=vm.bookOffset;vm.closeFormattedReading();assertFalse(vm.formattedReading);assertEquals(position,vm.bookOffset)
+        vm.formattedReading=true;vm.changeChapter(1);assertTrue(vm.formattedReading);assertEquals("Different chapter",vm.chapters[vm.chapter].text)
+        vm.navigate("details");assertFalse(vm.formattedReading)
+    }
     @Test fun chapterControlsReplaceTextAndResetThePagePosition() {
         val vm=state(TestApp(directory.newFolder(),MemoryPreferences()))
         vm.selected=Fic("123","Title","Writer"); vm.chapters=listOf(Chapter("One","First chapter"),Chapter("Two","Second distinct chapter")); vm.screen="reader"

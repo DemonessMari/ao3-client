@@ -27,7 +27,11 @@ public:
             if(!QRegularExpression("^\\d+$").match(id).hasMatch() || ids.contains(id)) return fail("Invalid or duplicate work ID");
             ids.insert(id);
             if(!entry.value("chapters").isArray() || !entry.value("bookmarks").isArray()) return fail("Missing chapters or bookmarks");
-            for(const auto &c:entry.value("chapters").toArray()) if(c.toObject().value("text").toString().trimmed().isEmpty()) return fail("Backup contains an empty chapter");
+            for(const auto &c:entry.value("chapters").toArray()) {
+                const auto chapter=c.toObject();
+                if(chapter.value("text").toString().trimmed().isEmpty()) return fail("Backup contains an empty chapter");
+                if(chapter.value("html").toString().size()>40*1024*1024) return fail("Formatted chapter exceeds 40 MB");
+            }
             for(const auto &m:entry.value("bookmarks").toArray()) { const auto mark=m.toObject(); const double fraction=mark.value("fraction").toDouble(-1); if(mark.value("title").toString().trimmed().isEmpty() || mark.value("chapter").toInt(-1)<0 || !std::isfinite(fraction) || fraction<0 || fraction>1) return fail("Invalid reading bookmark"); }
             const auto progress=entry.value("progress").toObject(); if(progress.value("chapter").toInt(-1)<0) return fail("Invalid chapter position");
             for(const auto &p:progress.value("positions").toArray()) { const auto position=p.toObject(); const double fraction=position.value("fraction").toDouble(-1); if(position.value("chapter").toInt(-1)<0 || !std::isfinite(fraction) || fraction<0 || fraction>1) return fail("Invalid reading position"); }

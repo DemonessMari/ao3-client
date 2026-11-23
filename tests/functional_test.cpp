@@ -1,3 +1,4 @@
+#include <QTabWidget>
 #include "readerspeech.h"
 #include "accountreadings.h"
 #include "profileavatar.h"
@@ -172,6 +173,30 @@ private slots:
         MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("Archive of Our Own"));
         for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
+    }
+    void componentSkinEditorPreviewsWithoutApplying() {
+        const auto before=QSettings().value("appearance/skin");bool visited=false;
+        QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});
+            auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),5);
+            auto *background=dialog->findChild<QLineEdit *>("skin_buttons_background");auto *foreground=dialog->findChild<QLineEdit *>("skin_buttons_text");QVERIFY(background);QVERIFY(foreground);background->setText("#174a8b");foreground->setText("#ffffff");tabs->setCurrentIndex(1);
+            auto *preview=dialog->findChild<QWidget *>("skinPreview");QVERIFY(preview);QVERIFY(preview->findChild<QPushButton *>()->palette().color(QPalette::Button)==QColor("#174a8b"));
+            if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))dialog->grab().save("/tmp/ao3-skin-editor-v3.png");visited=true;dialog->reject();
+        });
+        editAppSkin(nullptr);QVERIFY(visited);QCOMPARE(QSettings().value("appearance/skin"),before);
+    }
+    void independentComponentSkinsApplyAndReset() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/app-skin-v3.json"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();AppSkin skin,parsed;QString error;
+        QVERIFY2(AppSkin::parse(bytes,skin,error),qPrintable(error));QVERIFY(AppSkin::parse(skin.json(),parsed,error));QCOMPARE(parsed.components,skin.components);
+        for(const auto &pair:QList<QPair<QString,QJsonValue>>{{"padding",25},{"padding",1.5},{"textScale",.5},{"css","display:none"},{"text","#f1e3c7"}}){auto invalid=QJsonDocument::fromJson(bytes).object();auto rules=invalid["components"].toObject();auto card=rules["cards"].toObject();card[pair.first]=pair.second;rules["cards"]=card;invalid["components"]=rules;QVERIFY(!AppSkin::parse(QJsonDocument(invalid).toJson(),parsed,error));}
+        const auto prior=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");applyAppSkin();});
+        QWidget root;auto *layout=new QVBoxLayout(&root);QWidget header;header.setProperty("skinRole","header");auto *hl=new QVBoxLayout(&header);QLabel title("Archive of Our Own");hl->addWidget(&title);layout->addWidget(&header);
+        QWidget card;card.setProperty("skinRole","cards");auto *cl=new QVBoxLayout(&card);QLabel content("Chapter title and work summary");cl->addWidget(&content);layout->addWidget(&card);
+        QLineEdit input("Search preview");layout->addWidget(&input);QPushButton button("Button");layout->addWidget(&button);root.resize(480,400);root.show();QTest::qWait(20);const double base=button.font().pointSizeF();const auto margins=cl->contentsMargins();
+        QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(20);
+        QCOMPARE(button.palette().color(QPalette::Button),QColor("#174a8b"));QCOMPARE(input.palette().color(QPalette::Base),QColor("#f5f9ff"));QCOMPARE(content.palette().color(QPalette::Text),QColor("#292723"));QCOMPARE(title.palette().color(QPalette::WindowText),QColor("#ffffff"));QCOMPARE(cl->contentsMargins().left(),16);
+        QVERIFY(qAbs(button.font().pointSizeF()-base*1.1)<.1);applyAppSkin();QVERIFY(qAbs(button.font().pointSizeF()-base*1.1)<.1);
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))root.grab().save("/tmp/ao3-components-v3.png");
+        QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QVERIFY(qAbs(button.font().pointSizeF()-base)<.1);QCOMPARE(cl->contentsMargins(),margins);
     }
     void profilePicturesAreScopedBoundedAndDisplayed() {
         QFile file(QStringLiteral(AO3_FIXTURE_DIR "/profile-avatar.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());const auto avatar=profileAvatar(html);QCOMPARE(avatar.url,QString("https://archiveofourown.org/rails/active_storage/blobs/redirect/abc/avatar.png"));QCOMPARE(avatar.alt,QString("A green & blue icon"));

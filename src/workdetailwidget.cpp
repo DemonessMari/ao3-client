@@ -30,7 +30,7 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     mainLayout->addWidget(m_noSelectionWidget);
 
     // Detail widget
-    m_detailWidget = new QWidget(this);
+    m_detailWidget = new QWidget(this);m_detailWidget->setProperty("skinRole","cards");
     auto *layout = new QVBoxLayout(m_detailWidget);
     layout->setSpacing(6);
     layout->setContentsMargins(16, 16, 16, 16);

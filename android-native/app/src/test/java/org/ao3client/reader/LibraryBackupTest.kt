@@ -43,6 +43,16 @@ class LibraryBackupTest {
         assertThrows(IllegalArgumentException::class.java) { LibraryBackup.merge(data,library,MemoryPreferences()) }
         assertEquals("123",library.entries().single().fic.id)
     }
+    @Test fun oversizedFormattedChapterIsRejectedBeforeLibraryWrites() {
+        val library=ReadingLibrary(directory.newFolder())
+        library.remember(Fic("123","Keep","Writer"))
+        val data=fixture()
+        data.getJSONArray("works").getJSONObject(0).getJSONArray("chapters")
+            .getJSONObject(1).put("html","x".repeat(40*1024*1024+1))
+        assertThrows(IllegalArgumentException::class.java) { LibraryBackup.merge(data,library,MemoryPreferences()) }
+        assertEquals("123",library.entries().single().fic.id)
+        assertNull(library.load("987654321"))
+    }
     @Test fun importPreservesExistingProgressAndDownloads() {
         val library=ReadingLibrary(directory.newFolder()); val prefs=MemoryPreferences()
         library.saveOffline(Fic("987654321","Keep","Writer"),listOf(Chapter("Local","Keep local copy")))

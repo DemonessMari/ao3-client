@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
         item {SkinOutlinedButton(onClick={vm.showArchiveList(vm.archiveKind,vm.archiveId,page?.page ?: 1)},enabled=!vm.loading){Text("Refresh")}}
         if(page!=null){
             item{Text(page.title,style=MaterialTheme.typography.headlineSmall)}
-            item{OutlinedTextField(filter,{filter=it},label={Text("Filter this page")},singleLine=true,modifier=Modifier.fillMaxWidth())}
+            item{SkinOutlinedTextField(filter,{filter=it},label={Text("Filter this page")},singleLine=true,modifier=Modifier.fillMaxWidth())}
             if(vm.archiveKind=="inbox")item {
                 Column {
                     Row {SkinTextButton(onClick={selected=visible.filter{it.selection.isNotEmpty()}.map{it.id}.toSet()}){Text("Select visible")};SkinTextButton(onClick={selected=emptySet()}){Text("Clear selection")}}

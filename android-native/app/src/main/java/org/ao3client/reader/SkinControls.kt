@@ -33,8 +33,12 @@ fun AppSkin.colorScheme():ColorScheme {
     var onAccent by rememberSaveable{mutableStateOf(initial.onAccent)}
     var uiScale by rememberSaveable{mutableStateOf(initial.uiScale.toFloat())}
     var cornerRadius by rememberSaveable{mutableStateOf(initial.cornerRadius.toFloat())}
-    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent;uiScale=s.uiScale.toFloat();cornerRadius=s.cornerRadius.toFloat()}
-    val candidate=AppSkin(name,background,surface,text,accent,onAccent,uiScale.toDouble(),cornerRadius.toInt(),2)
+    var componentJson by rememberSaveable{mutableStateOf(org.json.JSONObject(initial.components.mapValues{org.json.JSONObject(it.value)}).toString())}
+    var componentRole by rememberSaveable{mutableStateOf("buttons")}
+    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent;uiScale=s.uiScale.toFloat();cornerRadius=s.cornerRadius.toFloat();componentJson=org.json.JSONObject(s.components.mapValues{org.json.JSONObject(it.value)}).toString()}
+    val source=org.json.JSONObject(componentJson)
+    val components=source.keys().asSequence().associateWith{role->val r=source.getJSONObject(role);r.keys().asSequence().associateWith{r.get(it)}}
+    val candidate=AppSkin(name,background,surface,text,accent,onAccent,uiScale.toDouble(),cornerRadius.toInt(),3,components)
     val parsed=runCatching{AppSkin.parse(candidate.json().toByteArray())}
     val valid=parsed.getOrNull()
     var previewJson by rememberSaveable{mutableStateOf(initial.json())}
@@ -45,14 +49,25 @@ fun AppSkin.colorScheme():ColorScheme {
     Column(Modifier.fillMaxSize()) {
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("light" to "Light","dark" to "Dark","sepia" to "Sepia").forEach{(key,label)->SkinOutlinedButton(onClick={fill(AppSkin.preset(key))}){Text(label)}}}
-        OutlinedTextField(name,{name=it.take(60)},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
-        listOf(Triple("Background",background,{v:String->background=v}),Triple("Surface",surface,{v:String->surface=v}),Triple("Text",text,{v:String->text=v}),Triple("Accent",accent,{v:String->accent=v}),Triple("Text on accent",onAccent,{v:String->onAccent=v})).forEach{(label,value,set)->OutlinedTextField(value,{set(it.take(7))},Modifier.fillMaxWidth(),label={Text(label)},singleLine=true)}
+        SkinOutlinedTextField(name,{name=it.take(60)},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
+        listOf(Triple("Background",background,{v:String->background=v}),Triple("Surface",surface,{v:String->surface=v}),Triple("Text",text,{v:String->text=v}),Triple("Accent",accent,{v:String->accent=v}),Triple("Text on accent",onAccent,{v:String->onAccent=v})).forEach{(label,value,set)->SkinOutlinedTextField(value,{set(it.take(7))},Modifier.fillMaxWidth(),label={Text(label)},singleLine=true)}
         Text("Interface size: ${(uiScale*100).toInt()}%")
         Slider(value=uiScale,onValueChange={uiScale=it},valueRange=1f..1.5f,steps=9)
         Text("Control corners: ${cornerRadius.toInt()}")
         Slider(value=cornerRadius,onValueChange={cornerRadius=it},valueRange=0f..24f,steps=23)
+        Text("Components",style=MaterialTheme.typography.titleMedium)
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("buttons" to "Buttons","inputs" to "Inputs","cards" to "Cards","header" to "Header").forEach{(key,title)->FilterChip(selected=componentRole==key,onClick={componentRole=key},label={Text(title)})}}
+        val rule=source.optJSONObject(componentRole) ?: org.json.JSONObject()
+        fun change(key:String,value:Any?){val all=org.json.JSONObject(componentJson);val next=all.optJSONObject(componentRole) ?: org.json.JSONObject();if(value==null)next.remove(key) else next.put(key,value);if(next.length()==0)all.remove(componentRole) else all.put(componentRole,next);componentJson=all.toString()}
+        Text("Empty colors inherit the theme.",style=MaterialTheme.typography.bodySmall)
+        listOf("background" to "Background","text" to "Text","border" to "Border").forEach{(key,title)->SkinOutlinedTextField(rule.optString(key),{change(key,it.take(7).takeIf{v->v.isNotEmpty()})},Modifier.fillMaxWidth(),label={Text(title)},placeholder={Text("Inherit")},singleLine=true)}
+        listOf("cornerRadius" to "Corners","padding" to "Spacing","textScale" to "Text size","borderWidth" to "Border width").forEach{(key,title)->
+            val inherited=!rule.has(key);val fallback=when(key){"cornerRadius"->cornerRadius;"textScale"->1f;else->0f}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(title);Row{Text("Inherit");Switch(checked=inherited,onCheckedChange={change(key,if(it)null else if(key=="textScale")fallback.toDouble() else fallback.toInt())})}}
+            if(!inherited){val range=when(key){"textScale"->.85f..1.5f;"borderWidth"->0f..3f;else->0f..24f};val value=rule.optDouble(key,fallback.toDouble()).toFloat();Text(if(key=="textScale")"${(value*100).toInt()}%" else "${value.toInt()}");Slider(value=value,onValueChange={change(key,if(key=="textScale")it.toDouble() else it.toInt())},valueRange=range,steps=when(key){"textScale"->12;"borderWidth"->2;else->23})}
+        }
         val density=androidx.compose.ui.platform.LocalDensity.current
-        CompositionLocalProvider(LocalSkinRadius provides preview.cornerRadius,androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(preview.uiScale/(vm.appSkin?.uiScale ?: 1.0)).toFloat(),density.fontScale)) {MaterialTheme(colorScheme=preview.colorScheme(),shapes=preview.shapes()) {Surface(color=MaterialTheme.colorScheme.background,modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){Text("Chapter title",style=MaterialTheme.typography.titleLarge);Surface(color=MaterialTheme.colorScheme.surface){Text("A preview of your reading text.",Modifier.padding(12.dp))};SkinButton(onClick={}){Text("Button")}}}}}
+        CompositionLocalProvider(LocalAppSkin provides preview, LocalSkinRadius provides preview.cornerRadius,androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(preview.uiScale/(vm.appSkin?.uiScale ?: 1.0)).toFloat(),density.fontScale)) {MaterialTheme(colorScheme=preview.colorScheme(),shapes=preview.shapes()) {Surface(color=MaterialTheme.colorScheme.background,modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){SkinHeader{Text("Archive of Our Own",Modifier.padding(8.dp),style=MaterialTheme.typography.titleLarge)};SkinCard(onClick={}){Text("Chapter title",Modifier.padding(8.dp));Text("A preview of your reading text.",Modifier.padding(8.dp))};SkinOutlinedTextField("Search preview",{},Modifier.fillMaxWidth(),singleLine=true);SkinButton(onClick={}){Text("Button")}}}}}
         if(valid==null)Text(parsed.exceptionOrNull()?.message.orEmpty(),color=MaterialTheme.colorScheme.error)
 
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){SkinOutlinedButton(onClick={import.launch(arrayOf("application/json","text/plain","application/octet-stream"))}){Text("Import")};SkinOutlinedButton(onClick={if(valid!=null){draft=valid.json();export.launch("ao3-skin.json")}},enabled=valid!=null){Text("Export")};SkinTextButton(onClick={fill(AppSkin.preset(vm.preferences.theme));vm.applySkin(null);vm.notice="App skin reset."}){Text("Reset")}}

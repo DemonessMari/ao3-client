@@ -259,7 +259,7 @@ void MainWindow::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // ── Header ──
-    m_headerBar = new QWidget(centralWidget);
+    m_headerBar = new QWidget(centralWidget);m_headerBar->setProperty("skinRole","header");
     m_headerBar->setMinimumHeight(72);
     m_headerBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
     m_headerBar->setStyleSheet(QStringLiteral("background: palette(window);"));

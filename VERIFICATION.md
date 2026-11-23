@@ -20,6 +20,17 @@ Full native website parity remains incomplete. Creator/account-management tools,
 
 2026-11-23: six desktop suites pass, including 59 functional checks and a rendered original-formatting view above 2 MB. A narrow-layout regression introduced by the new controls was corrected. A test crash from mismatched compiled window layouts no longer occurs after a consistent rebuild.
 
-Android: 115 unit tests pass, one live test is skipped in the offline run, and the separate live test passes with two distinct 20-work searches and a readable chapter. Lint has zero errors, 35 warnings and two hints. Controlled tests cover formatted-content persistence, backup retention, HTML sanitization, image embedding and single-request bulk inbox changes. No production account writes were performed.
+Android: 118 unit tests pass, one live test is skipped in the offline run, and the separate live test passes with two distinct 20-work searches and a readable chapter. Lint has zero errors, 35 warnings and two hints. Controlled tests cover formatted-content persistence, backup retention, HTML sanitization, image embedding and single-request bulk inbox changes. No production account writes were performed.
 
-The connected phone was on rc.10 and was updated successfully to the verified signed rc.14 APK, code 29, retaining app data. The new source changes are not installed or published. Phone action/404 and visual acceptance checks remain pending. Evidence is in the ignored `.codex-attachments/ao3-next-verification` folder.
+The connected phone was on rc.10 and was updated successfully to the verified signed rc.14 APK, code 29, retaining app data. The new source changes are not installed or published. A temporary, signed instrumentation helper also passed read-only public requests on the physical phone: two distinct searches returned 20 works each, reading returned one chapter, and download-format and comments pages responded. The copied session was signed out, so authenticated actions and visual acceptance remain pending. The helper was removed afterward. Evidence is in the ignored `.codex-attachments/ao3-next-verification` folder.
+
+
+## 3.2.0-rc.15
+
+2026-11-23: all six desktop suites pass after the component-skin changes. The new editor check verifies five tabs, draft preview updates and Cancel without applying; its rendered layout was inspected. Component tests cover separate palettes, corners and spacing, repeated application without size accumulation, restoration, cross-platform JSON and invalid rules. A stale style pointer exposed by the mobile-layout test was replaced with a tracked pointer; the complete suite now passes with style replacement.
+
+Android release: 120 tests pass, one live test is skipped; lint has zero errors, 37 warnings and two hints. APK and AAB signatures verify, and the APK passes 16 KB alignment checks. Android version code 30 uses the existing release signer. Component rendering on the physical phone still requires visual acceptance; automated tests do not establish that.
+
+Native skin version 3 adds independent button, input, card and header rules without CSS injection. Older versions remain supported. Remaining release checks are authenticated writes, device accessibility/rotation/Back/file-pickers, external media/work-skin assets and long reading sessions. Keep this release marked prerelease.
+
+The desktop installation in `~/Applications/ao3-client` matches the tested binary and passes an isolated startup check from `/tmp`. The connected phone reports rc.15/code 30 after an in-place update. Existing app data was retained. Release downloads live in `~/Downloads`; the desktop archive includes a complete example component skin.

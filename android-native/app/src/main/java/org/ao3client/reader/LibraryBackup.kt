@@ -30,7 +30,11 @@ object LibraryBackup {
         for(i in 0 until works.length()) {
             val entry=works.getJSONObject(i); val id=entry.getJSONObject("work").getString("id")
             require(id.matches(Regex("\\d+")) && ids.add(id)) { "Invalid or duplicate fic ID" }
-            val chapters=entry.getJSONArray("chapters"); for(c in 0 until chapters.length()) require(chapters.getJSONObject(c).getString("text").isNotBlank()) { "Backup contains an empty chapter" }
+            val chapters=entry.getJSONArray("chapters"); for(c in 0 until chapters.length()) {
+                val chapter=chapters.getJSONObject(c)
+                require(chapter.getString("text").isNotBlank()) { "Backup contains an empty chapter" }
+                require(chapter.optString("html").length<=40*1024*1024) { "Formatted chapter exceeds 40 MB" }
+            }
             val marks=entry.getJSONArray("bookmarks"); for(m in 0 until marks.length()) { val mark=marks.getJSONObject(m); require(mark.getString("title").isNotBlank() && mark.getInt("chapter")>=0 && mark.getDouble("fraction") in 0.0..1.0 && mark.optInt("index",0)>=0 && mark.optInt("offset",0)>=0 && mark.optInt("bookOffset",-1)>=-1) { "Invalid reading bookmark" } }
             val progress=entry.getJSONObject("progress"); require(progress.getInt("chapter")>=0)
             val positions=progress.getJSONArray("positions"); for(p in 0 until positions.length()) { val position=positions.getJSONObject(p); require(position.getInt("chapter")>=0 && position.getDouble("fraction") in 0.0..1.0 && position.optInt("index",0)>=0 && position.optInt("offset",0)>=0 && position.optInt("bookOffset",-1)>=-1) { "Invalid reading position" } }
