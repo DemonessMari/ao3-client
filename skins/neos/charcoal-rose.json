@@ -1,0 +1,49 @@
+{
+  "format": "ao3-client-skin",
+  "version": 3,
+  "uiScale": 1,
+  "cornerRadius": 8,
+  "onAccent": "#111111",
+  "name": "Neos Charcoal Rose \u00b7 native",
+  "background": "#1d1d1d",
+  "surface": "#2b2b2b",
+  "text": "#d3c5c8",
+  "accent": "#f59db3",
+  "components": {
+    "buttons": {
+      "background": "#2b2b2b",
+      "text": "#d3c5c8",
+      "border": "#8d8285",
+      "cornerRadius": 14,
+      "padding": 8,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "inputs": {
+      "background": "#1d1d1d",
+      "text": "#d3c5c8",
+      "border": "#8d8285",
+      "cornerRadius": 4,
+      "padding": 0,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "cards": {
+      "background": "#2b2b2b",
+      "text": "#d3c5c8",
+      "border": "#8d8285",
+      "cornerRadius": 8,
+      "padding": 10,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "header": {
+      "background": "#2b2b2b",
+      "text": "#d3c5c8",
+      "cornerRadius": 0,
+      "padding": 0,
+      "borderWidth": 0,
+      "textScale": 1
+    }
+  }
+}

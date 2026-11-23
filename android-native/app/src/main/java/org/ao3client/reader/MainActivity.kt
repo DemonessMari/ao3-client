@@ -1,5 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package org.ao3client.reader
+import androidx.compose.foundation.background
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -187,10 +188,10 @@ class MainActivity : ComponentActivity() {
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item {Text("Home",style=MaterialTheme.typography.headlineMedium)}
         item {Text("${vm.libraryEntries.size} recent works · ${vm.libraryEntries.count{it.offline}} offline · ${vm.libraryEntries.count{it.favorite}} favorites")}
-        item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){SkinButton(onClick={vm.navigate("search")}){Text("Search")};SkinOutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};SkinOutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
+        item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){SkinButton(onClick={vm.navigate("search")}){Text("Search")};SkinOutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};SkinOutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
         item {Text("Recent reads",style=MaterialTheme.typography.titleLarge)}
         if(vm.libraryEntries.isEmpty())item{Text("Your recent reads will appear here.")}
-        items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->SkinCard(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
+        items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->SkinCard(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
         item {SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/")},modifier=Modifier.fillMaxWidth()){Text("Browse AO3 website")}}
     }
 }
@@ -216,7 +217,7 @@ class MainActivity : ComponentActivity() {
             if (result.works.isEmpty() && result.unavailable.isEmpty()) item { Text(if(vm.ownWorks) "No works in this list." else "No works found.") }
             items(result.works, key = { it.id }) { fic ->
                 SkinCard(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(fic.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Text("by ${fic.author}", style = MaterialTheme.typography.bodyMedium)
                         if (fic.fandom.isNotBlank()) Text(fic.fandom, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -267,7 +268,7 @@ class MainActivity : ComponentActivity() {
                 trailing = { Text(if(expanded) "−" else "+", style = MaterialTheme.typography.headlineSmall) }
             )
             if(expanded) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = values.isEmpty(), onClick = { update(emptyList()) }, label = { Text("Any") })
                     field.choices.forEach { choice -> FilterChip(selected = choice.value in values, onClick = { update(if(field.multi) if(choice.value in values) values - choice.value else values + choice.value else if(choice.value in values) emptyList() else listOf(choice.value)) }, label = { Text(choice.label) }) }
                 }
@@ -344,12 +345,16 @@ class MainActivity : ComponentActivity() {
     Text("Reading appearance", style = MaterialTheme.typography.titleLarge)
     Text("Changes save automatically.", style = MaterialTheme.typography.bodySmall)
     SkinOutlinedButton(onClick=vm::showSkins){Text("App skin" + (vm.appSkin?.let { " · "+it.name } ?: ""))}
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if(vm.appSkin!=null) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text("Use app skin colors for reading",Modifier.weight(1f))
+        Switch(checked=prefs.useAppSkinColors,onCheckedChange={vm.appearance(useAppSkinColors=it)})
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("system" to "System", "light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
-            FilterChip(selected = vm.appSkin == null && prefs.theme == value, onClick = { vm.applySkin(null); vm.appearance(theme = value) }, label = { Text(title) })
+            FilterChip(selected = (vm.appSkin == null || !prefs.useAppSkinColors) && prefs.theme == value, onClick = { vm.appearance(theme = value,useAppSkinColors=false) }, label = { Text(title) })
         }
     }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("serif" to "Serif", "sans-serif" to "Sans serif").forEach { (value, title) ->
             FilterChip(selected = prefs.fontFamily == value, onClick = { vm.appearance(family = value) }, label = { Text(title) })
         }
@@ -361,12 +366,13 @@ class MainActivity : ComponentActivity() {
     Slider(value = prefs.lineSpacing, onValueChange = { vm.appearance(spacing = it) }, valueRange = 1.2f..2.2f, steps = 9)
     Text("Side margins · ${prefs.margin}")
     Slider(value=prefs.margin.toFloat(),onValueChange={vm.appearance(margin=it.toInt())},valueRange=0f..64f,steps=15)
-    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         listOf("left" to "Left","justify" to "Justified","center" to "Center","right" to "Right").forEach { (value,title) ->
             FilterChip(selected=prefs.alignment==value,onClick={vm.appearance(alignment=value)},label={Text(title)})
         }
     }
-    Text("Text preview. Change the margins and alignment to see how your reading text will look.\nSecond paragraph of text.",modifier=Modifier.fillMaxWidth().padding(horizontal=prefs.margin.dp),textAlign=readingAlignment(prefs.alignment),
+    val previewColors=readerColors(vm)
+    Text("Text preview. Change the margins and alignment to see how your reading text will look.\nSecond paragraph of text.",modifier=Modifier.fillMaxWidth().background(previewColors.background).padding(horizontal=prefs.margin.dp,vertical=12.dp),color=previewColors.onBackground,textAlign=readingAlignment(prefs.alignment),
         fontFamily = readerFontFamily(vm),
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize * prefs.lineSpacing).sp)
 }
@@ -413,18 +419,18 @@ class MainActivity : ComponentActivity() {
     val entries = vm.libraryEntries.filter { (filter != "offline" || it.offline) && (filter != "favorites" || it.favorite) && (it.fic.title.contains(query, true) || it.fic.author.contains(query, true)) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SkinOutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search library") }, singleLine = true) }
-        item { FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("recent" to "Recent", "offline" to "Offline", "favorites" to "Favorites").forEach { (value, title) -> FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(title) }) }
         } }
         if(entries.isEmpty()) item { Text("No works.") }
         items(entries, key = { it.fic.id }) { entry ->
             SkinCard(onClick = { vm.openLibrary(entry) }, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(entry.fic.title, style = MaterialTheme.typography.titleLarge)
                     Text("by ${entry.fic.author}")
                     Text(if(entry.offline) "Available offline" else "Needs AO3 to reopen", style = MaterialTheme.typography.labelLarge)
                     Text("Last read · " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(entry.openedAt)), style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SkinOutlinedButton(onClick = { vm.favorite(entry.fic.id, !entry.favorite) }) { Text(if(entry.favorite) "Unfavorite" else "Favorite") }
                         if(entry.offline) SkinTextButton(onClick = { vm.removeOffline(entry.fic.id) }) { Text("Remove download") }
                     }
@@ -458,7 +464,7 @@ class MainActivity : ComponentActivity() {
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if(result?.works?.isEmpty() == true) item { Text("No public fics in this view.") }
                 items(result?.works.orEmpty(), key = { it.id }) { fic -> SkinCard(onClick = { vm.showDetails(fic) }, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(fic.title, style = MaterialTheme.typography.titleLarge); Text("by ${fic.author}"); if(fic.summary.isNotBlank()) Text(fic.summary, maxLines = 4, overflow = TextOverflow.Ellipsis); Text(fic.stats, style = MaterialTheme.typography.bodySmall) }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(fic.title, style = MaterialTheme.typography.titleLarge); Text("by ${fic.author}"); if(fic.summary.isNotBlank()) Text(fic.summary, maxLines = 4, overflow = TextOverflow.Ellipsis); Text(fic.stats, style = MaterialTheme.typography.bodySmall) }
                 } }
                 if(result != null && result.pages > 1) item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     SkinTextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page - 1) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }

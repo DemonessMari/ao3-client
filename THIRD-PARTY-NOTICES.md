@@ -13,3 +13,30 @@ Kotlin, AndroidX and Jetpack Compose: Apache License 2.0. Sources: https://githu
 jsoup HTML parser: MIT License, copyright Jonathan Hedley and contributors. Source: https://github.com/jhy/jsoup . The pinned version is listed in `android-native/app/build.gradle`.
 
 License texts and Android notices are included in `android-native/app/src/main/assets/licenses/` and in the APK. The native Android release does not bundle Qt or OpenSSL. The old Qt Android prototype is retained as reference source only and is not the released APK.
+
+
+## neos native skin adaptations
+
+Original neos design by ZerafinaCSS: https://github.com/ZerafinaCSS/neos. The Tumblr Blue and Charcoal Rose JSON adaptations retain the original design values where the native format supports them. See `skins/neos/README.md` for mapping and differences.
+
+MIT License
+
+Copyright (c) 2025 Zerafina (https://github.com/ZerafinaCSS)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

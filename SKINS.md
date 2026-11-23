@@ -54,3 +54,10 @@ For example, add this to a version 3 skin (keeping the main color and layout fie
 ```
 
 A complete example is in `tests/fixtures/app-skin-v3.json`. Font importing remains separate; skins do not bundle assets or move controls.
+
+
+## Community design adaptations
+
+The App skin editor includes **Neos Blue** and **Neos Rose**, native adaptations of ZerafinaCSS's MIT-licensed [neos](https://github.com/ZerafinaCSS/neos). They include rounded controls, compact card spacing, separate form/content surfaces and a slim header. See [adaptation details](skins/neos/README.md) and its license for the supported design mapping.
+
+Reading theme, font, size, margins and alignment do not remove the app skin. Android offers **Use app skin colors for reading**; choosing a reading palette changes the reading area while preserving the custom interface. Desktop provides **Use app skin colors** in the reader options.

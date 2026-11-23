@@ -34,4 +34,14 @@ class AppSkinTest {
         val o=JSONObject(String(bytes));o.getJSONObject("components").put("menus",JSONObject())
         assertTrue(runCatching{AppSkin.parse(o.toString().toByteArray())}.isFailure)
     }
+    @Test fun bundledNeosAdaptationsHaveRoundedGeometryAndReadableContrast() {
+        for(name in listOf("tumblr-blue","charcoal-rose")){
+            val bytes=javaClass.classLoader!!.getResourceAsStream("neos/$name.json")!!.use{it.readBytes()}
+            val skin=AppSkin.parse(bytes)
+            assertEquals(skin,AppSkin.parse(skin.json().toByteArray()))
+            assertEquals(14,skin.components.getValue("buttons")["cornerRadius"])
+            assertEquals(8,skin.components.getValue("cards")["cornerRadius"])
+            assertEquals(10,skin.components.getValue("cards")["padding"])
+        }
+    }
 }

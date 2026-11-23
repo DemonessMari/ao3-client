@@ -8,5 +8,8 @@
         <file alias="docs/PRIVACY.md">../PRIVACY.md</file>
         <file alias="docs/THIRD-PARTY-NOTICES.md">../THIRD-PARTY-NOTICES.md</file>
         <file alias="docs/LICENSE">../LICENSE</file>
+        <file alias="skins/neos/tumblr-blue.json">../skins/neos/tumblr-blue.json</file>
+        <file alias="skins/neos/charcoal-rose.json">../skins/neos/charcoal-rose.json</file>
+        <file alias="skins/neos/LICENSE">../skins/neos/LICENSE</file>
     </qresource>
 </RCC>

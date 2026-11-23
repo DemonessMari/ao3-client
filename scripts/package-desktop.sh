@@ -6,6 +6,7 @@ version="$(sed -n 's/.*setApplicationVersion(QStringLiteral("\([^"]*\)")).*/\1/p
 stage="$(mktemp -d)"; trap 'rm -rf -- "$stage"' EXIT
 cmake --install "$build_dir" --prefix "$stage/ao3-client-$version/usr"
 cp "$project_dir/SKINS.md" "$project_dir/LICENSE" "$project_dir/README.md" "$project_dir/PRIVACY.md" "$project_dir/THIRD-PARTY-NOTICES.md" "$project_dir/FEATURES.md" "$project_dir/RELEASE-CHECKLIST.md" "$project_dir/VERIFICATION.md" "$project_dir/SECURITY.md" "$stage/ao3-client-$version/"
+cp -R "$project_dir/skins" "$stage/ao3-client-$version/skins"
 cp "$project_dir/tests/fixtures/app-skin-v3.json" "$stage/ao3-client-$version/example-skin.json"
 cp "$project_dir/scripts/install-package.py" "$stage/ao3-client-$version/install-package.py"
 cp "$project_dir/scripts/write-launcher.py" "$stage/ao3-client-$version/write-launcher.py"

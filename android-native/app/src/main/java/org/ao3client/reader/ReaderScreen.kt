@@ -38,7 +38,15 @@ import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
+@Composable internal fun readerColors(vm:ClientState):ColorScheme {
+    if(vm.preferences.useAppSkinColors)vm.appSkin?.let{return it.colorScheme()}
+    val theme=if(vm.preferences.theme=="system") {if(androidx.compose.foundation.isSystemInDarkTheme())"dark" else "light"} else vm.preferences.theme
+    return AppSkin.preset(theme).colorScheme()
+}
 @Composable fun ReaderScreen(vm: ClientState) {
+    MaterialTheme(colorScheme=readerColors(vm)){ReaderContent(vm)}
+}
+@Composable private fun ReaderContent(vm: ClientState) {
     val readingFamily=readerFontFamily(vm)
     val fic = vm.selected ?: return
     if(vm.chapters.isEmpty()) return

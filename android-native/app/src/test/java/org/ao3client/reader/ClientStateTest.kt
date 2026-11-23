@@ -106,11 +106,20 @@ class ClientStateTest {
     @Test fun readerLayoutPersistsAndClampsWithoutLeavingTheChapter() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app);vm.screen="reader";vm.chapter=2;vm.bookOffset=123
         vm.applySkin(AppSkin.preset("sepia"));vm.appearance(margin=32);assertEquals("Sepia",vm.appSkin?.name)
-        vm.appearance(theme="system",margin=52,alignment="justify");assertNull(vm.appSkin)
+        vm.appearance(theme="system",margin=52,alignment="justify");assertEquals("Sepia",vm.appSkin?.name);assertFalse(vm.preferences.useAppSkinColors)
         assertEquals("reader",vm.screen);assertEquals(2,vm.chapter);assertEquals(123,vm.bookOffset)
-        val restored=state(app);assertEquals("system",restored.preferences.theme);assertEquals(52,restored.preferences.margin);assertEquals("justify",restored.preferences.alignment)
+        val restored=state(app);assertEquals("system",restored.preferences.theme);assertEquals(52,restored.preferences.margin);assertEquals("justify",restored.preferences.alignment);assertEquals("Sepia",restored.appSkin?.name);assertFalse(restored.preferences.useAppSkinColors)
         vm.appearance(margin=999,alignment="invalid");assertEquals(64,vm.preferences.margin);assertEquals("left",vm.preferences.alignment)
         vm.appearance(margin=-1,alignment="right");assertEquals(0,vm.preferences.margin);assertEquals("right",state(app).preferences.alignment)
+    }
+    @Test fun readerAppearanceNeverRemovesTheCustomInterfaceSkin() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
+        val skin=AppSkin.preset("dark").copy(version=3,cornerRadius=16,components=mapOf("cards" to mapOf("padding" to 12)))
+        vm.applySkin(skin);vm.screen="reader";vm.chapter=2;vm.bookOffset=123
+        vm.appearance(theme="light",useAppSkinColors=false);vm.appearance(family="sans-serif",spacing=1.8f,margin=40,alignment="justify");vm.fontSize(24)
+        assertEquals(skin,vm.appSkin);assertFalse(vm.preferences.useAppSkinColors);assertEquals("reader",vm.screen);assertEquals(2,vm.chapter);assertEquals(123,vm.bookOffset)
+        val restored=state(app);assertEquals(skin,restored.appSkin);assertFalse(restored.preferences.useAppSkinColors)
+        vm.appearance(useAppSkinColors=true);assertTrue(state(app).preferences.useAppSkinColors);assertEquals(skin,vm.appSkin)
     }
     @Test fun missingImportedFontFallsBackAndRemovingOneKeepsTheChapter() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val missing="font:"+"a".repeat(64)

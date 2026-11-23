@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
         Text("Use imported font in interface",Modifier.weight(1f))
     }
     vm.fontError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
-    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         SkinOutlinedButton(onClick={picker.launch(arrayOf("*/*"))},enabled=!vm.fontImporting) {Text(if(vm.fontImporting)"Importing…" else "Import font")}
         if(ReaderFontStore.validId(vm.preferences.fontFamily))SkinTextButton(onClick={vm.removeFont(vm.preferences.fontFamily)},enabled=!vm.fontImporting) {Text("Remove font")}
     }

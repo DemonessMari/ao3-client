@@ -34,3 +34,16 @@ Android release: 120 tests pass, one live test is skipped; lint has zero errors,
 Native skin version 3 adds independent button, input, card and header rules without CSS injection. Older versions remain supported. Remaining release checks are authenticated writes, device accessibility/rotation/Back/file-pickers, external media/work-skin assets and long reading sessions. Keep this release marked prerelease.
 
 The desktop installation in `~/Applications/ao3-client` matches the tested binary and passes an isolated startup check from `/tmp`. The connected phone reports rc.15/code 30 after an in-place update. Existing app data was retained. Release downloads live in `~/Downloads`; the desktop archive includes a complete example component skin.
+
+
+## 3.2.0-rc.18
+
+2026-11-24: all six desktop suites pass, including a regression for nested header/input palettes and rendering of both bundled neos adaptations. Rendered community themes and the editor were inspected; the editor fits all component rows at the tested size and retains scrolling for smaller screens. Native component rules are applied after stylesheet refresh, with parents before children.
+
+Android: 122 tests pass and one live test is skipped; release lint has zero errors, 37 warnings and two hints. Regression tests verify reading changes preserve the complete custom interface skin and persist the independent reading-color choice across restart. APK and AAB signatures verify. Both bundled designs, original author credit, MIT license and adaptation notes are packaged offline.
+
+Skin editor inheritance rows now align text and switches with explicit spacing; wrapping action/chip rows have vertical gaps. The editor uses neutral component geometry outside its draft preview. Fic-card padding is applied once. The neos variants retain supported upstream geometry and surfaces, with documented contrast adjustments and unsupported website features.
+
+Phone visual acceptance and rc.18 installation are pending: no device was connected during this pass. Physical layout, large fonts, rotation and long-session checks remain separate from automated validation.
+
+The desktop installation in `~/Applications/ao3-client` matches the tested rc.18 binary and passes an isolated startup check from `/tmp`; existing application data is retained.

@@ -26,7 +26,7 @@ internal fun Map<String,Any>.color(key:String,fallback:Color)=(get(key) as? Stri
 }
 @Composable internal fun skinBorder(role:String):BorderStroke? {val rule=skinRule(role);val width=rule.number("borderWidth",if(role=="cards" || rule.containsKey("border"))1.0 else 0.0);return if(width>0)BorderStroke(width.dp,rule.color("border",MaterialTheme.colorScheme.onSurface)) else null}
 @Composable internal fun SkinRole(role:String,content:@Composable ()->Unit){
-    val rule=skinRule(role);val scheme=MaterialTheme.colorScheme
+    val rule=skinRule(role);val scheme=if(role=="header")LocalAppSkin.current?.colorScheme() ?: MaterialTheme.colorScheme else MaterialTheme.colorScheme
     val bg=rule.color("background",if(role=="header")scheme.background else scheme.surface)
     val fg=rule.color("text",scheme.onSurface)
     val factor=rule.number("textScale",1.0).toFloat()
@@ -41,7 +41,7 @@ internal fun Map<String,Any>.color(key:String,fallback:Color)=(get(key) as? Stri
 }
 @Composable internal fun SkinCard(onClick:()->Unit,modifier:Modifier=Modifier,content:@Composable ColumnScope.()->Unit){
     val rule=skinRule("cards")
-    SkinRole("cards"){Card(onClick=onClick,modifier=modifier,shape=skinShape("cards"),border=skinBorder("cards"),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface)){Column(Modifier.padding(rule.number("padding",0.0).dp),content=content)}}
+    SkinRole("cards"){Card(onClick=onClick,modifier=modifier,shape=skinShape("cards"),border=skinBorder("cards"),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface)){Column(Modifier.padding(rule.number("padding",16.0).dp),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)}}
 }
 @Composable private fun skinInputColors():TextFieldColors {
     val r=skinRule("inputs");val s=MaterialTheme.colorScheme;val fg=r.color("text",s.onSurface);val bg=r.color("background",s.surface);val border=if(r.containsKey("borderWidth"))Color.Transparent else r.color("border",s.outline)

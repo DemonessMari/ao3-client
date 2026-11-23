@@ -32,10 +32,12 @@
 #include <QListWidget>
 #include <QPointer>
 #include <QMenu>
+#include <algorithm>
+#include <QScreen>
 
 namespace {
 QString skinRole(const QWidget *widget) {
-    for(auto *w=widget;w;w=w->parentWidget())if(qobject_cast<const QMenu *>(w))return {};
+    for(auto *w=widget;w;w=w->parentWidget()){if(w->objectName()=="skinPreview")break;if(qobject_cast<const QMenu *>(w) || w->property("skinEditor").toBool())return {};}
     if(qobject_cast<const QPushButton *>(widget))return "buttons";
     if(qobject_cast<const QLineEdit *>(widget)||qobject_cast<const QComboBox *>(widget)||qobject_cast<const QAbstractSpinBox *>(widget)||qobject_cast<const QTextEdit *>(widget))return "inputs";
     for(auto *w=widget;w;w=w->parentWidget())if(!w->property("skinRole").toString().isEmpty())return w->property("skinRole").toString();
@@ -68,7 +70,7 @@ public:
     }
     void drawComplexControl(ComplexControl control,const QStyleOptionComplex *option,QPainter *painter,const QWidget *widget=nullptr)const override {
         const auto rule=skin.component("inputs");
-        if(!custom || rule.isEmpty() || (control!=CC_ComboBox && control!=CC_SpinBox)){QProxyStyle::drawComplexControl(control,option,painter,widget);return;}
+        if(!custom || rule.isEmpty() || skinRole(widget)!="inputs" || (control!=CC_ComboBox && control!=CC_SpinBox)){QProxyStyle::drawComplexControl(control,option,painter,widget);return;}
         QStyleOption panel;panel.rect=option->rect;panel.state=option->state;panel.palette=option->palette;drawPrimitive(PE_PanelLineEdit,&panel,painter,widget);
         if(control==CC_ComboBox){QStyleOption arrow=*option;arrow.rect=subControlRect(control,option,SC_ComboBoxArrow,widget).adjusted(4,4,-4,-4);QProxyStyle::drawPrimitive(PE_IndicatorArrowDown,&arrow,painter,widget);}
         else for(auto pair:QList<QPair<SubControl,PrimitiveElement>>{{SC_SpinBoxUp,PE_IndicatorArrowUp},{SC_SpinBoxDown,PE_IndicatorArrowDown}}){QStyleOption arrow=*option;arrow.rect=subControlRect(control,option,pair.first,widget).adjusted(3,2,-3,-2);QProxyStyle::drawPrimitive(pair.second,&arrow,painter,widget);}
@@ -80,7 +82,7 @@ public:
         const bool active=button->state & (State_Sunken|State_On|State_MouseOver);
         const auto group=enabled?QPalette::Active:QPalette::Disabled;
         painter->save();painter->setRenderHint(QPainter::Antialiasing);
-        const auto rule=skin.component("buttons");const double width=rule.value("borderWidth").toDouble(button->state & State_HasFocus?2:1);
+        const auto rule=skinRole(widget)=="buttons"?skin.component("buttons"):QJsonObject();const double width=rule.value("borderWidth").toDouble(button->state & State_HasFocus?2:1);
         painter->setPen(width>0?QPen(QColor(rule.value("border").toString(button->palette.color(group,button->state & State_HasFocus?QPalette::Highlight:QPalette::Mid).name())),width):QPen(Qt::NoPen));
         painter->setBrush(button->palette.color(group,active?QPalette::Highlight:QPalette::Button));
         const int r=rule.value("cornerRadius").toInt(radius);painter->drawRoundedRect(QRectF(button->rect).adjusted(1,1,-1,-1),r,r);painter->restore();
@@ -204,25 +206,30 @@ void applyAppSkin() {
     }
     QApplication::setFont(font);previousScale=skin.uiScale;
     qApp->setPalette(skin.palette());
-    for(auto *w:QApplication::allWidgets()) {
+    auto widgets=QApplication::allWidgets();
+    auto depth=[](const QWidget *w){int n=0;for(;w;w=w->parentWidget())++n;return n;};
+    std::stable_sort(widgets.begin(),widgets.end(),[&](const QWidget *a,const QWidget *b){return depth(a)<depth(b);});
+    for(auto *w:widgets) {
         w->setPalette(skin.palette());
         if(w->property("ao3ComponentBaseSize").isValid()){auto f=w->font();f.setPointSizeF(w->property("ao3ComponentBaseSize").toDouble()*skin.uiScale);w->setFont(f);}
         if(w->layout() && w->property("ao3BaseMargins").isValid()){const auto m=w->property("ao3BaseMargins").toList();w->layout()->setContentsMargins(m[0].toInt(),m[1].toInt(),m[2].toInt(),m[3].toInt());}
-        componentWidget(w);w->update();
+        w->update();
     }
     qApp->setStyleSheet(qApp->styleSheet());
-    for(auto *w:QApplication::allWidgets())if(!w->styleSheet().isEmpty())w->setStyleSheet(w->styleSheet());
+    for(auto *w:widgets)if(!w->styleSheet().isEmpty())w->setStyleSheet(w->styleSheet());
+    for(auto *w:widgets)componentWidget(w);
     for(auto *window:QApplication::topLevelWidgets())for(auto *reader:window->findChildren<ReaderWidget *>())reader->refreshSkin();
 }
 void editAppSkin(QWidget *parent) {
-    QDialog dialog(parent);dialog.setWindowTitle("App skin");dialog.resize(560,720);
+    QDialog dialog(parent);dialog.setProperty("skinEditor",true);dialog.setWindowTitle("App skin");dialog.resize(600,qMin(820,qMax(560,dialog.screen()->availableGeometry().height()-40)));
     auto *layout=new QVBoxLayout(&dialog);
-    auto *presets=new QComboBox(&dialog);presets->addItems({"Custom","Light","Dark","Sepia"});layout->addWidget(presets);
+    auto *presets=new QComboBox(&dialog);presets->addItems({"Custom","Light","Dark","Sepia","Neos Tumblr Blue","Neos Charcoal Rose"});layout->addWidget(presets);
+    layout->addWidget(new QLabel("Neos adaptations · ZerafinaCSS · MIT",&dialog));
     auto *follow=new QCheckBox("Follow system theme",&dialog);follow->setObjectName("followSystemTheme");follow->setChecked(QSettings().value("appearance/followSystem",false).toBool());layout->addWidget(follow);
     auto *tabs=new QTabWidget(&dialog);layout->addWidget(tabs,1);
-    auto addTab=[&](const QString &name){auto *scroll=new QScrollArea(tabs);scroll->setWidgetResizable(true);auto *body=new QWidget(scroll);scroll->setWidget(body);tabs->addTab(scroll,name);auto *form=new QFormLayout(body);form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);return form;};
+    auto addTab=[&](const QString &name){auto *scroll=new QScrollArea(tabs);scroll->setWidgetResizable(true);auto *body=new QWidget(scroll);scroll->setWidget(body);tabs->addTab(scroll,name);auto *form=new QFormLayout(body);form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);form->setRowWrapPolicy(QFormLayout::WrapLongRows);form->setLabelAlignment(Qt::AlignLeft|Qt::AlignVCenter);form->setFormAlignment(Qt::AlignTop);form->setSizeConstraint(QLayout::SetMinAndMaxSize);form->setVerticalSpacing(8);form->setContentsMargins(16,16,16,16);return form;};
     auto *form=addTab("Theme");QList<QLineEdit *> fields;
-    for(const auto &label:{"Name","Background","Surface","Text","Accent","Text on accent"}){auto *field=new QLineEdit(&dialog);field->setMaxLength(fields.isEmpty()?60:7);form->addRow(label,field);fields.append(field);}
+    for(const auto &label:{"Name","Background","Surface","Text","Accent","Text on accent"}){auto *field=new QLineEdit(&dialog);field->setMaxLength(fields.isEmpty()?60:7);field->setMinimumHeight(32);form->addRow(label,field);fields.append(field);}
     auto *scale=new QDoubleSpinBox(&dialog);scale->setRange(1,1.5);scale->setSingleStep(.05);scale->setDecimals(2);form->addRow("Interface scale",scale);
     auto *radius=new QSpinBox(&dialog);radius->setRange(0,24);form->addRow("Default corners",radius);
     QMap<QString,QMap<QString,QLineEdit *>> componentFields;
@@ -230,7 +237,7 @@ void editAppSkin(QWidget *parent) {
         auto *componentForm=addTab(role.left(1).toUpper()+role.mid(1));
         auto *hint=new QLabel("Leave a field empty to inherit the theme.",&dialog);hint->setWordWrap(true);componentForm->addRow(hint);
         for(const auto &pair:QList<QPair<QString,QString>>{{"background","Background"},{"text","Text"},{"border","Border"},{"cornerRadius","Corners (0–24)"},{"padding","Spacing (0–24)"},{"textScale","Text scale (0.85–1.5)"},{"borderWidth","Border width (0–3)"}}){
-            auto *field=new QLineEdit(&dialog);field->setMaxLength(7);field->setPlaceholderText("Inherit");field->setObjectName("skin_"+role+"_"+pair.first);componentFields[role][pair.first]=field;componentForm->addRow(pair.second,field);
+            auto *field=new QLineEdit(&dialog);field->setMaxLength(7);field->setMinimumHeight(32);field->setPlaceholderText("Inherit");field->setObjectName("skin_"+role+"_"+pair.first);componentFields[role][pair.first]=field;componentForm->addRow(pair.second,field);
         }
     }
     auto *preview=new QWidget(&dialog);preview->setObjectName("skinPreview");preview->setAutoFillBackground(true);auto *pv=new QVBoxLayout(preview);
@@ -258,7 +265,7 @@ void editAppSkin(QWidget *parent) {
     QObject::connect(scale,&QDoubleSpinBox::valueChanged,&dialog,update);QObject::connect(radius,&QSpinBox::valueChanged,&dialog,update);
     AppSkin manual;customAppSkin(manual);fill(resolvedAppSkin(QGuiApplication::styleHints()->colorScheme()==Qt::ColorScheme::Dark));tabs->setEnabled(!follow->isChecked());presets->setEnabled(!follow->isChecked());
     QObject::connect(follow,&QCheckBox::toggled,&dialog,[&](bool checked){if(checked){QString error;read(manual,error);fill(AppSkin::preset(QGuiApplication::styleHints()->colorScheme()==Qt::ColorScheme::Dark?1:0));}else fill(manual);tabs->setEnabled(!checked);presets->setEnabled(!checked);});
-    QObject::connect(presets,&QComboBox::activated,&dialog,[&](int i){if(i>0)fill(AppSkin::preset(i-1));});
+    QObject::connect(presets,&QComboBox::activated,&dialog,[&](int i){if(i>=1 && i<=3)fill(AppSkin::preset(i-1));else if(i>=4){QFile file(":/skins/neos/"+QString(i==4?"tumblr-blue":"charcoal-rose")+".json");AppSkin skin;QString error;if(file.open(QIODevice::ReadOnly) && AppSkin::parse(file.readAll(),skin,error))fill(skin);else errorLabel->setText(error.isEmpty()?"Cannot load bundled skin.":error);}});
     QObject::connect(reset,&QPushButton::clicked,&dialog,[&]{follow->setChecked(false);fill(AppSkin::preset(0));});
     QObject::connect(importButton,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getOpenFileName(&dialog,"Import app skin",{},"Skin files (*.json)");if(path.isEmpty())return;QFile file(path);AppSkin skin;QString error;if(!file.open(QIODevice::ReadOnly)||!AppSkin::parse(file.read(16385),skin,error)){QMessageBox::warning(&dialog,"Cannot import skin",error.isEmpty()?"Cannot read the file.":error);return;}follow->setChecked(false);presets->setCurrentIndex(0);fill(skin);});
     QObject::connect(exportButton,&QPushButton::clicked,&dialog,[&]{AppSkin skin;QString error;if(!read(skin,error))return;const auto path=QFileDialog::getSaveFileName(&dialog,"Export app skin","ao3-skin.json","Skin files (*.json)");if(path.isEmpty())return;QSaveFile file(path);const auto bytes=skin.json();if(!file.open(QIODevice::WriteOnly)||file.write(bytes)!=bytes.size()||!file.commit())QMessageBox::warning(&dialog,"Export failed","Could not save the skin file.");});

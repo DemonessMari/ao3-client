@@ -1,0 +1,49 @@
+{
+  "format": "ao3-client-skin",
+  "version": 3,
+  "uiScale": 1.03,
+  "cornerRadius": 8,
+  "onAccent": "#0d141b",
+  "name": "Neos Tumblr Blue \u00b7 native",
+  "background": "#1a2735",
+  "surface": "#263b53",
+  "text": "#b3b3b3",
+  "accent": "#00b8ff",
+  "components": {
+    "buttons": {
+      "background": "#1a2735",
+      "text": "#b3b3b3",
+      "border": "#828790",
+      "cornerRadius": 14,
+      "padding": 8,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "inputs": {
+      "background": "#36465d",
+      "text": "#b3b3b3",
+      "border": "#b3b3b3",
+      "cornerRadius": 4,
+      "padding": 0,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "cards": {
+      "background": "#263b53",
+      "text": "#b3b3b3",
+      "border": "#828790",
+      "cornerRadius": 8,
+      "padding": 10,
+      "borderWidth": 1,
+      "textScale": 1
+    },
+    "header": {
+      "background": "#1a2735",
+      "text": "#b3b3b3",
+      "cornerRadius": 0,
+      "padding": 0,
+      "borderWidth": 0,
+      "textScale": 1
+    }
+  }
+}

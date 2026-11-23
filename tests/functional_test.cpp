@@ -174,6 +174,14 @@ private slots:
         for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
     }
+    void bundledCommunitySkinsLoadAndRender() {
+        const auto previous=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(previous.isValid())QSettings().setValue("appearance/skin",previous);else QSettings().remove("appearance/skin");applyAppSkin();});
+        for(const auto &name:QStringList{"tumblr-blue","charcoal-rose"}){
+            QFile file(":/skins/neos/"+name+".json");QVERIFY(file.open(QIODevice::ReadOnly));AppSkin skin;QString error;QVERIFY2(AppSkin::parse(file.readAll(),skin,error),qPrintable(error));QCOMPARE(skin.component("buttons").value("cornerRadius").toInt(),14);QCOMPARE(skin.component("cards").value("padding").toInt(),10);
+            QSettings().setValue("appearance/skin",skin.json());MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();applyAppSkin();QTest::qWait(50);QCOMPARE(window.m_searchInput->palette().color(QPalette::Base),QColor(skin.component("inputs").value("background").toString()));
+            if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))window.grab().save("/tmp/ao3-neos-"+name+".png");
+        }
+    }
     void componentSkinEditorPreviewsWithoutApplying() {
         const auto before=QSettings().value("appearance/skin");bool visited=false;
         QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});

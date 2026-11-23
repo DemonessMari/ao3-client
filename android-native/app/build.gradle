@@ -14,10 +14,10 @@ android {
         testInstrumentationRunner 'org.ao3client.reader.DeviceNetworkInstrumentation'
         minSdk 28
         targetSdk 36
-        versionCode 32
-        versionName '3.2.0-rc.17'
+        versionCode 33
+        versionName '3.2.0-rc.18'
     }
-    sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures") }
+    sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures"); main.assets.srcDir file("../../skins"); test.resources.srcDir file("../../skins") }
     signingConfigs {
         release {
             if (System.getenv('AO3_SIGNING_FILE')) {
