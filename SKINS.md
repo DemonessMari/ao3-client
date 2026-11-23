@@ -39,6 +39,8 @@ Version 3 adds a `components` object. The editor has separate controls for **But
 
 Each component accepts optional `background`, `text` and `border` colors, `cornerRadius` (0–24), `padding` (0–24), `textScale` (0.85–1.5), and `borderWidth` (0–3). Sizes use native logical units, with platform accessibility scaling retained. Buttons keep their minimum touch target on Android. Input spacing reserves space around Android fields; desktop uses native control size and container margins. Menus retain their platform shape. Reader text size, margins and pagination remain separate reading settings.
 
+Fic cards have a thin border by default. Set card `borderWidth` to `0` to remove it, or choose a border color and width.
+
 Component text needs 4.5:1 contrast against its background. An explicitly selected border needs 3:1 contrast. Omitted button colors inherit accent/text-on-accent; input and card colors inherit surface/text; header colors inherit background/text. Styles are native component settings, without CSS, scripts or remote resources.
 
 For example, add this to a version 3 skin (keeping the main color and layout fields):

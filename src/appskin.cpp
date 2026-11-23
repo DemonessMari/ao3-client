@@ -95,7 +95,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *)override {
         const auto rule=skin.component(role);const auto bg=rule.value("background").toString(role=="header"?skin.background:skin.surface);
-        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(rule.contains("border")?1:0);
+        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);
         p.setPen(width>0?QPen(QColor(rule.value("border").toString(skin.text)),width):QPen(Qt::NoPen));p.setBrush(QColor(bg));const int radius=rule.value("cornerRadius").toInt(skin.cornerRadius);p.drawRoundedRect(QRectF(rect()).adjusted(1,1,-1,-1),radius,radius);
     }
 };
@@ -151,7 +151,7 @@ public:using QObject::QObject;
         if(event->type()==QEvent::Paint && nativeStyle->skin.version==3 && widget->property("skinRole").isValid()){
             const auto role=widget->property("skinRole").toString();const auto rule=nativeStyle->skin.component(role);
             if(rule.isEmpty())return false;
-            QPainter p(widget);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(rule.contains("border")?1:0);
+            QPainter p(widget);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);
             p.setPen(width>0?QPen(QColor(rule.value("border").toString(nativeStyle->skin.text)),width):QPen(Qt::NoPen));p.setBrush(widget->palette().color(QPalette::Window));const int r=rule.value("cornerRadius").toInt(nativeStyle->radius);p.drawRoundedRect(QRectF(widget->rect()).adjusted(1,1,-1,-1),r,r);return true;
         }
         return false;

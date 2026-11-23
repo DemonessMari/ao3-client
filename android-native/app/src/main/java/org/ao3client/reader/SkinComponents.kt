@@ -24,7 +24,7 @@ internal fun Map<String,Any>.color(key:String,fallback:Color)=(get(key) as? Stri
     val rule=skinRule(role);val radius=(rule["cornerRadius"] as? Number)?.toInt() ?: LocalSkinRadius.current
     return if(radius!=null)RoundedCornerShape(radius.dp) else when(role){"buttons"->ButtonDefaults.shape;"inputs"->OutlinedTextFieldDefaults.shape;"header"->androidx.compose.ui.graphics.RectangleShape;else->CardDefaults.shape}
 }
-@Composable internal fun skinBorder(role:String):BorderStroke? {val rule=skinRule(role);val width=rule.number("borderWidth",if(rule.containsKey("border"))1.0 else 0.0);return if(width>0)BorderStroke(width.dp,rule.color("border",MaterialTheme.colorScheme.onSurface)) else null}
+@Composable internal fun skinBorder(role:String):BorderStroke? {val rule=skinRule(role);val width=rule.number("borderWidth",if(role=="cards" || rule.containsKey("border"))1.0 else 0.0);return if(width>0)BorderStroke(width.dp,rule.color("border",MaterialTheme.colorScheme.onSurface)) else null}
 @Composable internal fun SkinRole(role:String,content:@Composable ()->Unit){
     val rule=skinRule(role);val scheme=MaterialTheme.colorScheme
     val bg=rule.color("background",if(role=="header")scheme.background else scheme.surface)
