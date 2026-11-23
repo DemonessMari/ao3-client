@@ -82,10 +82,10 @@ fun ArchiveBookmarkScreen(vm:ClientState) {
         OutlinedTextField(form.collections,{update(form.copy(collections=it))},label={Text("Collections, comma separated")},modifier=Modifier.fillMaxWidth(),enabled=!vm.bookmarkSending)
         Row(Modifier.fillMaxWidth().toggleable(value=form.privateBookmark,enabled=!vm.bookmarkSending,role=Role.Checkbox,onValueChange={update(form.copy(privateBookmark=it))}),verticalAlignment=Alignment.CenterVertically) {Checkbox(form.privateBookmark,null,enabled=!vm.bookmarkSending);Text("Private bookmark")}
         Row(Modifier.fillMaxWidth().toggleable(value=form.recommendation,enabled=!vm.bookmarkSending,role=Role.Checkbox,onValueChange={update(form.copy(recommendation=it))}),verticalAlignment=Alignment.CenterVertically) {Checkbox(form.recommendation,null,enabled=!vm.bookmarkSending);Text("Recommendation")}
-        Button(onClick={vm.saveArchiveBookmark()},enabled=!vm.bookmarkSending && !vm.bookmarkUncertain) {Text(if(vm.bookmarkSending) "Saving…" else "Save to AO3")}
-        if(form.id.isNotBlank())OutlinedButton(onClick={deleting=true},enabled=!vm.bookmarkSending && !vm.bookmarkUncertain) {Text("Delete AO3 bookmark")}
-        TextButton(onClick={reloading=true},enabled=!vm.bookmarkSending) {Text("Reload from AO3")}
+        SkinButton(onClick={vm.saveArchiveBookmark()},enabled=!vm.bookmarkSending && !vm.bookmarkUncertain) {Text(if(vm.bookmarkSending) "Saving…" else "Save to AO3")}
+        if(form.id.isNotBlank())SkinOutlinedButton(onClick={deleting=true},enabled=!vm.bookmarkSending && !vm.bookmarkUncertain) {Text("Delete AO3 bookmark")}
+        SkinTextButton(onClick={reloading=true},enabled=!vm.bookmarkSending) {Text("Reload from AO3")}
     }
-    if(reloading)AlertDialog(onDismissRequest={reloading=false},title={Text("Reload bookmark?")},text={Text("Replace this draft with the bookmark saved on AO3?")},confirmButton={TextButton(onClick={reloading=false;vm.editArchiveBookmark(form.workId,true)}) {Text("Reload")}},dismissButton={TextButton(onClick={reloading=false}) {Text("Cancel")}})
-    if(deleting)AlertDialog(onDismissRequest={deleting=false},title={Text("Delete AO3 bookmark?")},text={Text("This deletes your account bookmark, including its notes and tags.")},confirmButton={TextButton(onClick={deleting=false;vm.saveArchiveBookmark(true)}) {Text("Delete")}},dismissButton={TextButton(onClick={deleting=false}) {Text("Cancel")}})
+    if(reloading)AlertDialog(onDismissRequest={reloading=false},title={Text("Reload bookmark?")},text={Text("Replace this draft with the bookmark saved on AO3?")},confirmButton={SkinTextButton(onClick={reloading=false;vm.editArchiveBookmark(form.workId,true)}) {Text("Reload")}},dismissButton={SkinTextButton(onClick={reloading=false}) {Text("Cancel")}})
+    if(deleting)AlertDialog(onDismissRequest={deleting=false},title={Text("Delete AO3 bookmark?")},text={Text("This deletes your account bookmark, including its notes and tags.")},confirmButton={SkinTextButton(onClick={deleting=false;vm.saveArchiveBookmark(true)}) {Text("Delete")}},dismissButton={SkinTextButton(onClick={deleting=false}) {Text("Cancel")}})
 }

@@ -235,6 +235,37 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
     fun avatar(url:String):ByteArray {require(avatarUrlAllowed(url));val cookie=synchronized(cookieLock){cookies.get(URI(url),emptyMap())["Cookie"]?.joinToString("; ")};return loadAvatarBytes(url,cookie,prefs.getString("networkUserAgent",null)?:"AO3Client/3.0 (Unofficial Android Reader)")}
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }
     fun authorWorks(user: String, page: Int, bookmarks: Boolean): Listing { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.listing(request("/users/${encode(user)}/${if(bookmarks) "bookmarks" else "works"}?page=$page"), page) }
+    internal fun entitySubscription(type:String,target:String,user:String,desired:Boolean?=null):Boolean? {
+        require(type in listOf("Series","User"))
+        require(if(type=="Series")target.matches(Regex("[0-9]+")) else target.matches(Regex("[A-Za-z0-9_]+")))
+        val route=if(type=="Series")"/series/$target" else "/users/$target"
+        val generation=cookieGeneration
+        val html=request(route,expectedGeneration=generation)
+        require(ArchiveParser.sessionIdentity(html)==user){"Your AO3 session changed. Check native sign-in."}
+        val form=Subscriptions.form(html,if(type=="Series")target else "",user,type) ?: return null
+        if(desired==null || form.subscribed==desired)return form.subscribed
+        val result=try{request(form.path,form.fields,generation,referer=route)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the subscription change. Check your subscriptions on AO3 before retrying.",e)}
+        require(ArchiveParser.sessionIdentity(result)==user)
+        val updated=Subscriptions.form(result,form.fields.getValue("subscription[subscribable_id]"),user,type)
+        require(updated?.subscribed==desired){"Could not confirm the subscription change. Check your subscriptions on AO3 before retrying."}
+        return updated.subscribed
+    }
+    internal fun archivePage(kind:String,user:String,id:String,page:Int):ArchivePage {
+        require(page in 1..1000000)
+        val route=archivePageRoute(kind,user,id)
+        return parseArchivePage(request("$route?page=$page"),kind,user,id,page)
+    }
+    internal fun archivePageAction(kind:String,user:String,id:String,page:Int,entryId:String,label:String):ArchivePage {
+        require(kind in listOf("subscriptions","inbox"))
+        val route=archivePageRoute(kind,user,id)
+        val generation=cookieGeneration
+        val fresh=pageAction(request("$route?page=$page",expectedGeneration=generation),kind,user,id,page,entryId,label)
+        val html=try{request(fresh.path,fresh.fields,generation,referer=route+"?page=$page")}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
+        val result=try{parseArchivePage(html,kind,user,id,page)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
+        val entry=result.entries.firstOrNull{it.id==entryId}
+        require(when(label){"Unsubscribe","Delete from inbox"->entry==null;"Mark read"->entry!=null && !entry.unread;"Mark unread"->entry?.unread==true;else->false}){"Could not confirm the change. Refresh the AO3 list before trying again."}
+        return result
+    }
     internal fun accountReadings(user:String,page:Int,later:Boolean):Listing {
         require(user.matches(Regex("[A-Za-z0-9_]+")) && page in 1..1000000)
         return parseAccountReadings(request("/users/$user/readings?page=$page"+if(later) "&show=to-read" else ""),user,page)
@@ -350,9 +381,37 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         prefs.getString("sessionUsername", null)?.takeIf { cookies.cookieStore.cookies.any { cookie -> !cookie.hasExpired() } }
     }
     fun commentForm(workId:String,replyId:String=""):CommentForm {
-        require(workId.matches(Regex("\\d+")) && (replyId.isEmpty() || replyId.matches(Regex("\\d+"))))
-        val path=if(replyId.isEmpty()) "/works/$workId/comments/new" else "/comments/$replyId/comments/new"
-        return parseCommentForm(request(path)).copy(context=replyId)
+        require((workId.matches(Regex("\\d+")) || workId.matches(Regex("comment:[0-9]+"))) && (replyId.isEmpty() || replyId.matches(Regex("\\d+"))))
+        val parent=replyId.ifEmpty{workId.removePrefix("comment:").takeIf{workId.startsWith("comment:")}.orEmpty()}
+        val path=if(parent.isEmpty()) "/works/$workId/comments/new" else "/comments/$parent/comments/new"
+        return parseCommentForm(request(path)).copy(context=parent)
+    }
+    internal fun editComment(id:String,user:String):CommentForm {
+        require(id.matches(Regex("[0-9]+")))
+        val html=request("/comments/$id/edit")
+        require(ArchiveParser.sessionIdentity(html)==user){"Your AO3 session changed. Check native sign-in."}
+        val form=parseCommentForm(html)
+        require(form.editing && ao3Path(form.action)=="/comments/$id")
+        return form.copy(context=id)
+    }
+    internal fun manageComment(id:String,label:String,user:String):CommentSubmission {
+        require(id.matches(Regex("[0-9]+")))
+        val generation=cookieGeneration
+        val html=request("/comments/$id")
+        require(ArchiveParser.sessionIdentity(html)==user){"Your AO3 session changed. Check native sign-in."}
+        var control=CommentManagement.controls(Jsoup.parse(html),id).singleOrNull{it.label==label} ?: error("AO3 no longer permits this action. Refresh comments.")
+        require(label!="Edit")
+        if(label=="Delete"){
+            val confirmation=request(control.path)
+            require(ArchiveParser.sessionIdentity(confirmation)==user)
+            control=CommentManagement.deleteForm(confirmation,id)
+        }
+        return try {
+            val response=request(control.path,control.fields,generation,referer="/comments/$id")
+            require(ArchiveParser.sessionIdentity(response)==user)
+            parseCommentSubmission(response,management=true)
+        } catch(e:java.util.concurrent.CancellationException){throw e}
+          catch(_:Exception){CommentSubmission(error="Could not confirm the change. Refresh comments before trying again.",uncertain=true)}
     }
     fun postComment(form:CommentForm,text:String,pseud:String="",guestName:String="",guestEmail:String=""):CommentSubmission {
         require(validCommentAction(form.action) && text.isNotBlank() && !form.hidden["authenticity_token"].isNullOrBlank())
@@ -363,8 +422,9 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         return parseCommentSubmission(request(path,fields))
     }
     fun comments(workId:String,page:Int=1):CommentPage {
-        require(workId.matches(Regex("\\d+")) && page>0)
-        return CommentParser.parse(request("/works/$workId/comments?page=$page"),page)
+        require((workId.matches(Regex("\\d+")) || workId.matches(Regex("comment:[0-9]+"))) && page>0)
+        val route=if(workId.startsWith("comment:")) "/comments/"+workId.removePrefix("comment:") else "/works/$workId/comments"
+        return CommentParser.parse(request("$route?page=$page"),page)
     }
     private fun persistCookies(user:String?=null,agent:String?=null) {
         val saved=JSONArray()

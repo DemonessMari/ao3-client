@@ -2,6 +2,16 @@ package org.ao3client.reader
 import org.junit.Assert.*
 import org.junit.Test
 class CommentsTest {
+    @Test fun managementUsesActualPermissionsAndEditKeepsHtmlAndNewlines() {
+        val html=javaClass.classLoader!!.getResource("comment-managed.html")!!.readText()
+        val controls=CommentManagement.controls(org.jsoup.Jsoup.parse(html),"55")
+        assertEquals(setOf("Edit","Delete","Freeze thread"),controls.map{it.label}.toSet())
+        assertEquals("freeze+token",controls.first{it.label=="Freeze thread"}.fields["authenticity_token"])
+        assertTrue(CommentManagement.controls(org.jsoup.Jsoup.parse("<div class='userstuff'>$html</div>"),"55").isEmpty())
+        val form=parseCommentForm(javaClass.classLoader!!.getResource("comment-edit.html")!!.readText())
+        assertTrue(form.editing);assertEquals("First & second\n\n<em>Keep this HTML</em>",form.initialText)
+        assertTrue(runCatching{parseCommentForm(javaClass.classLoader!!.getResource("comment-edit.html")!!.readText().replace("value=\"put\"","value=\"delete\""))}.isFailure)
+    }
     @Test fun nestedCommentsKeepTheirOwnAuthorsAndFormsStayOutsideStoryText() {
         val nested="<ol class='thread'><li id='comment_1' class='comment'><h4 class='byline'><a href='/users/Alice'>Alice</a></h4><blockquote class='userstuff'>Parent</blockquote><ol class='thread'><li id='comment_2' class='comment'><h4 class='byline'><a href='/users/Bob'>Bob</a></h4><blockquote class='userstuff'>Reply</blockquote></li></ol></li></ol>"
         val parsed=CommentParser.parse(nested);assertEquals(2,parsed.comments.size);assertEquals("Alice",parsed.comments[0].author);assertEquals("Parent",parsed.comments[0].text);assertEquals("Bob",parsed.comments[1].author);assertEquals(1,parsed.comments[1].depth)

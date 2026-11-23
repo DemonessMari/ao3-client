@@ -218,9 +218,9 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
 
         }
         if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-            TextButton(onClick={turn(-1)},enabled=(index>0 || vm.chapter>0) && !busy) { Text(if(index==0 && vm.chapter>0) "Previous chapter" else "Previous") }
+            SkinTextButton(onClick={turn(-1)},enabled=(index>0 || vm.chapter>0) && !busy) { Text(if(index==0 && vm.chapter>0) "Previous chapter" else "Previous") }
             Text("${index+1} / ${pages.size}")
-            TextButton(onClick={turn(1)},enabled=(index<pages.lastIndex || vm.chapter<vm.chapters.lastIndex) && !busy) { Text(if(index==pages.lastIndex && vm.chapter<vm.chapters.lastIndex) "Next chapter" else "Next") }
+            SkinTextButton(onClick={turn(1)},enabled=(index<pages.lastIndex || vm.chapter<vm.chapters.lastIndex) && !busy) { Text(if(index==pages.lastIndex && vm.chapter<vm.chapters.lastIndex) "Next chapter" else "Next") }
         }
     }
 }

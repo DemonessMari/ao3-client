@@ -23,14 +23,14 @@ object ReadingActions {
 @Composable
 fun WorkAccountButton(vm:ClientState,id:String) {
     var choosing by remember(id) { mutableStateOf(false) }
-    if(vm.username!=null)OutlinedButton(onClick={choosing=true},enabled=id !in vm.accountPending) { Text("AO3 account") }
+    if(vm.username!=null)SkinOutlinedButton(onClick={choosing=true},enabled=id !in vm.accountPending) { Text("AO3 account") }
     if(choosing)AlertDialog(onDismissRequest={choosing=false},title={Text("AO3 account")},text={
         androidx.compose.foundation.layout.Column {
-            TextButton(onClick={choosing=false;vm.editArchiveBookmark(id)}) { Text("AO3 bookmark") }
-            TextButton(onClick={choosing=false;vm.setMarkedForLater(id,true)}) { Text("Mark for later") }
-            TextButton(onClick={choosing=false;vm.setMarkedForLater(id,false)}) { Text("Mark as read") }
-            TextButton(onClick={choosing=false;vm.setWorkSubscribed(id,true)}) { Text("Subscribe to work") }
-            TextButton(onClick={choosing=false;vm.setWorkSubscribed(id,false)}) { Text("Unsubscribe from work") }
+            SkinTextButton(onClick={choosing=false;vm.editArchiveBookmark(id)}) { Text("AO3 bookmark") }
+            SkinTextButton(onClick={choosing=false;vm.setMarkedForLater(id,true)}) { Text("Mark for later") }
+            SkinTextButton(onClick={choosing=false;vm.setMarkedForLater(id,false)}) { Text("Mark as read") }
+            SkinTextButton(onClick={choosing=false;vm.setWorkSubscribed(id,true)}) { Text("Subscribe to work") }
+            SkinTextButton(onClick={choosing=false;vm.setWorkSubscribed(id,false)}) { Text("Unsubscribe from work") }
         }
-    },confirmButton={TextButton(onClick={choosing=false}) { Text("Cancel") }})
+    },confirmButton={SkinTextButton(onClick={choosing=false}) { Text("Cancel") }})
 }

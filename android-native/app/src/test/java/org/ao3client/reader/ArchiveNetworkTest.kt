@@ -8,6 +8,8 @@ import org.junit.Test
 
 class ArchiveNetworkTest {
     private class Reply(url:URL,val code:Int,val html:String,val location:String?=null):HttpURLConnection(url) {
+        val written=java.io.ByteArrayOutputStream()
+        override fun getOutputStream()=written
         var closed=false
         override fun connect() {}
         override fun disconnect() {closed=true}
@@ -17,6 +19,44 @@ class ArchiveNetworkTest {
         override fun getErrorStream()=ByteArrayInputStream(html.toByteArray())
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
+    }
+    @Test fun commentModerationRefetchesPermissionAndNeverRetriesAnUncertainWrite() {
+        val managed=javaClass.classLoader!!.getResource("comment-managed.html")!!.readText()
+        val calls=mutableListOf<Reply>()
+        val response="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav><div class='flash comment_notice'>Thread frozen.</div>"
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())managed else response).also{calls+=it}})
+        val result=client.manageComment("55","Freeze thread","Writer")
+        assertFalse(result.uncertain);assertEquals("Thread frozen.",result.notice)
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod})
+        assertEquals("/comments/55/freeze",calls.last().url.path)
+        assertTrue(calls.last().written.toString("UTF-8").contains("freeze%2Btoken"))
+        val unknownCalls=mutableListOf<Reply>()
+        val unknown=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(unknownCalls.isEmpty())200 else 503,managed).also{unknownCalls+=it}})
+        assertTrue(unknown.manageComment("55","Freeze thread","Writer").uncertain)
+        assertEquals(2,unknownCalls.size)
+        val deniedCalls=mutableListOf<Reply>()
+        val denied=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,managed.replace("Writer","Other")).also{deniedCalls+=it}})
+        assertTrue(runCatching{denied.manageComment("55","Freeze thread","Writer")}.isFailure)
+        assertEquals(1,deniedCalls.size)
+    }
+    @Test fun inboxReadUsesInboxRecordIdRatherThanCommentId() {
+        val html=javaClass.classLoader!!.getResource("archive-inbox.html")!!.readText()
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())html else html.replace("class=\"unread comment\"","class=\"read comment\"")).also{calls+=it}})
+        assertFalse(client.archivePageAction("inbox","Writer","",1,"55","Mark read").entries.single().unread)
+        val body=calls.last().written.toString("UTF-8")
+        assertTrue(body.contains("inbox_comments%5B%5D=77"));assertFalse(body.contains("inbox_comments%5B%5D=55"))
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod})
+    }
+    @Test fun unsubscribeRefetchesTheTokenAndVerifiesTheResultWithoutRetry() {
+        val html=javaClass.classLoader!!.getResource("archive-subscriptions.html")!!.readText()
+        val empty="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav><div id='main' class='subscriptions-index'><h2 class='heading'>Subscriptions</h2></div>"
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())html else empty).also{calls+=it}})
+        assertTrue(client.archivePageAction("subscriptions","Writer","",1,"4","Unsubscribe").entries.isEmpty())
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod})
+        assertTrue(calls.last().written.toString("UTF-8").contains("fresh%2B%26token"))
+        assertEquals("https://archiveofourown.org/users/Writer/subscriptions?page=1",calls.last().getRequestProperty("Referer"))
     }
     @Test fun readingListsUseOnlyAuthenticatedGetRoutesAndKeepLaterWhenPaging() {
         val html=javaClass.classLoader!!.getResource("account-readings.html")!!.readText();val calls=mutableListOf<Reply>()

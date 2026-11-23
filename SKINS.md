@@ -1,6 +1,6 @@
 # App skins
 
-Open **App skin** from Home or Settings. Choose Light, Dark or Sepia, or enter colors. Preview before applying. Import and Export use the same JSON format on Android and desktop. Skin files contain colors and a name, without scripts, CSS or external resources.
+Open **App skin** from Home or Settings. Choose Light, Dark or Sepia, or enter colors. Preview before applying. Import and Export use the same JSON format on Android and desktop. Skin files contain colors and validated native layout settings, without scripts, CSS or external resources.
 
 Colors use opaque `#RRGGBB` values. Text must have at least 4.5:1 contrast with both backgrounds and with its accent button. Accents must have at least 4.5:1 contrast with both backgrounds. Invalid files leave the active skin unchanged.
 
@@ -25,8 +25,10 @@ Use **Import font** in Reading settings to select a `.ttf` or `.otf` file (up to
 
 Imported fonts also apply to native menus, titles and work previews by default. Turn off **Use imported font in interface** to keep the system interface font while retaining the imported font for reading. Interface sizes and heading weights are preserved.
 
-## Richer native skins (proposed)
+## Native layout skins
 
-A version 2 JSON skin can extend the current color fields with validated typography, spacing, borders, corner shapes and named component rules (header, buttons, work cards, tags and reader). Each platform would apply these through native drawing, fonts and layout APIs, without CSS selectors, injected stylesheets or executable scripts. Existing version 1 skins would remain supported. This extension is not implemented yet.
+Version 2 adds `uiScale` (1–1.5) and `cornerRadius` (whole numbers 0–24) to the fields above. Set `version` to `2` and include both fields. Version 1 files remain supported. The editor previews and exports version 2.
 
-Font/image assets could be packaged with the JSON in an `.ao3skin` ZIP, using local asset references. Reader content, chapter parsing and AO3 work CSS would remain separate. A native skin cannot automatically reproduce arbitrary AO3 HTML/CSS layouts.
+Interface scale enlarges native interface text and controls while retaining system font accessibility scaling. Reader font size can also be adjusted separately. Android scales the entire native view, including the reading area; desktop scales interface fonts and standard layout spacing. Corner radius controls native buttons on desktop and Material component shapes on Android. Menus retain their platform layout and are not clipped to a rounded container. Desktop uses native style drawing, fonts and spacing; Android uses Compose density and shapes. These settings do not inject CSS.
+
+Skins are settings, not arbitrary layout templates: they cannot move controls, load external resources, execute code or reproduce arbitrary AO3 CSS. Font importing remains separate. Named component rules and bundled image/font assets are not implemented.

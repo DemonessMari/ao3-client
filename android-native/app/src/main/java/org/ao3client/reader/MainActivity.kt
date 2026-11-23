@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private val model: ClientState by viewModels()
     private fun readerVolumeDirection(keyCode:Int):Int? {
         if(model.screen!="reader" || !model.volumeNavigation || model.readerOverlayOpen)return null
-        return when(keyCode){android.view.KeyEvent.KEYCODE_VOLUME_DOWN->1;android.view.KeyEvent.KEYCODE_VOLUME_UP->-1;else->null}
+        return when(keyCode){android.view.KeyEvent.KEYCODE_VOLUME_DOWN->model.volumeStep(true);android.view.KeyEvent.KEYCODE_VOLUME_UP->model.volumeStep(false);else->null}
     }
     override fun onKeyDown(keyCode:Int,event:android.view.KeyEvent):Boolean {
         val direction=readerVolumeDirection(keyCode)
@@ -69,8 +69,12 @@ class MainActivity : ComponentActivity() {
             val readingFamily=readerFontFamily(model)
             val interfaceFamily=if(useImportedInterfaceFont(model.preferences))readingFamily else FontFamily.Default
             val typography=remember(interfaceFamily) {interfaceTypography(interfaceFamily)}
-            MaterialTheme(colorScheme = model.appSkin?.colorScheme() ?: colors,typography=typography) {
-                ClientApp(model)
+            val skin=model.appSkin
+            val density=androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(LocalSkinRadius provides skin?.takeIf{it.version==2}?.cornerRadius, androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(skin?.uiScale ?: 1.0).toFloat(),density.fontScale)) {
+                MaterialTheme(colorScheme = skin?.colorScheme() ?: colors,typography=typography,shapes=skin?.takeIf{it.version==2}?.shapes() ?: Shapes()) {
+                    ClientApp(model)
+                }
             }
         }
     }
@@ -78,17 +82,17 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable fun ClientApp(vm: ClientState) {
-    if(vm.notice!=null) AlertDialog(onDismissRequest={vm.notice=null},title={Text("AO3 Client")},text={Text(vm.notice.orEmpty())},confirmButton={TextButton(onClick={vm.notice=null}) { Text("OK") }})
+    if(vm.notice!=null) AlertDialog(onDismissRequest={vm.notice=null},title={Text("AO3 Client")},text={Text(vm.notice.orEmpty())},confirmButton={SkinTextButton(onClick={vm.notice=null}) { Text("OK") }})
     if(vm.settingsConfirmation) AlertDialog(
         onDismissRequest = { vm.settingsConfirmation = false },
         title = { Text("Settings saved") },
         text = { Text("Language and translation settings saved.") },
-        confirmButton = { TextButton(onClick = { vm.settingsConfirmation = false }) { Text("OK") } }
+        confirmButton = { SkinTextButton(onClick = { vm.settingsConfirmation = false }) { Text("OK") } }
     )
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
@@ -102,7 +106,7 @@ class MainActivity : ComponentActivity() {
         } }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
-            if (vm.loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
+            if (vm.loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); SkinTextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
             vm.error?.let { ErrorCard(it) { vm.error = null } }
             when(vm.screen) {
                 "home" -> HomeScreen(vm)
@@ -110,6 +114,7 @@ class MainActivity : ComponentActivity() {
                 "library" -> LibraryScreen(vm)
                 "archiveBookmark" -> ArchiveBookmarkScreen(vm)
                 "comments" -> CommentsScreen(vm)
+                "archiveList" -> ArchiveListScreen(vm)
                 "series" -> SeriesScreen(vm)
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
@@ -117,23 +122,23 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; TextButton(onClick = vm::myWorks) { Text("Browse my works") }; TextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; TextButton(onClick={vm.showAccountReadings(false)}){Text("AO3 reading history")}; Ao3AccountLinks(vm); OutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; OutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showAccountReadings(false)}){Text("AO3 reading history")}; Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
 }
 @Composable private fun ClientTopBar(vm: ClientState) {
-    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile","series") || vm.screen=="settings" && vm.settingsReturn=="reader"
+    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
     val navigation: @Composable () -> Unit = {
         if(showBack)IconButton(onClick={vm.navigate(when(vm.screen) {
             "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
-            "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
+            "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
         })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
     }
     val account: @Composable () -> Unit = {
         if(vm.screen !in listOf("login","settings")) {
             val user=vm.username
-            if(user==null)TextButton(onClick={vm.navigate("login")}) {Text("Sign in")}
+            if(user==null)SkinTextButton(onClick={vm.navigate("login")}) {Text("Sign in")}
             else {
                 var expanded by remember(user) { mutableStateOf(false) }
                 Box {
@@ -143,6 +148,7 @@ class MainActivity : ComponentActivity() {
                         DropdownMenuItem(text={Text("Check native sign-in")},onClick={expanded=false;vm.verifyNativeSession()})
                         DropdownMenuItem(text={Text("Account details")},onClick={expanded=false;vm.navigate("account")})
                         DropdownMenuItem(text={Text("My profile")},onClick={expanded=false;vm.showProfile("/users/$user")})
+                        listOf("bookmarks" to "My AO3 bookmarks","subscriptions" to "Subscriptions","inbox" to "Inbox").forEach{(kind,title)->DropdownMenuItem(text={Text(title)},onClick={expanded=false;vm.showArchiveList(kind)})}
                         DropdownMenuItem(text={Text("Marked for Later")},onClick={expanded=false;vm.showAccountReadings(true)})
                         DropdownMenuItem(text={Text("AO3 reading history")},onClick={expanded=false;vm.showAccountReadings(false)})
                         DropdownMenuItem(text={Text("My works")},onClick={expanded=false;vm.myWorks()})
@@ -163,7 +169,7 @@ class MainActivity : ComponentActivity() {
         }
     } else TopAppBar(title={Text(when(vm.screen) {
         "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
-        "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
+        "archiveList" -> vm.archiveList?.title.orEmpty(); "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
     },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()})
 }
 
@@ -179,11 +185,11 @@ class MainActivity : ComponentActivity() {
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item {Text("Home",style=MaterialTheme.typography.headlineMedium)}
         item {Text("${vm.libraryEntries.size} recent works · ${vm.libraryEntries.count{it.offline}} offline · ${vm.libraryEntries.count{it.favorite}} favorites")}
-        item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={vm.navigate("search")}){Text("Search")};OutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};OutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
+        item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){SkinButton(onClick={vm.navigate("search")}){Text("Search")};SkinOutlinedButton(onClick={vm.refreshLibrary();vm.navigate("library")}){Text("Library")};SkinOutlinedButton(onClick=vm::showSkins){Text("App skin")}}}
         item {Text("Recent reads",style=MaterialTheme.typography.titleLarge)}
         if(vm.libraryEntries.isEmpty())item{Text("Your recent reads will appear here.")}
         items(vm.libraryEntries.take(5),key={it.fic.id}) {entry->Card(onClick={vm.openLibrary(entry)},modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(entry.fic.title,style=MaterialTheme.typography.titleMedium);Text("by ${entry.fic.author}");Text(if(entry.offline)"Available offline" else "Online",style=MaterialTheme.typography.labelMedium)}}}
-        item {OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/")},modifier=Modifier.fillMaxWidth()){Text("Browse AO3 website")}}
+        item {SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/")},modifier=Modifier.fillMaxWidth()){Text("Browse AO3 website")}}
     }
 }
 @Composable fun SearchScreen(vm: ClientState) {
@@ -221,9 +227,9 @@ class MainActivity : ComponentActivity() {
             items(result.unavailable) { info -> Text(info,Modifier.padding(vertical=12.dp)) }
             if(result.pages > 1) item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { vm.search(result.page - 1, false) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }
+                    SkinOutlinedButton(onClick = { vm.search(result.page - 1, false) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }
                     Text("${result.page} / ${result.pages}")
-                    OutlinedButton(onClick = { vm.search(result.page + 1, false) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
+                    SkinOutlinedButton(onClick = { vm.search(result.page + 1, false) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
                 }
             }
         }
@@ -238,8 +244,8 @@ class MainActivity : ComponentActivity() {
         }
         Surface(tonalElevation = 3.dp) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { vm.filterDraft = emptyMap() }) { Text("Reset") }
-                Button(onClick = { vm.filters = vm.filterDraft; vm.search() }, Modifier.weight(1f)) { Text("Apply and search") }
+                SkinOutlinedButton(onClick = { vm.filterDraft = emptyMap() }) { Text("Reset") }
+                SkinButton(onClick = { vm.filters = vm.filterDraft; vm.search() }, Modifier.weight(1f)) { Text("Apply and search") }
             }
         }
     }
@@ -297,25 +303,25 @@ class MainActivity : ComponentActivity() {
     }
     vm.officialDownloads?.let { formats -> AlertDialog(onDismissRequest={vm.officialDownloads=null},title={Text("Download")},text={
         Column { if(formats.isEmpty()) Text("AO3 has no download formats available for this work.")
-            formats.forEach { item -> TextButton(onClick={downloadWorkId=fic.id;downloadUrl=item.url;downloadFormat=item.format;vm.officialDownloads=null;saveDownload.launch(item.filename)}) { Text(item.format.uppercase()) } }
+            formats.forEach { item -> SkinTextButton(onClick={downloadWorkId=fic.id;downloadUrl=item.url;downloadFormat=item.format;vm.officialDownloads=null;saveDownload.launch(item.filename)}) { Text(item.format.uppercase()) } }
         }
-    },confirmButton={TextButton(onClick={vm.officialDownloads=null}) { Text("Close") }}) }
+    },confirmButton={SkinTextButton(onClick={vm.officialDownloads=null}) { Text("Close") }}) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(fic.title, style = MaterialTheme.typography.headlineMedium)
         Text("by ${fic.author}", style = MaterialTheme.typography.titleMedium)
         if(fic.rating.isNotBlank()) Text("Rating · ${fic.rating}")
         if(fic.warnings.isNotBlank()) Text("Warnings · ${fic.warnings}")
-        if(fic.authorPath.isNotBlank()) OutlinedButton(onClick = { vm.showProfile(fic.authorPath) }) { Text("Author profile") }
-        Button(onClick = vm::read, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if(vm.loading) "Loading fic…" else "Read fic") }
+        if(fic.authorPath.isNotBlank()) SkinOutlinedButton(onClick = { vm.showProfile(fic.authorPath) }) { Text("Author profile") }
+        SkinButton(onClick = vm::read, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if(vm.loading) "Loading fic…" else "Read fic") }
         if(fic.fandom.isNotBlank()) Text(fic.fandom, color = MaterialTheme.colorScheme.primary)
         if(fic.stats.isNotBlank()) Text(fic.stats, style = MaterialTheme.typography.bodyMedium)
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
         KudosButton(vm,fic.id)
         WorkAccountButton(vm,fic.id)
-        OutlinedButton(onClick={vm.showSeries()},enabled=!vm.loading) { Text("Series") }
-        OutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
-        OutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
+        SkinOutlinedButton(onClick={vm.showSeries()},enabled=!vm.loading) { Text("Series") }
+        SkinOutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
+        SkinOutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
         Ao3WorkLinks(vm,fic.id)
 
     }
@@ -327,15 +333,15 @@ class MainActivity : ComponentActivity() {
         Text("Sign in to AO3", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Username or email") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.login(name, password); password = "" }))
-        Button(onClick = { keyboard?.hide(); vm.login(name, password); password = "" }, enabled = name.isNotBlank() && password.isNotEmpty() && !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
-        OutlinedButton(onClick={keyboard?.hide();password="";vm.openWebsite(Archive.BASE+"/users/login")},modifier=Modifier.fillMaxWidth()) {Text("Sign in on AO3 website")}
+        SkinButton(onClick = { keyboard?.hide(); vm.login(name, password); password = "" }, enabled = name.isNotBlank() && password.isNotEmpty() && !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Sign in") }
+        SkinOutlinedButton(onClick={keyboard?.hide();password="";vm.openWebsite(Archive.BASE+"/users/login")},modifier=Modifier.fillMaxWidth()) {Text("Sign in on AO3 website")}
     }
 }
 @Composable fun ReadingAppearanceControls(vm: ClientState) {
     val prefs = vm.preferences
     Text("Reading appearance", style = MaterialTheme.typography.titleLarge)
     Text("Changes save automatically.", style = MaterialTheme.typography.bodySmall)
-    OutlinedButton(onClick=vm::showSkins){Text("App skin" + (vm.appSkin?.let { " · "+it.name } ?: ""))}
+    SkinOutlinedButton(onClick=vm::showSkins){Text("App skin" + (vm.appSkin?.let { " · "+it.name } ?: ""))}
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("system" to "System", "light" to "Light", "sepia" to "Sepia", "dark" to "Dark").forEach { (value, title) ->
             FilterChip(selected = vm.appSkin == null && prefs.theme == value, onClick = { vm.applySkin(null); vm.appearance(theme = value) }, label = { Text(title) })
@@ -380,7 +386,7 @@ class MainActivity : ComponentActivity() {
         HorizontalDivider(); Text("Translation service", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(service, { service = it }, Modifier.fillMaxWidth(), label = { Text("LibreTranslate URL") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
         OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key (optional)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        Button(onClick = { vm.savePreferences(vm.preferences.copy(language = language, filterLanguage = filter, service = service, apiKey = apiKey)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save language and translation") }
+        SkinButton(onClick = { vm.savePreferences(vm.preferences.copy(language = language, filterLanguage = filter, service = service, apiKey = apiKey)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save language and translation") }
     }
 }
 
@@ -394,9 +400,9 @@ class MainActivity : ComponentActivity() {
     Text("Backups contain reading data, not credentials. Files are not encrypted.",style=MaterialTheme.typography.bodySmall)
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) { Checkbox(includeDownloads,{includeDownloads=it}); Text("Include downloaded chapter text",Modifier.weight(1f)) }
     Text("Maximum size: 100 MB.",style=MaterialTheme.typography.bodySmall)
-    OutlinedButton(onClick={export.launch("ao3-library-backup.json")},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Export library backup") }
-    OutlinedButton(onClick={restore.launch(arrayOf("application/json","text/plain","application/octet-stream"))},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Import library backup") }
-    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept.")},confirmButton={TextButton(onClick={ val uri=confirm; confirm=null; try { vm.importLibrary(context.contentResolver.openInputStream(uri!!) ?: error("Cannot read backup")) } catch(e:Exception) { vm.error=e.message } }) { Text("Import") }},dismissButton={TextButton(onClick={confirm=null}) { Text("Cancel") }})
+    SkinOutlinedButton(onClick={export.launch("ao3-library-backup.json")},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Export library backup") }
+    SkinOutlinedButton(onClick={restore.launch(arrayOf("application/json","text/plain","application/octet-stream"))},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Import library backup") }
+    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept.")},confirmButton={SkinTextButton(onClick={ val uri=confirm; confirm=null; try { vm.importLibrary(context.contentResolver.openInputStream(uri!!) ?: error("Cannot read backup")) } catch(e:Exception) { vm.error=e.message } }) { Text("Import") }},dismissButton={SkinTextButton(onClick={confirm=null}) { Text("Cancel") }})
 }
 
 @Composable fun LibraryScreen(vm: ClientState) {
@@ -417,8 +423,8 @@ class MainActivity : ComponentActivity() {
                     Text(if(entry.offline) "Available offline" else "Needs AO3 to reopen", style = MaterialTheme.typography.labelLarge)
                     Text("Last read · " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(entry.openedAt)), style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.favorite(entry.fic.id, !entry.favorite) }) { Text(if(entry.favorite) "Unfavorite" else "Favorite") }
-                        if(entry.offline) TextButton(onClick = { vm.removeOffline(entry.fic.id) }) { Text("Remove download") }
+                        SkinOutlinedButton(onClick = { vm.favorite(entry.fic.id, !entry.favorite) }) { Text(if(entry.favorite) "Unfavorite" else "Favorite") }
+                        if(entry.offline) SkinTextButton(onClick = { vm.removeOffline(entry.fic.id) }) { Text("Remove download") }
                     }
                 }
             }
@@ -437,6 +443,7 @@ class MainActivity : ComponentActivity() {
             val profile = vm.profile
             LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item { Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){ProfilePicture(vm,vm.profileUser,profile?.avatarUrl.orEmpty(),profile?.avatarAlt.orEmpty());Text(vm.profileUser,Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)} }
+                item{EntitySubscriptionButton(vm,"User",vm.profileUser)}
                 if(profile != null) {
                     if(profile.title.isNotBlank()) item { Text(profile.title, style = MaterialTheme.typography.titleLarge) }
                     if(profile.details.isNotBlank()) item { Text(profile.details) }
@@ -452,9 +459,9 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(fic.title, style = MaterialTheme.typography.titleLarge); Text("by ${fic.author}"); if(fic.summary.isNotBlank()) Text(fic.summary, maxLines = 4, overflow = TextOverflow.Ellipsis); Text(fic.stats, style = MaterialTheme.typography.bodySmall) }
                 } }
                 if(result != null && result.pages > 1) item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page - 1) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }
+                    SkinTextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page - 1) }, enabled = result.page > 1 && !vm.loading) { Text("Previous") }
                     Text("${result.page} / ${result.pages}")
-                    TextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page + 1) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
+                    SkinTextButton(onClick = { vm.profileWorks(vm.profileTab == "bookmarks", result.page + 1) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
                 } }
             }
         }
@@ -468,9 +475,9 @@ class MainActivity : ComponentActivity() {
         if(entries!=null && entries.isEmpty())Text("This work is not part of a series.")
         entries?.forEach {entry->
             Text(entry.position,style=MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/series/"+entry.id)}){Text("View series on AO3")}
-            Button(onClick={entry.previous?.let(vm::openSeriesWork)},enabled=entry.previous!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Previous work")}
-            Button(onClick={entry.next?.let(vm::openSeriesWork)},enabled=entry.next!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Next work")}
+            SkinOutlinedButton(onClick={vm.showArchiveList("series",entry.id)}){Text("View series")}
+            SkinButton(onClick={entry.previous?.let(vm::openSeriesWork)},enabled=entry.previous!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Previous work")}
+            SkinButton(onClick={entry.next?.let(vm::openSeriesWork)},enabled=entry.next!=null && !vm.loading,modifier=Modifier.fillMaxWidth()){Text("Next work")}
             HorizontalDivider()
         }
     }

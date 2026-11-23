@@ -16,9 +16,19 @@ internal fun tapZoneAction(fraction:Float,left:Int,center:Int,right:Int,edge:Int
     listOf("Left" to vm.tapLeft,"Center" to vm.tapCenter,"Right" to vm.tapRight).forEach{(region,value)->
         var expanded by remember {mutableStateOf(false)}
         val choices=listOf(-1 to "Previous page",0 to "No action",1 to "Next page",2 to "Show/hide controls")
-        Box {OutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()){Text("$region · ${choices.first{it.first==value}.second}")}
+        Box {SkinOutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()){Text("$region · ${choices.first{it.first==value}.second}")}
             DropdownMenu(expanded,{expanded=false}){choices.forEach{(action,title)->DropdownMenuItem(text={Text(title)},onClick={vm.tapZone(region,action);expanded=false})}}}
     }
     Text("Each edge zone · ${vm.tapEdge}%")
     Slider(vm.tapEdge.toFloat(),{vm.tapEdge(it.toInt())},valueRange=20f..40f)
+}
+
+@Composable internal fun VolumeControls(vm:ClientState) {
+    listOf(false to "Volume up",true to "Volume down").forEach{(down,label)->
+        var expanded by remember{mutableStateOf(false)}
+        val value=if(down)vm.volumeDown else vm.volumeUp
+        val choices=listOf(-1 to "Previous page",1 to "Next page",0 to "System volume")
+        Box {SkinOutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()){Text("$label · ${choices.first{it.first==value}.second}")}
+            DropdownMenu(expanded,{expanded=false}){choices.forEach{(action,title)->DropdownMenuItem(text={Text(title)},onClick={vm.volumeAction(down,action);expanded=false})}}}
+    }
 }

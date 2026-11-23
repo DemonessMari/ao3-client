@@ -103,8 +103,8 @@ MainWindow::MainWindow(QWidget *parent)
         message->setWordWrap(true);message->setTextFormat(Qt::PlainText);m_seriesLayout->addWidget(message);
         for(const auto &entry:result.entries) {
             auto *label=new QLabel(entry.position,m_seriesPage);label->setWordWrap(true);label->setTextFormat(Qt::PlainText);m_seriesLayout->addWidget(label);
-            auto *site=new QPushButton("View series on AO3",m_seriesPage);m_seriesLayout->addWidget(site);
-            connect(site,&QPushButton::clicked,this,[this,entry]{openArchiveWebsite(QUrl("https://archiveofourown.org/series/"+entry.id));});
+            auto *site=new QPushButton("View series",m_seriesPage);m_seriesLayout->addWidget(site);
+            connect(site,&QPushButton::clicked,this,[this,entry]{showArchiveList("series",entry.id);});
             for(const auto &choice:QVector<QPair<QString,QString>>{{"Previous work",entry.previous},{"Next work",entry.next}}) {
                 auto *button=new QPushButton(choice.first,m_seriesPage);button->setEnabled(!choice.second.isEmpty());m_seriesLayout->addWidget(button);
                 connect(button,&QPushButton::clicked,this,[this,choice]{m_seriesTarget=choice.second;statusBar()->showMessage("Loading work details...");m_client->fetchWorkDetails(choice.second);});
@@ -207,6 +207,14 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_client, &AO3Client::authorWorksFetched, this, [this](const QString &username, bool bookmarks, const SearchResult &result) {
         if(username == m_listingAuthor && bookmarks == m_listingBookmarks) onSearchCompleted(result);
     });
+    connect(m_client,&AO3Client::entitySubscriptionFetched,this,[this](const QString &type,const QString &target,bool available,bool subscribed,const QString &message){
+        if(type=="User" && target==m_profileUsername){m_profileSubscription->setVisible(available);m_profileSubscription->setEnabled(available);m_profileSubscription->setText(subscribed?"Unsubscribe":"Subscribe to author");m_profileSubscription->setProperty("subscribed",subscribed);}
+        if(type=="Series" && m_listsKind=="series" && target==m_listsId){m_listsData.canSubscribe=available;m_listsData.subscribed=subscribed;if(m_contentStack->currentWidget()==m_listsPage)renderArchiveList(m_listsData);}
+        if(!message.isEmpty())statusBar()->showMessage(message);
+    });
+    connect(m_client,&AO3Client::archivePageFetched,this,[this](const QString &kind,const QString &id,const ArchivePage &page){if(kind==m_listsKind && id==m_listsId && m_contentStack->currentWidget()==m_listsPage){const auto canSubscribe=m_listsData.canSubscribe,subscribed=m_listsData.subscribed;m_listsData=page;m_listsData.canSubscribe=canSubscribe;m_listsData.subscribed=subscribed;renderArchiveList(m_listsData);}});
+    connect(m_client,&AO3Client::archiveActionFinished,this,[this](const QString &message,bool uncertain){m_listsUncertain=uncertain;statusBar()->showMessage(message);if(m_listsPage && m_contentStack->currentWidget()==m_listsPage)renderArchiveList(m_listsData);});
+    connect(m_client,&AO3Client::workDetailsFetched,this,[this](const Work &work){if(work.id==m_listsWorkTarget && m_contentStack->currentWidget()==m_listsPage){m_listsWorkTarget.clear();m_pendingReadId.clear();m_detailsReturn=m_contentStack->indexOf(m_listsPage);m_detailWidget->showWork(work);m_contentStack->setCurrentIndex(2);}});
     connect(m_client,&AO3Client::accountReadingsFetched,this,[this](bool later,const SearchResult &result) {
         if(m_readingMode==(later?"later":"history"))onSearchCompleted(result);
     });
@@ -638,6 +646,7 @@ void MainWindow::setupUI()
     m_profilePage = new QWidget(m_contentStack); auto *profileLayout = new QVBoxLayout(m_profilePage);
     m_profileAvatar=new QLabel(m_profilePage);m_profileAvatar->setObjectName("profileAvatar");m_profileAvatar->setFixedSize(80,80);m_profileAvatar->setAlignment(Qt::AlignCenter);auto avatarFont=m_profileAvatar->font();avatarFont.setPointSize(28);m_profileAvatar->setFont(avatarFont);profileLayout->addWidget(m_profileAvatar);
     auto *profileActions = new QHBoxLayout; auto *authorWorks = new QPushButton("Author's works", m_profilePage); auto *authorBookmarks = new QPushButton("Public AO3 bookmarks", m_profilePage);
+    m_profileSubscription=new QPushButton("Subscribe to author",m_profilePage);m_profileSubscription->hide();profileActions->addWidget(m_profileSubscription);connect(m_profileSubscription,&QPushButton::clicked,this,[this]{m_profileSubscription->setEnabled(false);m_client->entitySubscription("User",m_profileUsername,!m_profileSubscription->property("subscribed").toBool());});
     profileActions->addWidget(authorWorks); profileActions->addWidget(authorBookmarks); profileLayout->addLayout(profileActions);
     m_profileText = new QTextBrowser(m_profilePage); profileLayout->addWidget(m_profileText, 1); m_contentStack->addWidget(m_profilePage);
     connect(authorWorks, &QPushButton::clicked, this, [this] { showAuthorListing(false); }); connect(authorBookmarks, &QPushButton::clicked, this, [this] { showAuthorListing(true); });
@@ -659,14 +668,14 @@ void MainWindow::setupUI()
     commentsLayout->insertWidget(1,m_commentEditor);m_commentEditor->hide();
     connect(m_commentNew,&QPushButton::clicked,this,[this] {composeComment();});
     connect(m_commentClose,&QPushButton::clicked,this,[this] {if(!m_commentSending)m_commentEditor->hide();});
-    connect(m_commentsText,&QTextBrowser::anchorClicked,this,[this](const QUrl &url) {if(url.scheme()=="reply")composeComment(url.path());});
+    connect(m_commentsText,&QTextBrowser::anchorClicked,this,[this](const QUrl &url) {if(url.scheme()=="reply")composeComment(url.path());else if(url.scheme()=="manage"){const auto path=url.path(QUrl::FullyDecoded);manageComment(path.section('/',0,0),path.section('/',1));}});
     connect(m_client,&AO3Client::commentFormFetched,this,[this](const QString &id,const CommentForm &form) {
         if(id!=m_commentsWork || form.context!=m_commentContext)return;
         if(!form.error.isEmpty()) {onError(form.error);return;}
-        m_commentForm=form;m_commentNotice->setText((form.context.isEmpty()?QString("New comment"):QString("Reply to comment #%1").arg(form.context))+"\n"+form.notice);m_commentPseud->clear();
+        m_commentForm=form;if(form.editing)m_commentDraft->setPlainText(form.initialText);m_commentNotice->setText((form.editing?QString("Edit comment"):form.context.isEmpty()?QString("New comment"):QString("Reply to comment #%1").arg(form.context))+"\n"+form.notice);m_commentPseud->clear();
         for(const auto &p:form.pseuds)m_commentPseud->addItem(p.second,p.first);
         m_commentPseud->setCurrentIndex(qMax(0,m_commentPseud->findData(form.hidden.value("comment[pseud_id]"))));m_commentPseud->setVisible(form.pseuds.size()>1);
-        m_commentName->setVisible(form.guest);m_commentEmail->setVisible(form.guest);m_commentPost->setEnabled(!m_commentUncertain);
+        m_commentName->setVisible(form.guest);m_commentEmail->setVisible(form.guest);m_commentPost->setText(form.editing?"Save changes":"Post");m_commentPost->setEnabled(!m_commentUncertain);
         m_commentEditor->show();m_commentDraft->setFocus();
     });
     connect(m_commentPost,&QPushButton::clicked,this,[this] {
@@ -677,8 +686,8 @@ void MainWindow::setupUI()
     connect(m_client,&AO3Client::commentSubmitted,this,[this](const QString &id,const CommentSubmission &result) {
         if(id!=m_commentsWork)return;
         m_commentSending=false;m_commentEditor->setEnabled(true);m_commentUncertain=result.uncertain;m_commentPost->setEnabled(!m_commentUncertain);m_commentNew->setEnabled(!m_commentUncertain);
-        if(!result.error.isEmpty()) {m_commentNotice->setText(result.error);return;}
-        m_commentDraft->clear();m_commentEditor->hide();statusBar()->showMessage(result.notice);if(m_contentStack->currentWidget()==m_commentsPage)showComments(id,m_commentsCurrent);
+        if(!result.error.isEmpty()) {m_commentDeletion.clear();m_commentNotice->setText(result.error);return;}
+        m_commentDraft->clear();m_commentEditor->hide();statusBar()->showMessage(result.notice);if(m_contentStack->currentWidget()==m_commentsPage && !m_commentDeletion.isEmpty() && id=="comment:"+m_commentDeletion){m_commentDeletion.clear();m_contentStack->setCurrentIndex(m_commentsReturn);if(m_contentStack->currentWidget()==m_listsPage)m_client->fetchArchivePage(m_listsKind,m_listsId,m_listsData.page);return;}m_commentDeletion.clear();if(m_contentStack->currentWidget()==m_commentsPage)showComments(id,m_commentsCurrent);
     });
     connect(commentsBack,&QPushButton::clicked,this,[this] {m_contentStack->setCurrentIndex(m_commentsReturn);});
     connect(commentsRefresh,&QPushButton::clicked,this,[this] {showComments(m_commentsWork,m_commentsCurrent);});
@@ -692,7 +701,7 @@ void MainWindow::setupUI()
         m_commentsCurrent=page.page;m_commentsNumber->setText(QString("%1 / %2").arg(page.page).arg(page.pages));
         m_commentsPrevious->setEnabled(page.page>1);m_commentsNext->setEnabled(page.page<page.pages);
         QString html;
-        for(const auto &comment:page.comments) html+=QString("<div style='margin-left:%1px'><h3>%2</h3><p>%3</p><p>%4</p><a href=\"reply:%5\">Reply</a></div><hr>").arg(qMin(comment.depth,4)*16).arg(comment.author.toHtmlEscaped(),comment.date.toHtmlEscaped(),QString(comment.text).toHtmlEscaped().replace("\n","<br>"),comment.id);
+        for(const auto &comment:page.comments){html+=QString("<div style='margin-left:%1px'><h3>%2</h3><p>%3</p><p>%4</p>").arg(qMin(comment.depth,4)*16).arg(comment.author.toHtmlEscaped(),comment.date.toHtmlEscaped(),QString(comment.text).toHtmlEscaped().replace("\n","<br>"));if(comment.canReply)html+="<a href='reply:"+comment.id+"'>Reply</a> ";for(const auto &action:comment.actions)html+="<a href='manage:"+comment.id+"/"+QString::fromLatin1(QUrl::toPercentEncoding(action))+"'>"+action.toHtmlEscaped()+"</a> ";html+="</div><hr>";}
         m_commentsText->setHtml(html.isEmpty()?"No comments.":html);
     });
 
@@ -821,7 +830,7 @@ void MainWindow::onWorkSelected(int index)
         m_detailWidget->clear();
         return;
     }
-    m_detailWidget->showWork(m_currentResult.works[index]);
+    m_detailsReturn=-1;m_detailWidget->showWork(m_currentResult.works[index]);
     if (mobileUi()) m_contentStack->setCurrentWidget(m_mobileDetails);
 }
 
@@ -835,10 +844,10 @@ void MainWindow::onLoginClicked()
 {
     if(m_loginManager->isLoggedIn()) {
         QMenu menu(this);menu.addSection(m_loginManager->username());
-        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *later=menu.addAction("Marked for Later");auto *history=menu.addAction("AO3 reading history");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
+        auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *later=menu.addAction("Marked for Later");auto *history=menu.addAction("AO3 reading history");auto *bookmarks=menu.addAction("My AO3 bookmarks");auto *subscriptions=menu.addAction("Subscriptions");auto *inbox=menu.addAction("Inbox");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
         auto *selected=menu.exec(m_loginButton->mapToGlobal(QPoint(0,m_loginButton->height())));
         if(selected==profile)showProfile("/users/"+m_loginManager->username());
-        else if(selected==later)showAccountReadings(true);else if(selected==history)showAccountReadings(false);else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
+        else if(selected==bookmarks)showArchiveList("bookmarks");else if(selected==subscriptions)showArchiveList("subscriptions");else if(selected==inbox)showArchiveList("inbox");else if(selected==later)showAccountReadings(true);else if(selected==history)showAccountReadings(false);else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
         return;
     }
     showLoginView();
@@ -968,6 +977,7 @@ void MainWindow::showLoginView()
 
 void MainWindow::setLoggedInState(bool loggedIn)
 {
+    if(!loggedIn){m_listsData={};m_listsKind.clear();m_listsWorkTarget.clear();if(m_listsPage)renderArchiveList(m_listsData);}
     if(!loggedIn && !m_readingMode.isEmpty()){m_readingMode.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();}
 
     if(!loggedIn)clearArchiveBookmark();
@@ -1083,6 +1093,7 @@ void MainWindow::resizeWorkItems()
 
 bool MainWindow::navigateBack()
 {
+    if(m_listsPage && m_contentStack->currentWidget()==m_listsPage){m_listsWorkTarget.clear();closeArchiveList();return true;}
     if(m_seriesPage && m_contentStack->currentWidget()==m_seriesPage){m_seriesTarget.clear();m_contentStack->setCurrentIndex(m_seriesReturn);return true;}
     m_pendingReadId.clear();
     QGuiApplication::inputMethod()->hide();
@@ -1098,6 +1109,8 @@ bool MainWindow::navigateBack()
     if (m_contentStack->currentWidget() == m_reader) { closeReader(); return true; }
     if (m_contentStack->currentWidget() == m_mobileFilters) { m_contentStack->setCurrentIndex(m_beforeFilters); return true; }
     if (m_contentStack->currentWidget() == m_mobileDetails) { m_contentStack->setCurrentIndex(2); return true; }
+    if(m_contentStack->currentWidget()==m_profilePage){m_contentStack->setCurrentIndex(m_profileReturn);return true;}
+    if(m_contentStack->currentIndex()==2 && m_detailsReturn>=0){const int target=m_detailsReturn;m_detailsReturn=-1;m_contentStack->setCurrentIndex(target);return true;}
     if (m_contentStack->currentIndex() != 0) { showDashboard(); return true; }
     return false;
 }
@@ -1139,7 +1152,7 @@ void MainWindow::openLibrarySelection()
 void MainWindow::openLibraryEntry(const QJsonObject &entry)
 {
     const auto work = ReadingLibrary::work(entry);
-    m_detailWidget->showWork(work);
+    m_detailsReturn=-1;m_detailWidget->showWork(work);
     const auto chapters = ReadingLibrary().load(work.id);
     if (!chapters.isEmpty()) { openReader(work, chapters); return; }
     m_pendingReadId = work.id; statusBar()->showMessage("Loading fic from AO3..."); m_client->fetchWorkContent(work.id);
@@ -1151,7 +1164,8 @@ void MainWindow::showProfile(const QString &authorUrl)
     m_pendingReadId.clear();
     const QStringList path = QUrl(authorUrl).path().split('/', Qt::SkipEmptyParts);
     if(path.size() < 2 || path[0] != "users") { onError("This work has no public author profile."); return; }
-    m_profileUsername = path[1];m_profileAvatar->clear();m_profileAvatar->setText(m_profileUsername.left(1).toUpper());m_profileAvatar->setAccessibleName("Profile picture for "+m_profileUsername); m_profileText->setPlainText("Loading profile..."); m_contentStack->setCurrentWidget(m_profilePage); m_client->fetchAuthorProfile(m_profileUsername);
+    if(m_contentStack->currentWidget()!=m_profilePage)m_profileReturn=m_contentStack->currentIndex();
+    m_profileUsername = path[1];m_profileAvatar->clear();m_profileAvatar->setText(m_profileUsername.left(1).toUpper());m_profileAvatar->setAccessibleName("Profile picture for "+m_profileUsername); m_profileText->setPlainText("Loading profile..."); m_contentStack->setCurrentWidget(m_profilePage); m_client->fetchAuthorProfile(m_profileUsername);m_profileSubscription->hide();m_client->entitySubscription("User",m_profileUsername);
 }
 void MainWindow::showAuthorListing(bool bookmarks)
 {
@@ -1159,6 +1173,43 @@ void MainWindow::showAuthorListing(bool bookmarks)
     m_readingMode.clear();m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
     m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
     statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
+}
+
+void MainWindow::showArchiveList(const QString &kind,const QString &id,int page)
+{
+    if(kind!="series" && !m_loginManager->isLoggedIn()){showLoginView();return;}
+    if(m_contentStack->currentWidget()==m_reader)m_reader->saveProgress();
+    if(!m_listsPage){auto *scroll=new QScrollArea(m_contentStack);scroll->setWidgetResizable(true);m_listsPage=scroll;auto *body=new QWidget(scroll);m_listsLayout=new QVBoxLayout(body);m_listsLayout->setAlignment(Qt::AlignTop);scroll->setWidget(body);m_contentStack->addWidget(scroll);}
+    if(m_contentStack->currentWidget()!=m_listsPage){m_listsReturn=m_contentStack->currentIndex();m_listsOrigin=m_detailWidget->currentWork();m_listsTrail.clear();}
+    m_listsKind=kind;m_listsId=id;m_listsUncertain=false;m_listsWorkTarget.clear();m_contentStack->setCurrentWidget(m_listsPage);m_listsData={};m_listsData.title="Loading...";renderArchiveList(m_listsData);m_client->fetchArchivePage(kind,id,page);if(kind=="series")m_client->entitySubscription("Series",id);
+}
+void MainWindow::openArchiveTarget(const QString &target)
+{
+    const auto work=QRegularExpression("^/works/([0-9]+)$").match(target);const auto series=QRegularExpression("^/series/([0-9]+)$").match(target);const auto comment=QRegularExpression("^/comments/([0-9]+)$").match(target);
+    if(work.hasMatch()){m_listsWorkTarget=work.captured(1);m_client->fetchWorkDetails(m_listsWorkTarget);}
+    else if(series.hasMatch()){m_listsTrail.append({{m_listsKind,m_listsId},m_listsData.page});showArchiveList("series",series.captured(1));}
+    else if(target.startsWith("/users/"))showProfile(target);
+    else if(comment.hasMatch())showComments("comment:"+comment.captured(1));
+    else if(!target.isEmpty())openArchiveWebsite(QUrl("https://archiveofourown.org"+target));
+}
+void MainWindow::closeArchiveList()
+{
+    if(!m_listsTrail.isEmpty()){const auto previous=m_listsTrail.takeLast();showArchiveList(previous.first.first,previous.first.second,previous.second);}else {if(m_listsReturn==2 && !m_listsOrigin.id.isEmpty())m_detailWidget->showWork(m_listsOrigin);m_detailsReturn=-1;m_contentStack->setCurrentIndex(m_listsReturn);}
+}
+void MainWindow::renderArchiveList(const ArchivePage &page)
+{
+    while(auto *item=m_listsLayout->takeAt(0)){if(item->widget())item->widget()->deleteLater();delete item;}
+    auto *back=new QPushButton("Back",m_listsPage);m_listsLayout->addWidget(back);connect(back,&QPushButton::clicked,this,&MainWindow::closeArchiveList);
+    auto *refresh=new QPushButton("Refresh",m_listsPage);m_listsLayout->addWidget(refresh);connect(refresh,&QPushButton::clicked,this,[this,page]{showArchiveList(m_listsKind,m_listsId,page.page);});
+    auto text=[this](const QString &value){auto *label=new QLabel(value,m_listsPage);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);label->setTextInteractionFlags(Qt::TextSelectableByMouse);m_listsLayout->addWidget(label);};text(page.error.isEmpty()?page.title:page.error);
+    if(!page.description.isEmpty())text(page.description);
+    if(page.entries.isEmpty() && page.error.isEmpty() && page.title!="Loading...")text("No entries.");
+    if(m_listsKind=="series" && page.canSubscribe){auto *subscribe=new QPushButton(page.subscribed?"Unsubscribe":"Subscribe to series",m_listsPage);m_listsLayout->addWidget(subscribe);connect(subscribe,&QPushButton::clicked,this,[this,page,subscribe]{subscribe->setEnabled(false);m_client->entitySubscription("Series",m_listsId,!page.subscribed);});}
+    for(const auto &entry:page.entries){text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty())text(entry.body);
+        if(!entry.target.isEmpty()){auto *open=new QPushButton(entry.target.startsWith("/comments/")?"Open thread":entry.target.startsWith("/bookmarks/")?"Open on AO3":"Open",m_listsPage);m_listsLayout->addWidget(open);connect(open,&QPushButton::clicked,this,[this,entry]{openArchiveTarget(entry.target);});}
+        for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if((action=="Unsubscribe" || action=="Delete from inbox") && QMessageBox::question(this,action+"?",entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
+    }
+    for(int delta:{-1,1}){auto *button=new QPushButton(delta<0?"Previous":"Next",m_listsPage);button->setEnabled(delta<0?page.page>1:page.page<page.pages);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,page,delta]{showArchiveList(m_listsKind,m_listsId,page.page+delta);});}text(QString::number(page.page)+" / "+QString::number(page.pages));m_listsLayout->addStretch();
 }
 
 void MainWindow::showSeries(const QString &id)
@@ -1186,9 +1237,16 @@ void MainWindow::showComments(const QString &workId,int page) {
     m_contentStack->setCurrentWidget(m_commentsPage);m_client->fetchComments(workId,m_commentsCurrent);
 }
 
+void MainWindow::manageComment(const QString &id,const QString &action)
+{
+    if(m_commentSending || m_commentUncertain)return;
+    if(action=="Edit"){m_commentContext=id;m_client->fetchCommentEdit(m_commentsWork,id);return;}
+    if((action=="Delete" || action=="Mark as spam") && QMessageBox::question(this,action+" comment?",action=="Delete"?"Permanently delete this comment?":"Mark this comment as spam?")!=QMessageBox::Yes)return;
+    m_commentDeletion=action=="Delete"?id:QString();m_commentSending=true;m_commentNew->setEnabled(false);m_client->manageComment(m_commentsWork,id,action);
+}
 void MainWindow::composeComment(const QString &replyId) {
     if(m_commentSending || m_commentUncertain)return;
-    m_commentContext=replyId;m_client->fetchCommentForm(m_commentsWork,replyId);
+    m_commentContext=replyId.isEmpty() && m_commentsWork.startsWith("comment:")?m_commentsWork.mid(8):replyId;m_client->fetchCommentForm(m_commentsWork,replyId);
 }
 
 void MainWindow::clearArchiveBookmark() {

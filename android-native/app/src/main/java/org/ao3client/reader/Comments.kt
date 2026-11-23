@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.unit.dp
 
-data class ArchiveComment(val id:String,val author:String,val authorPath:String,val date:String,val text:String,val depth:Int)
+data class ArchiveComment(val id:String,val author:String,val authorPath:String,val date:String,val text:String,val depth:Int,val actions:List<String> = emptyList(),val canReply:Boolean=true)
 data class CommentPage(val comments:List<ArchiveComment>,val page:Int,val pages:Int)
 object CommentParser {
     fun parse(html:String,page:Int=1):CommentPage {
@@ -24,7 +24,7 @@ object CommentParser {
             val body=copy.selectFirst("blockquote.userstuff")
             body?.select("br")?.forEach { it.after("\n") }
             body?.select("p, div, li, blockquote")?.forEach { it.appendText("\n\n") }
-            ArchiveComment(element.id().removePrefix("comment_"), author?.text() ?: heading?.text() ?: "Comment",author?.attr("href").orEmpty(),date,body?.wholeText()?.trim() ?: copy.selectFirst("p.message, p")?.text().orEmpty(),(element.parents().count { it.tagName()=="ol" && it.hasClass("thread") }-1).coerceIn(0,8))
+            ArchiveComment(element.id().removePrefix("comment_"), author?.text() ?: heading?.text() ?: "Comment",author?.attr("href").orEmpty(),date,body?.wholeText()?.trim() ?: copy.selectFirst("p.message, p")?.text().orEmpty(),(element.parents().count { it.tagName()=="ol" && it.hasClass("thread") }-1).coerceIn(0,8),CommentManagement.controls(element,element.id().removePrefix("comment_")).map{it.label},element.select("#navigation_for_comment_"+element.id().removePrefix("comment_")).firstOrNull()?.select("li[id^=add_comment_reply_link_]")?.isNotEmpty() ?: true)
         }
         val pages=doc.select(".pagination a[href]").mapNotNull { Regex("[?&]page=(\\d+)").find(it.attr("href"))?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: page
         return CommentPage(comments,page,maxOf(page,pages))
@@ -34,16 +34,17 @@ object CommentParser {
 @androidx.compose.runtime.Composable
 fun CommentsScreen(vm:ClientState) {
     val page=vm.commentsPage
+    var confirmation by remember{mutableStateOf<Pair<String,String>?>(null)}
     androidx.compose.foundation.lazy.LazyColumn(
         modifier=androidx.compose.ui.Modifier.fillMaxSize(),
         contentPadding=androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement=androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
     ) {
-        item { androidx.compose.material3.OutlinedButton(onClick={vm.showComments(vm.commentsWork,page?.page ?: 1)},enabled=!vm.loading) { androidx.compose.material3.Text("Refresh") } }
-        item { OutlinedButton(onClick={vm.composeComment()},enabled=!vm.loading && !vm.commentSending && !vm.commentUncertain) { Text("Add comment") } }
+        item { SkinOutlinedButton(onClick={vm.showComments(vm.commentsWork,page?.page ?: 1)},enabled=!vm.loading) { androidx.compose.material3.Text("Refresh") } }
+        item { SkinOutlinedButton(onClick={vm.composeComment()},enabled=!vm.loading && !vm.commentSending && !vm.commentUncertain) { Text("Add comment") } }
         vm.commentForm?.let { form -> item {
             Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(if(form.context.isBlank()) "New comment" else "Reply to comment #${form.context}",style=MaterialTheme.typography.titleMedium)
+                Text(if(form.editing)"Edit comment" else if(form.context.isBlank()) "New comment" else "Reply to comment #${form.context}",style=MaterialTheme.typography.titleMedium)
                 if(form.notice.isNotBlank()) Text(form.notice)
                 if(form.pseuds.size>1) form.pseuds.forEach { (id,label) -> Row { RadioButton(selected=vm.commentPseud==id,onClick={vm.commentPseud=id},enabled=!vm.commentSending);Text(label) } }
                 if(form.guest) {
@@ -52,8 +53,8 @@ fun CommentsScreen(vm:ClientState) {
                 }
                 OutlinedTextField(value=vm.commentDraft,onValueChange={vm.commentDraft=it},label={Text("Comment")},minLines=4,enabled=!vm.commentSending,modifier=Modifier.fillMaxWidth())
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Button(onClick={vm.sendComment()},enabled=!vm.commentSending && !vm.commentUncertain && vm.commentDraft.isNotBlank() && (!form.guest || (vm.commentName.isNotBlank() && vm.commentEmail.isNotBlank()))) { Text(if(vm.commentSending) "Posting…" else "Post") }
-                    TextButton(onClick={vm.closeComment()},enabled=!vm.commentSending) { Text("Close") }
+                    SkinButton(onClick={vm.sendComment()},enabled=!vm.commentSending && !vm.commentUncertain && vm.commentDraft.isNotBlank() && (!form.guest || (vm.commentName.isNotBlank() && vm.commentEmail.isNotBlank()))) { Text(if(vm.commentSending) "Saving…" else if(form.editing)"Save changes" else "Post") }
+                    SkinTextButton(onClick={vm.closeComment()},enabled=!vm.commentSending) { Text("Close") }
                 }
             }
         } }
@@ -64,24 +65,26 @@ fun CommentsScreen(vm:ClientState) {
                     androidx.compose.material3.Text(comment.author,style=androidx.compose.material3.MaterialTheme.typography.titleMedium)
                     if(comment.date.isNotBlank()) androidx.compose.material3.Text(comment.date,style=androidx.compose.material3.MaterialTheme.typography.bodySmall)
                     androidx.compose.foundation.text.selection.SelectionContainer { androidx.compose.material3.Text(comment.text) }
-                    if(!comment.text.contains("This comment has been deleted")) TextButton(onClick={vm.composeComment(comment.id)},enabled=!vm.loading && !vm.commentSending && !vm.commentUncertain) { Text("Reply") }
+                    if(comment.canReply && !comment.text.contains("This comment has been deleted")) SkinTextButton(onClick={vm.composeComment(comment.id)},enabled=!vm.loading && !vm.commentSending && !vm.commentUncertain) { Text("Reply") }
+                    comment.actions.forEach{action->SkinTextButton(onClick={if(action in listOf("Delete","Mark as spam"))confirmation=comment.id to action else vm.manageComment(comment.id,action)},enabled=!vm.loading && !vm.commentSending && !vm.commentUncertain){Text(action)}}
                     androidx.compose.material3.HorizontalDivider()
                 }
             }
             item { androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.fillMaxWidth(),horizontalArrangement=androidx.compose.foundation.layout.Arrangement.SpaceBetween) {
-                androidx.compose.material3.TextButton(onClick={vm.showComments(vm.commentsWork,page.page-1)},enabled=page.page>1 && !vm.loading) { androidx.compose.material3.Text("Previous") }
+                SkinTextButton(onClick={vm.showComments(vm.commentsWork,page.page-1)},enabled=page.page>1 && !vm.loading) { androidx.compose.material3.Text("Previous") }
                 androidx.compose.material3.Text("${page.page} / ${page.pages}")
-                androidx.compose.material3.TextButton(onClick={vm.showComments(vm.commentsWork,page.page+1)},enabled=page.page<page.pages && !vm.loading) { androidx.compose.material3.Text("Next") }
+                SkinTextButton(onClick={vm.showComments(vm.commentsWork,page.page+1)},enabled=page.page<page.pages && !vm.loading) { androidx.compose.material3.Text("Next") }
             } }
         }
     }
+    confirmation?.let{(id,action)->AlertDialog(onDismissRequest={confirmation=null},title={Text("$action comment?")},text={Text(if(action=="Delete")"Permanently delete this comment?" else "Mark this comment as spam?")},confirmButton={SkinTextButton(onClick={confirmation=null;vm.manageComment(id,action)}){Text(action)}},dismissButton={SkinTextButton(onClick={confirmation=null}){Text("Cancel")}})}
 }
 
-data class CommentForm(val action:String,val hidden:Map<String,String>,val pseuds:List<Pair<String,String>>,val guest:Boolean,val notice:String,val context:String="")
+data class CommentForm(val action:String,val hidden:Map<String,String>,val pseuds:List<Pair<String,String>>,val guest:Boolean,val notice:String,val context:String="",val editing:Boolean=false,val initialText:String="")
 data class CommentSubmission(val notice:String="",val error:String="",val uncertain:Boolean=false)
 fun validCommentAction(action:String):Boolean = try {
     val uri=java.net.URI(Archive.BASE).resolve(action)
-    uri.scheme=="https" && uri.host=="archiveofourown.org" && (uri.port==-1 || uri.port==443) && uri.userInfo==null && uri.rawQuery==null && uri.rawFragment==null && uri.path.matches(Regex("/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments"))
+    uri.scheme=="https" && uri.host=="archiveofourown.org" && (uri.port==-1 || uri.port==443) && uri.userInfo==null && uri.rawQuery==null && uri.rawFragment==null && (uri.path.matches(Regex("/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments")) || uri.path.matches(Regex("/comments/[0-9]+")))
 } catch(_:Exception) { false }
 fun parseCommentForm(html:String):CommentForm {
     val doc=Jsoup.parse(html)
@@ -92,12 +95,13 @@ fun parseCommentForm(html:String):CommentForm {
     form.select("input[type=hidden][name], input[type=submit][name]").filterNot { it.hasAttr("disabled") }.forEach { hidden[it.attr("name")]=it.attr("value") }
     val pseuds=form.select("select[name='comment[pseud_id]'] option").map { it.attr("value") to it.text() }
     if(pseuds.isNotEmpty()) hidden["comment[pseud_id]"]=form.selectFirst("select[name='comment[pseud_id]'] option[selected]")?.attr("value") ?: pseuds.first().first
-    check(!hidden["authenticity_token"].isNullOrBlank() && "_method" !in hidden) { "AO3 did not return a valid new-comment form" }
-    return CommentForm(form.attr("action"),hidden,pseuds,form.select("input[name='comment[name]'], input[name='comment[email]']").isNotEmpty(),form.select(".notice").joinToString("\n") { it.text() })
+    val editing=ao3Path(form.attr("action"))?.matches(Regex("/comments/[0-9]+"))==true
+    check(!hidden["authenticity_token"].isNullOrBlank() && if(editing)hidden["_method"]=="put" else "_method" !in hidden) { "AO3 did not return a valid new-comment form" }
+    return CommentForm(form.attr("action"),hidden,pseuds,form.select("input[name='comment[name]'], input[name='comment[email]']").isNotEmpty(),form.select(".notice").joinToString("\n") { it.text() },editing=editing,initialText=form.selectFirst("textarea[name='comment[comment_content]']")?.`val`().orEmpty())
 }
-fun parseCommentSubmission(html:String):CommentSubmission {
+fun parseCommentSubmission(html:String,management:Boolean=false):CommentSubmission {
     val doc=Jsoup.parse(html)
-    val notice=doc.select(".flash.comment_notice").firstOrNull { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }?.text().orEmpty()
-    val error=doc.select("#errorExplanation, #error, .errorExplanation, .flash.comment_error").filter { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }.joinToString("\n") { it.text() }
+    val notice=doc.select(if(management)".flash.comment_notice, .flash.notice" else ".flash.comment_notice").firstOrNull { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }?.text().orEmpty()
+    val error=doc.select("#errorExplanation, #error, .errorExplanation, .flash.comment_error, .flash.error").filter { node -> !node.hasClass("userstuff") && node.parents().none { it.id()=="workskin" || it.hasClass("userstuff") } }.joinToString("\n") { it.text() }
     return if(notice.isNotBlank() || error.isNotBlank()) CommentSubmission(notice,error) else CommentSubmission(error="Could not confirm whether the comment was posted. Refresh comments before trying again.",uncertain=true)
 }

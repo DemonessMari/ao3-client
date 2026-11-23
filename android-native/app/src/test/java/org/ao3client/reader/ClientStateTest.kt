@@ -51,6 +51,13 @@ class ClientStateTest {
         vm.navigate("series");vm.navigate(vm.seriesReturn)
         assertEquals("reader",vm.screen);assertEquals("202",vm.selected!!.id);assertEquals("Original chapter content.",vm.chapters.single().text);assertEquals(12,vm.bookOffset);assertEquals("library",vm.readerReturn)
     }
+    @Test fun volumeKeysCanBeReversedOrReturnToSystemVolume() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
+        vm.volumeNavigation(true);vm.volumeAction(false,1);vm.volumeAction(true,0)
+        assertEquals(1,vm.volumeStep(false));assertNull(vm.volumeStep(true))
+        val restored=state(app);assertEquals(1,restored.volumeStep(false));assertNull(restored.volumeStep(true))
+        restored.volumeNavigation(false);assertNull(restored.volumeStep(false))
+    }
     @Test fun readerExtrasPersistAndBoundSpeed() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         vm.autoScrollSpeed(500);assertEquals(120,vm.autoScrollSpeed);vm.autoScrollSpeed(-1);assertEquals(10,vm.autoScrollSpeed)

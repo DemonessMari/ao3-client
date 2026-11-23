@@ -95,6 +95,27 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void commentManagementUsesFreshPermissionForms() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/comment-managed.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        const auto controls=commentControls(ArchivePages::Document(html),"55");QVERIFY(controls.contains("Edit"));QVERIFY(controls.contains("Delete"));QCOMPARE(controls.value("Freeze thread").fields.value("authenticity_token"),QString("freeze+token"));
+        QVERIFY(commentControls(ArchivePages::Document("<div class='userstuff'>"+html+"</div>"),"55").isEmpty());
+        QFile edit(QStringLiteral(AO3_FIXTURE_DIR "/comment-edit.html"));QVERIFY(edit.open(QIODevice::ReadOnly));const auto form=parseCommentForm(QString::fromUtf8(edit.readAll()));QVERIFY(form.error.isEmpty());QVERIFY(form.editing);QCOMPARE(form.initialText,QString("First & second\n\n<em>Keep this HTML</em>"));
+    }
+    void nativeArchiveListsUseOwnedFormsAndSeriesOrder() {
+        auto fixture=[](const QString &name){QFile file(QStringLiteral(AO3_FIXTURE_DIR "/archive-")+name+".html");if(!file.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(file.readAll());};
+        const auto series=ArchivePages::parse(fixture("series"),"series",{},"42",1);QVERIFY(series.error.isEmpty());QCOMPARE(series.entries.size(),2);QCOMPARE(series.entries[0].target,QString("/works/20"));QCOMPARE(series.entries[1].target,QString("/works/10"));
+        const auto html=fixture("subscriptions");const auto subscriptions=ArchivePages::parse(html,"subscriptions","Writer",{},1);QVERIFY(subscriptions.error.isEmpty());QCOMPARE(subscriptions.entries.size(),3);QCOMPARE(subscriptions.pages,2);
+        const auto action=ArchivePages::action(html,"subscriptions","Writer",{},1,"4","Unsubscribe");QVERIFY(action.error.isEmpty());QCOMPARE(action.fields.value("authenticity_token"),QString("fresh+&token"));QCOMPARE(action.path,QString("/users/Writer/subscriptions/4"));
+        QVERIFY(!ArchivePages::parse(html,"subscriptions","Other",{},1).error.isEmpty());
+        const auto inbox=ArchivePages::parse(fixture("inbox"),"inbox","Writer",{},1);QVERIFY(inbox.error.isEmpty());QCOMPARE(inbox.entries.size(),1);QVERIFY(inbox.entries.first().unread);
+        const auto read=ArchivePages::action(fixture("inbox"),"inbox","Writer",{},1,"55","Mark read");QVERIFY(read.error.isEmpty());QCOMPARE(read.fields.value("inbox_comments[]"),QString("77"));
+        const auto spoof=QString(fixture("inbox")).replace("<p>A comment &amp; a reply.</p>","<input name='inbox_comments[]' value='999'><input type='hidden' name='authenticity_token' value='fake-token'>");const auto safe=ArchivePages::action(spoof,"inbox","Writer",{},1,"55","Mark read");QVERIFY(safe.error.isEmpty());QCOMPARE(safe.fields.value("inbox_comments[]"),QString("77"));QCOMPARE(safe.fields.value("authenticity_token"),QString("inbox+token"));
+        QVERIFY(!ArchivePages::action(QString(fixture("inbox")).replace("name=\"read\"","name=\"read\" disabled"),"inbox","Writer",{},1,"55","Mark read").error.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});network->page=html.toUtf8();window.showArchiveList("subscriptions");QTRY_COMPARE(window.m_listsData.entries.size(),3);
+        const QString empty="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav><div id='main' class='subscriptions-index'></div>";
+        network->pages={html.toUtf8(),empty.toUtf8()};QSignalSpy finished(window.m_client,&AO3Client::archiveActionFinished);window.m_client->performArchiveAction("subscriptions",{},1,"4","Unsubscribe");QTRY_COMPARE(finished.size(),1);QVERIFY(!finished.last()[1].toBool());QVERIFY(network->bodies.last().contains("fresh%2B%26token"));QVERIFY(window.m_listsData.entries.isEmpty());
+        window.setLoggedInState(false);QVERIFY(window.m_listsData.entries.isEmpty());QVERIFY(window.m_listsKind.isEmpty());
+    }
     void workActionsWrapInsideNarrowDetails() {
         WorkDetailWidget detail;Work work;work.id="123";work.title="A story";work.author="Writer";detail.showWork(work);detail.resize(380,850);detail.show();QTest::qWait(30);
         auto *actions=detail.findChild<QWidget *>("detailActions");QVERIFY(actions);QVERIFY(actions->layout()->hasHeightForWidth());
@@ -158,12 +179,23 @@ private slots:
         auto object=QJsonDocument::fromJson(bytes).object();for(const auto &pair:QVector<QPair<QString,QJsonValue>>{{"text","#ffffff"},{"onAccent","#174a8b"},{"accent","#eeeeee"},{"surface","#00ffffff"},{"version",2},{"css","body{display:none}"}}){auto invalid=object;invalid[pair.first]=pair.second;QVERIFY(!AppSkin::parse(QJsonDocument(invalid).toJson(),copy,error));}
         QVERIFY(!AppSkin::parse(QByteArray(16385,'x'),copy,error));
     }
+    void nativeSkinLayoutTokensAreBoundedAndReversible() {
+        AppSkin skin=AppSkin::preset(1),parsed;QString error;skin.version=2;skin.uiScale=1.25;skin.cornerRadius=0;
+        QVERIFY(AppSkin::parse(skin.json(),parsed,error));QCOMPARE(parsed.uiScale,1.25);QCOMPARE(parsed.cornerRadius,0);QCOMPARE(parsed.version,2);
+        for(double invalid:{.5,2.0}){auto bad=skin;bad.uiScale=invalid;QVERIFY(!AppSkin::parse(bad.json(),parsed,error));}
+        for(int invalid:{-1,25}){auto bad=skin;bad.cornerRadius=invalid;QVERIFY(!AppSkin::parse(bad.json(),parsed,error));}
+        const auto prior=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");applyAppSkin();});
+        QPushButton button("Native button");button.setStyleSheet("padding: 8px;");const auto base=button.font().pointSizeF();
+        QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QVERIFY(button.styleSheet().isEmpty());QVERIFY(qAbs(button.font().pointSizeF()-base*1.25)<.1);
+        applyAppSkin();QVERIFY(qAbs(button.font().pointSizeF()-base*1.25)<.1);
+        QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QCOMPARE(button.styleSheet(),QString("padding: 8px;"));QVERIFY(qAbs(button.font().pointSizeF()-base)<.1);
+    }
     void appSkinUpdatesExistingChromeAndReader() {
-        const auto prior=QSettings().value("appearance/skin"),use=QSettings().value("reader/useAppSkin");const auto palette=QApplication::palette();auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");if(use.isValid())QSettings().setValue("reader/useAppSkin",use);else QSettings().remove("reader/useAppSkin");QApplication::setPalette(palette);});
+        const auto prior=QSettings().value("appearance/skin"),use=QSettings().value("reader/useAppSkin");const auto palette=QApplication::palette();auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");if(use.isValid())QSettings().setValue("reader/useAppSkin",use);else QSettings().remove("reader/useAppSkin");applyAppSkin();QApplication::setPalette(palette);});
         MainWindow window;installNetwork(window);window.resize(1100,850);window.show();QTest::qWait(30);
         QSettings().setValue("reader/useAppSkin",true);const auto skin=AppSkin::preset(1);QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QCOMPARE(window.palette().color(QPalette::Window),QColor(skin.background));QCOMPARE(window.m_searchInput->palette().color(QPalette::Text),QColor(skin.text));QCOMPARE(window.m_headerBar->palette().color(QPalette::Window),QColor(skin.background));QCOMPARE(window.m_searchButton->palette().color(QPalette::Button),QColor(skin.accent));
         Work work;work.id="865432";work.title="Skin preview";work.author="Reader";window.m_reader->openWork(work,{{"Chapter one","Reading text.\n\nAnother paragraph."}});window.m_reader->applyAppearance();QCOMPARE(window.m_reader->m_browser->palette().color(QPalette::Text),QColor(skin.text));QCOMPARE(window.m_reader->m_browser->palette().color(QPalette::Base),QColor(skin.background));
-        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS")){window.showDashboard();QTest::qWait(80);window.grab().save("/tmp/ao3-home-dark.png");QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(80);window.grab().save("/tmp/ao3-home-light.png");}
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS")){window.showDashboard();QTest::qWait(80);window.grab().save("/tmp/ao3-home-dark.png");QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(80);window.grab().save("/tmp/ao3-home-light.png");auto layout=AppSkin::preset(0);layout.version=2;layout.uiScale=1.25;layout.cornerRadius=4;QSettings().setValue("appearance/skin",layout.json());applyAppSkin();QTest::qWait(80);window.grab().save("/tmp/ao3-home-native-skin.png");}
     }
     void filtersStartClosedAndHomeShowsLibraryActions() {
         MainWindow window;installNetwork(window);window.show();QTest::qWait(30);QVERIFY(window.m_filterDock->isHidden());QVERIFY(!window.m_filterButton->isChecked());QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(!window.m_filterDock->isHidden());QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QVERIFY(window.m_filterDock->isHidden());
@@ -222,6 +254,7 @@ private slots:
         const auto create=parseWorkSubscription(fresh,"123","Alice"),remove=parseWorkSubscription(existing,"123","Alice");
         QCOMPARE(create.path,QString("/users/Alice/subscriptions"));QVERIFY(!create.subscribed);QCOMPARE(create.fields.size(),3);QCOMPARE(create.fields.value("authenticity_token"),QString("csrf+&=token"));
         QVERIFY(remove.subscribed);QCOMPARE(remove.path,QString("/users/Alice/subscriptions/456"));QCOMPARE(remove.fields.value("_method"),QString("delete"));
+        for(const QString &type:QStringList{"User","Series"}){const auto entity=QString(fresh).replace("value=\"Work\"","value=\""+type+"\"").replace("class=\"subscribe\"","class=\"navigation\"");const auto form=parseWorkSubscription(entity,type=="User"?QString():QString("123"),"Alice",type);QVERIFY(!form.path.isEmpty());QCOMPARE(form.fields.value("subscription[subscribable_type]"),type);QVERIFY(parseWorkSubscription("<div class='userstuff'>"+entity+"</div>",{},"Alice",type).path.isEmpty());}
         QVERIFY(parseWorkSubscription(fresh,"999","Alice").path.isEmpty());QVERIFY(parseWorkSubscription(existing,"123","Bob").path.isEmpty());
         for(const auto &bad:QStringList{QString(fresh).replace("/users/Alice/subscriptions","https://evil.example/users/Alice/subscriptions"),QString(fresh).replace("value=\"Work\"","value=\"User\""),QString(existing).replace("value=\"delete\"","value=\"patch\""),QString(fresh).replace("authenticity_token","missing"),"<div id='workskin'>"+fresh+"</div>","<div class='userstuff'>"+existing+"</div>",QString(existing).replace("/subscriptions/456","/subscriptions/delete_all")})QVERIFY(parseWorkSubscription(bad,"123","Alice").path.isEmpty());
         MainWindow window;auto *network=installNetwork(window);QTest::qWait(50);

@@ -9,13 +9,13 @@ import androidx.compose.ui.Modifier
     Text("AO3 website",style=MaterialTheme.typography.titleMedium)
     Text("Website sign-in is separate.",style=MaterialTheme.typography.bodySmall)
     listOf("Profile pictures" to "pseuds","AO3 bookmarks" to "bookmarks","Subscriptions" to "subscriptions","Reading history" to "readings","Marked for later" to "readings?show=to-read","Inbox" to "inbox","Skins" to "skins","Preferences" to "preferences","Drafts" to "works/drafts").forEach { (title,path) ->
-        TextButton(onClick={vm.openWebsite(if(vm.username.isNullOrBlank()) Archive.BASE+"/users/login" else Archive.BASE+"/users/${Archive.encode(vm.username.orEmpty())}/$path")}) { Text(title) }
+        SkinTextButton(onClick={vm.openWebsite(if(vm.username.isNullOrBlank()) Archive.BASE+"/users/login" else Archive.BASE+"/users/${Archive.encode(vm.username.orEmpty())}/$path")}) { Text(title) }
     }
-    TextButton(onClick={vm.openWebsite(Archive.BASE+"/")}) {Text("Browse AO3")}
+    SkinTextButton(onClick={vm.openWebsite(Archive.BASE+"/")}) {Text("Browse AO3")}
 }
 
 @Composable fun Ao3WorkLinks(vm:ClientState,id:String) {
     Text("AO3 website",style=MaterialTheme.typography.titleMedium)
-    OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id")},modifier=Modifier.fillMaxWidth()) {Text("Original formatting and work skin")}
-    OutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id?show_comments=true#comments")},modifier=Modifier.fillMaxWidth()) {Text("Comment management")}
+    SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id")},modifier=Modifier.fillMaxWidth()) {Text("Original formatting and work skin")}
+    SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id?show_comments=true#comments")},modifier=Modifier.fillMaxWidth()) {Text("Comment management")}
 }

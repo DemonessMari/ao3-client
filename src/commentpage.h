@@ -7,7 +7,7 @@
 #include <QUrlQuery>
 #include <QUrl>
 
-struct ArchiveComment { QString id, author, authorPath, date, text; int depth = 0; };
+struct ArchiveComment { QString id, author, authorPath, date, text; int depth = 0; QStringList actions; bool canReply=true; };
 struct CommentPage { QVector<ArchiveComment> comments; int page = 1, pages = 1; QString notice, error; };
 namespace CommentHtml {
 struct Node { QString tag; QMap<QString,QString> attrs; int parent=-1, begin=0, end=0; };
@@ -73,13 +73,14 @@ struct CommentForm {
     QString action, source, context, notice, error;
     QMap<QString,QString> hidden;
     QVector<QPair<QString,QString>> pseuds;
-    bool guest=false;
+    bool guest=false,editing=false;
+    QString initialText;
 };
 struct CommentSubmission { QString notice,error; bool uncertain=false; };
 inline bool validCommentAction(const QString &action) {
     const auto url=QUrl("https://archiveofourown.org").resolved(QUrl(action));
     return url.scheme()=="https" && url.host()=="archiveofourown.org" && url.port(443)==443 && url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment() &&
-        QRegularExpression("^/(?:works/\\d+/|chapters/\\d+/|comments/\\d+/)?comments$").match(url.path()).hasMatch();
+        QRegularExpression("^(?:/(?:works/[0-9]+/|chapters/[0-9]+/|comments/[0-9]+/)?comments|/comments/[0-9]+)$").match(url.path()).hasMatch();
 }
 inline CommentForm parseCommentForm(const QString &html) {
     using namespace CommentHtml;CommentForm result;const auto list=nodes(html);
@@ -101,19 +102,21 @@ inline CommentForm parseCommentForm(const QString &html) {
             }
             if(hasClass(part,"notice"))result.notice+=text(html.mid(part.begin,part.end-part.begin))+"\n";
         }
-        if(result.hidden.value("authenticity_token").isEmpty() || result.hidden.contains("_method"))result.error="AO3 did not return a valid new-comment form";
+        result.editing=QRegularExpression("^/comments/[0-9]+$").match(QUrl(result.action).path()).hasMatch();
+        for(int j=i+1;j<list.size();++j)if(beneath(list,j,i) && list[j].tag=="textarea" && list[j].attrs.value("name")=="comment[comment_content]"){QTextDocument draft;draft.setHtml("<pre>"+html.mid(list[j].begin,list[j].end-list[j].begin)+"</pre>");result.initialText=draft.toPlainText();break;}
+        if(result.hidden.value("authenticity_token").isEmpty() || (result.editing?result.hidden.value("_method")!="put":result.hidden.contains("_method")))result.error="AO3 did not return a valid new-comment form";
         return result;
     }
     result.error="Commenting is unavailable. Check the work's permissions or sign in.";return result;
 }
-inline CommentSubmission parseCommentSubmission(const QString &html) {
+inline CommentSubmission parseCommentSubmission(const QString &html,bool management=false) {
     using namespace CommentHtml;CommentSubmission result;const auto list=nodes(html);
     for(int i=0;i<list.size();++i) {
         const auto &node=list[i];bool story=hasClass(node,"userstuff");
         for(int p=node.parent;p>=0;p=list[p].parent) if(list[p].attrs.value("id")=="workskin" || hasClass(list[p],"userstuff"))story=true;
         if(story)continue;
-        if(hasClass(node,"flash") && hasClass(node,"comment_notice"))result.notice=text(html.mid(node.begin,node.end-node.begin));
-        if(node.attrs.value("id")=="errorExplanation" || node.attrs.value("id")=="error" || hasClass(node,"errorExplanation") || (hasClass(node,"flash") && hasClass(node,"comment_error")))result.error=text(html.mid(node.begin,node.end-node.begin));
+        if(hasClass(node,"flash") && (hasClass(node,"comment_notice") || (management && hasClass(node,"notice"))))result.notice=text(html.mid(node.begin,node.end-node.begin));
+        if(node.attrs.value("id")=="errorExplanation" || node.attrs.value("id")=="error" || hasClass(node,"errorExplanation") || (hasClass(node,"flash") && (hasClass(node,"comment_error") || hasClass(node,"error"))))result.error=text(html.mid(node.begin,node.end-node.begin));
     }
     if(result.notice.isEmpty() && result.error.isEmpty()) {result.uncertain=true;result.error="Could not confirm whether the comment was posted. Refresh comments before trying again.";}
     return result;

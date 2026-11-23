@@ -23,6 +23,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     private val archive = archiveFactory(storage)
     var autoScrollSpeed by mutableIntStateOf(storage.getInt("autoScrollSpeed",30).coerceIn(10,120));private set
     var volumeNavigation by mutableStateOf(storage.getBoolean("volumeNavigation",false));private set
+    var volumeUp by mutableIntStateOf(storage.getInt("volumeUp",-1).coerceIn(-1,1));private set
+    var volumeDown by mutableIntStateOf(storage.getInt("volumeDown",1).coerceIn(-1,1));private set
+    fun volumeAction(down:Boolean,value:Int){val bounded=value.coerceIn(-1,1);if(down)volumeDown=bounded else volumeUp=bounded;storage.edit().putInt(if(down)"volumeDown" else "volumeUp",bounded).apply()}
+    internal fun volumeStep(down:Boolean):Int?=(if(down)volumeDown else volumeUp).takeIf{volumeNavigation && it!=0}
     var keepScreenOn by mutableStateOf(storage.getBoolean("keepScreenOn",false));private set
     var tapLeft by mutableIntStateOf(storage.getInt("tapLeft",-1).coerceIn(-1,2));private set
     var tapCenter by mutableIntStateOf(storage.getInt("tapCenter",2).coerceIn(-1,2));private set
@@ -114,7 +118,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
                 ++kudosGeneration;kudosStates.clear();accountPending.clear()
                 archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
                 commentsPage=null;commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision
-                searchListing=null;accountListing=null;profile=null;profileListing=null;saveProgress();selected=null;chapters=emptyList();ownWorks=false
+                searchListing=null;accountListing=null;archiveList=null;entitySubscriptions.clear();profile=null;profileListing=null;saveProgress();selected=null;chapters=emptyList();ownWorks=false
                 username=user;screen="account";notice="Website sign-in verified for the native reader."
             } catch(e:CancellationException) {throw e}
               catch(e:Exception) {if(generation==kudosGeneration)error=e.message ?: "Website sign-in could not be verified"}
@@ -239,6 +243,17 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             }
         }
     }
+    fun manageComment(id:String,action:String) {
+        if(commentSending || commentUncertain)return
+        val user=username ?: return
+        if(action=="Edit"){
+            val revision=++commentFormRevision
+            load {val form=withContext(Dispatchers.IO){archive.editComment(id,user)};if(revision==commentFormRevision && username==user){commentForm=form;commentDraft=form.initialText;commentPseud=form.hidden["comment[pseud_id]"].orEmpty()}}
+        }else {
+            commentSending=true;error=null;val context=commentsWork
+            viewModelScope.launch {try{val result=withContext(Dispatchers.IO){archive.manageComment(id,action,user)};if(username==user && commentsWork==context && screen=="comments"){commentUncertain=result.uncertain;if(result.error.isNotBlank())error=result.error else {notice=result.notice;if(action=="Delete" && commentsWork=="comment:$id"){commentForm=null;commentDraft="";val back=commentsReturn;navigate(back);if(back=="archiveList")showArchiveList(archiveKind,archiveId,archiveList?.page ?: 1)}else showComments(commentsWork,commentsPage?.page ?: 1)}}}catch(e:Exception){if(e is CancellationException)throw e;error=e.message}finally{commentSending=false}}
+        }
+    }
     fun closeComment() { if(!commentSending) { ++commentFormRevision;commentForm=null } }
     fun sendComment() {
         val form=commentForm ?: return
@@ -286,7 +301,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var readerRevision by mutableIntStateOf(0)
     private var requestRevision = 0
     private var sessionJob: Job? = null
-    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { val confirmed=withContext(Dispatchers.IO) { archive.session() };if(username!=confirmed){accountListing=null;ownWorks=false};username=confirmed } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
+    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { val confirmed=withContext(Dispatchers.IO) { archive.session() };if(username!=confirmed){accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false};username=confirmed } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
     private fun load(block: suspend () -> Unit) {
         loadJob?.cancel(); val revision = ++requestRevision; error = null; loading = true
         loadJob = viewModelScope.launch {
@@ -296,6 +311,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun cancelLoad() { ++requestRevision; loadJob?.cancel(); loading=false }
     fun navigate(destination: String) {
         if (screen == "reader") saveProgress()
+        if(screen=="archiveList" && destination==archiveReturn) {
+            if(archiveTrail.isNotEmpty()){val previous=archiveTrail.removeAt(archiveTrail.lastIndex);showArchiveList(previous.first,previous.second,previous.third);return}
+            archiveOrigin?.let{origin->selected=origin.fic;chapters=origin.chapters;chapter=origin.chapter;translation=origin.translation;detailsReturn=origin.detailsReturn;readerReturn=origin.readerReturn;if(chapters.isNotEmpty())restorePosition();readerRevision++};archiveOrigin=null
+        }
         if(screen=="series" && destination==seriesReturn) {
             seriesOrigin?.let { origin ->
                 selected=origin.fic;chapters=origin.chapters;chapter=origin.chapter;translation=origin.translation
@@ -306,6 +325,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             seriesOrigin=null
         }
         if(destination in listOf("home","search","library","login"))seriesOrigin=null
+        if(destination=="home" || destination=="login"){archiveList=null;archiveKind="";archiveTrail.clear();archiveOrigin=null;archiveUncertain=false}
         if (destination != "details") officialDownloads=null
         if (destination != "reader") { ++requestRevision; loadJob?.cancel(); loading = false; cancelTranslation(); fullScreen = false; textOnly = false }
         error = null
@@ -333,6 +353,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if(name == null) { error = "This work has no public author profile."; return }
         if(screen != "details" || detailsReturn != "profile") profileReturn = screen
         profileUser = name; profile = null; profileListing = null; profileTab = "profile"; screen = "profile"
+        subscriptionState("User",name)
         load { profile = withContext(Dispatchers.IO) { archive.profile(name) } }
     }
     fun profileWorks(bookmarks: Boolean, page: Int = 1) {
@@ -349,6 +370,57 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         if(username==null){navigate("login");return}
         if(screen=="reader")saveProgress()
         cancelTranslation();accountList=if(later)"later" else "history";accountListing=null;ownWorks=true;search(1,false)
+    }
+    internal val entitySubscriptions=mutableStateMapOf<String,Boolean>()
+    internal val entitySubscriptionPending=mutableStateMapOf<String,Boolean>()
+    private val subscriptionRevisions=mutableMapOf<String,Long>()
+    private fun subscriptionState(type:String,target:String) {
+        val user=username ?: return;val key="$type:$target";if(entitySubscriptionPending[key]==true)return
+        val revision=(subscriptionRevisions[key] ?: 0)+1;subscriptionRevisions[key]=revision
+        viewModelScope.launch {try{val state=withContext(Dispatchers.IO){archive.entitySubscription(type,target,user)};if(user==username && subscriptionRevisions[key]==revision && state!=null)entitySubscriptions[key]=state}catch(e:Exception){if(e is CancellationException)throw e}}
+    }
+    fun setEntitySubscription(type:String,target:String,subscribed:Boolean) {
+        val user=username ?: return;val key="$type:$target";if(entitySubscriptionPending[key]==true)return
+        subscriptionRevisions[key]=(subscriptionRevisions[key] ?: 0)+1
+        entitySubscriptionPending[key]=true
+        viewModelScope.launch {try{val state=withContext(Dispatchers.IO){archive.entitySubscription(type,target,user,subscribed)};if(user==username){if(state!=null){entitySubscriptions[key]=state;notice="Subscription confirmed by AO3."}else error="AO3 does not offer a subscription here."}}catch(e:Exception){if(e is CancellationException)throw e;if(user==username){error=e.message;entitySubscriptions.remove(key)}}finally{entitySubscriptionPending.remove(key)}}
+    }
+    private var archiveOrigin:SeriesOrigin?=null
+    private val archiveTrail=mutableListOf<Triple<String,String,Int>>()
+    internal var archiveList by mutableStateOf<ArchivePage?>(null);private set
+    internal var archiveKind="";private set
+    internal var archiveId="";private set
+    var archiveReturn="home";private set
+    var archiveUncertain by mutableStateOf(false);private set
+    fun showArchiveList(kind:String,id:String="",page:Int=1) {
+        if(kind!="series" && username==null){navigate("login");return}
+        if(screen!="archiveList"){archiveReturn=screen;archiveList=null;archiveTrail.clear();archiveOrigin=selected?.let{SeriesOrigin(it,chapters,chapter,translation,if(detailsReturn=="archiveList") "home" else detailsReturn,readerReturn)}}
+        if(screen=="reader")saveProgress()
+        archiveKind=kind;archiveId=id;archiveUncertain=false;navigate("archiveList")
+        val user=username.orEmpty()
+        load {val result=withContext(Dispatchers.IO){archive.archivePage(kind,user,id,page)};if(kind=="series" || username==user)archiveList=result}
+        if(kind=="series")subscriptionState("Series",id)
+    }
+    internal fun actOnArchiveEntry(entry:ArchiveEntry,label:String) {
+        if(loading || archiveUncertain)return
+        val user=username ?: return;val kind=archiveKind;val id=archiveId;val page=archiveList?.page ?: return
+        load {
+            try {val result=withContext(Dispatchers.IO){archive.archivePageAction(kind,user,id,page,entry.id,label)};if(username==user){archiveList=result;notice="Change confirmed by AO3."}}
+            catch(e:Exception){if(e is CancellationException)throw e;archiveUncertain=true;throw e}
+        }
+    }
+    fun openArchiveEntry(target:String) {
+        when {
+            target.matches(Regex("/works/[0-9]+"))->openListedWork(target.substringAfterLast('/'))
+            target.matches(Regex("/series/[0-9]+"))->{archiveList?.let{archiveTrail+=Triple(archiveKind,archiveId,it.page)};showArchiveList("series",target.substringAfterLast('/'))}
+            target.startsWith("/users/")->showProfile(target)
+            target.matches(Regex("/comments/[0-9]+"))->showComments("comment:"+target.substringAfterLast('/'))
+            target.isNotEmpty()->openWebsite(Archive.BASE+target)
+        }
+    }
+    private fun openListedWork(id:String)=load {
+        val fic=withContext(Dispatchers.IO){archive.workDetails(id)}
+        officialDownloads=null;selected=fic;chapters=emptyList();translation=null;detailsReturn="archiveList";readerReturn="details";screen="details"
     }
     private data class SeriesOrigin(val fic:Fic,val chapters:List<Chapter>,val chapter:Int,val translation:String?,val detailsReturn:String,val readerReturn:String)
     private var seriesOrigin:SeriesOrigin?=null
@@ -445,10 +517,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun login(name: String, password: String) = load {
         ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
         sessionJob?.cancel()
-        val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };accountListing=null;ownWorks=false;username=confirmed
+        val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false;username=confirmed
         screen = "home"
     }
-    fun logout() { ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { entitySubscriptions.clear();entitySubscriptionPending.clear();++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; archiveList=null;selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()

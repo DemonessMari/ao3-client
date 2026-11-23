@@ -10,7 +10,8 @@
 class QWidget;
 struct AppSkin {
     QString name="Light", background="#fff8f5", surface="#ffffff", text="#292723", accent="#920b19", onAccent="#ffffff";
-    QByteArray json() const { return QJsonDocument(QJsonObject{{"format","ao3-client-skin"},{"version",1},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}}).toJson(); }
+    double uiScale=1.0;int cornerRadius=8,version=1;
+    QByteArray json() const { QJsonObject o{{"format","ao3-client-skin"},{"version",version},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}};if(version==2){o["uiScale"]=uiScale;o["cornerRadius"]=cornerRadius;}return QJsonDocument(o).toJson(); }
     static AppSkin preset(int index) {
         if(index==1)return {"Dark","#191b1e","#25272b","#e7e1d8","#ffb3b9","#350009"};
         if(index==2)return {"Sepia","#f1e3c7","#fff2d9","#292723","#843d21","#ffffff"};
@@ -24,10 +25,12 @@ struct AppSkin {
     static bool parse(const QByteArray &bytes,AppSkin &skin,QString &error) {
         if(bytes.size()>16384){error="Skin files must be smaller than 16 KB.";return false;}
         QJsonParseError e;const auto doc=QJsonDocument::fromJson(bytes,&e);const auto o=doc.object();
-        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || o.value("version").toDouble()!=1){error="Choose an AO3 Client skin JSON file (version 1).";return false;}
-        const QStringList keys={"format","version","name","background","surface","text","accent","onAccent"};
+        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || (o.value("version").toDouble()!=1 && o.value("version").toDouble()!=2)){error="Choose an AO3 Client skin JSON file (version 1 or 2).";return false;}
+        QStringList keys={"format","version","name","background","surface","text","accent","onAccent"};if(o.value("version").toInt()==2)keys.append({"uiScale","cornerRadius"});
         for(auto it=o.begin();it!=o.end();++it)if(!keys.contains(it.key())){error="Unknown skin field: "+it.key();return false;}
-        AppSkin candidate;candidate.name=o.value("name").toString().trimmed();
+        AppSkin candidate;candidate.version=o.value("version").toInt();
+        if(candidate.version==2){const auto scale=o.value("uiScale"),radius=o.value("cornerRadius");if(!scale.isDouble() || !radius.isDouble() || !std::isfinite(scale.toDouble()) || scale.toDouble()<1 || scale.toDouble()>1.5 || radius.toDouble()<0 || radius.toDouble()>24 || radius.toDouble()!=std::floor(radius.toDouble())){error="Interface scale must be 1–1.5; corner radius must be a whole number from 0 to 24.";return false;}candidate.uiScale=scale.toDouble();candidate.cornerRadius=radius.toInt();}
+        candidate.name=o.value("name").toString().trimmed();
         if(candidate.name.isEmpty() || candidate.name.size()>60 || candidate.name.contains(QRegularExpression("[\\x00-\\x1f\\x7f]"))){error="Give the skin a name of 1–60 characters.";return false;}
         for(auto pair:{qMakePair(QString("background"),&candidate.background),qMakePair(QString("surface"),&candidate.surface),qMakePair(QString("text"),&candidate.text),qMakePair(QString("accent"),&candidate.accent),qMakePair(QString("onAccent"),&candidate.onAccent)}){
             const auto value=o.value(pair.first).toString();if(!QRegularExpression("^#[0-9a-fA-F]{6}$").match(value).hasMatch()){error="Use opaque #RRGGBB colors for "+pair.first+".";return false;}*pair.second=value.toLower();

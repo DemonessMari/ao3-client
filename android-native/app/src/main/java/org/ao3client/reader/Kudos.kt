@@ -25,7 +25,7 @@ object KudosParser {
 
 @androidx.compose.runtime.Composable
 fun KudosButton(vm:ClientState,id:String) {
- androidx.compose.material3.OutlinedButton(onClick={vm.giveKudos(id)},enabled=!vm.kudosStates.containsKey(id)) {
+ SkinOutlinedButton(onClick={vm.giveKudos(id)},enabled=!vm.kudosStates.containsKey(id)) {
   androidx.compose.material3.Text(vm.kudosStates[id] ?: if(vm.username==null) "Give guest kudos" else "Give kudos")
  }
 }

@@ -52,6 +52,18 @@ private slots:
 
 private:
     QString m_readingMode;
+    void showArchiveList(const QString &kind,const QString &id={},int page=1);
+    void openArchiveTarget(const QString &target);
+    void renderArchiveList(const ArchivePage &page);
+    QWidget *m_listsPage=nullptr;
+    QVBoxLayout *m_listsLayout=nullptr;
+    QString m_listsKind,m_listsId,m_listsWorkTarget;
+    ArchivePage m_listsData;
+    int m_listsReturn=0,m_detailsReturn=-1,m_profileReturn=0;
+    Work m_listsOrigin;
+    bool m_listsUncertain=false;
+    QVector<QPair<QPair<QString,QString>,int>> m_listsTrail;
+    void closeArchiveList();
     void setupUI();
     void openArchiveWebsite(const QUrl &url);
     ArchiveWeb *m_archiveWebsite=nullptr;
@@ -72,6 +84,7 @@ private:
     bool m_archiveBookmarkSending=false,m_archiveBookmarkUncertain=false;
     void showComments(const QString &workId,int page=1);
     void composeComment(const QString &replyId={});
+    void manageComment(const QString &id,const QString &action);
     QWidget *m_commentEditor=nullptr;
     QTextEdit *m_commentDraft=nullptr;
     QLineEdit *m_commentName=nullptr,*m_commentEmail=nullptr;
@@ -79,7 +92,7 @@ private:
     QPushButton *m_commentPost=nullptr,*m_commentClose=nullptr,*m_commentNew=nullptr;
     QLabel *m_commentNotice=nullptr;
     CommentForm m_commentForm;
-    QString m_commentContext;
+    QString m_commentContext, m_commentDeletion;
     bool m_commentSending=false,m_commentUncertain=false;
     QWidget *m_commentsPage=nullptr;
     QTextBrowser *m_commentsText=nullptr;
@@ -95,6 +108,7 @@ private:
     QWidget *m_profilePage = nullptr;
     QTextBrowser *m_profileText = nullptr;
     QLabel *m_profileAvatar = nullptr;
+    QPushButton *m_profileSubscription=nullptr;
     QString m_profileUsername;
     QString m_accountPictureUser;
     QString m_listingAuthor;

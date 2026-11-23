@@ -117,7 +117,7 @@ import androidx.lifecycle.LifecycleEventObserver
         bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 IconButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous chapter") }
-                Box { TextButton(onClick = { chaptersMenu = true }) { Text("Chapter ${vm.chapter + 1} of ${vm.chapters.size}") }
+                Box { SkinTextButton(onClick = { chaptersMenu = true }) { Text("Chapter ${vm.chapter + 1} of ${vm.chapters.size}") }
                     DropdownMenu(expanded = chaptersMenu, onDismissRequest = { chaptersMenu = false }, modifier = Modifier.heightIn(max = 320.dp).widthIn(max = 320.dp)) {
                         vm.chapters.forEachIndexed { i, chapter -> DropdownMenuItem(text = { Text("${i + 1}. ${chapter.title}", softWrap = true) }, onClick = { chaptersMenu = false; vm.changeChapter(i) }) }
                     }
@@ -128,12 +128,12 @@ import androidx.lifecycle.LifecycleEventObserver
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
-                if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
-                if(speech.active && !vm.textOnly) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {TextButton(onClick={speech.pauseOrResume()}){Text(if(speech.paused)"Resume speech" else "Pause speech")};TextButton(onClick={speech.stop()}){Text("Stop speech")}}
-                if(autoScroll && !vm.textOnly) TextButton(onClick={autoScroll=false}) {Text("Pause auto-scroll")}
+                if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); SkinTextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
+                if(speech.active && !vm.textOnly) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {SkinTextButton(onClick={speech.pauseOrResume()}){Text(if(speech.paused)"Resume speech" else "Pause speech")};SkinTextButton(onClick={speech.stop()}){Text("Stop speech")}}
+                if(autoScroll && !vm.textOnly) SkinTextButton(onClick={autoScroll=false}) {Text("Pause auto-scroll")}
                 if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(currentChapter.title,Modifier.weight(1f).padding(vertical=6.dp),style=MaterialTheme.typography.labelLarge)
-                    if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) TextButton(onClick={notes=true}) { Text("Author notes") }
+                    if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) SkinTextButton(onClick={notes=true}) { Text("Author notes") }
                 }
                 if(!vm.textOnly) vm.error?.let { ErrorCard(it) { vm.error = null } }
                 if(vm.translating && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.translationProgress, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium) }
@@ -144,8 +144,8 @@ import androidx.lifecycle.LifecycleEventObserver
                         itemsIndexed(paragraphs) { i, paragraph -> Text(rich.subSequence(paragraphOffsets[i],paragraphOffsets[i]+paragraph.length), fontFamily = readingFamily, fontSize = vm.preferences.fontSize.sp, lineHeight = (vm.preferences.fontSize * vm.preferences.lineSpacing).sp,modifier=Modifier.fillMaxWidth(),textAlign=readingAlignment(vm.preferences.alignment)) }
                         item {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }
-                                TextButton(onClick = { vm.changeChapter(vm.chapter + 1) }, enabled = vm.chapter < vm.chapters.lastIndex) { Text("Next chapter") }
+                                SkinTextButton(onClick = { vm.changeChapter(vm.chapter - 1) }, enabled = vm.chapter > 0) { Text("Previous chapter") }
+                                SkinTextButton(onClick = { vm.changeChapter(vm.chapter + 1) }, enabled = vm.chapter < vm.chapters.lastIndex) { Text("Next chapter") }
                             }
                         }
                         item { Spacer(Modifier.height(24.dp)) }
@@ -171,6 +171,7 @@ import androidx.lifecycle.LifecycleEventObserver
                 Slider(value=vm.autoScrollSpeed.toFloat(),onValueChange={vm.autoScrollSpeed(it.toInt())},valueRange=10f..120f)
             }
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Volume buttons turn pages",Modifier.weight(1f));Switch(vm.volumeNavigation,{vm.volumeNavigation(it)})}
+            if(vm.volumeNavigation)VolumeControls(vm)
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Keep screen on",Modifier.weight(1f));Switch(vm.keepScreenOn,{vm.keepScreenOn(it)})}
 
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
@@ -184,9 +185,9 @@ import androidx.lifecycle.LifecycleEventObserver
             MenuRow("Reading appearance", supportingText = "Theme, font, text size and line spacing · applies immediately", onClick = { tools = false; appearance = true })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Text size · ${vm.preferences.fontSize}", Modifier.weight(1f))
-                Row { OutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize - 1) }) { Text("A−") }; Spacer(Modifier.width(12.dp)); OutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize + 1) }) { Text("A+") } }
+                Row { SkinOutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize - 1) }) { Text("A−") }; Spacer(Modifier.width(12.dp)); SkinOutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize + 1) }) { Text("A+") } }
             }
-            Button(onClick = { if(vm.translating || vm.storage.getBoolean("translationConsented",false)) { vm.translate(); tools = false } else translationConsent=true }, Modifier.fillMaxWidth()) { Text(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}") }
+            SkinButton(onClick = { if(vm.translating || vm.storage.getBoolean("translationConsented",false)) { vm.translate(); tools = false } else translationConsent=true }, Modifier.fillMaxWidth()) { Text(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}") }
             if(vm.translation != null) MenuRow("Show original", onClick = { vm.original(); tools = false })
             MenuRow("Text only", supportingText="Hide all controls. Tap the center or press Back to restore them.", onClick={ tools=false; vm.textOnly=true })
             Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Book mode",Modifier.weight(1f)); Switch(checked=vm.bookMode,onCheckedChange={vm.readingMode(book=it)}) }
@@ -207,9 +208,9 @@ import androidx.lifecycle.LifecycleEventObserver
             OutlinedTextField(language,{language=it.take(16)},label={Text("Speech language, e.g. en or es")},singleLine=true,modifier=Modifier.fillMaxWidth())
             Text("Speech rate · ${"%.1f".format(rate)}×");Slider(rate,{rate=it},valueRange=.5f..2f)
             speech.error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
-            Button(onClick={vm.storage.edit().putString("speechLanguage",language.trim()).putFloat("speechRate",rate).apply();val offset=if(vm.bookMode)vm.bookOffset.coerceAtLeast(0) else paragraphOffsets.getOrElse(scroll.firstVisibleItemIndex){text.length};speech.start(text,offset,language.trim(),rate)},modifier=Modifier.fillMaxWidth()){Text("Read from here")}
-            Row {TextButton(onClick={speech.pauseOrResume()},enabled=speech.active){Text(if(speech.paused)"Resume" else "Pause")};TextButton(onClick={speech.stop()}){Text("Stop")}}
-            TextButton(onClick={speechOptions=false}){Text("Done")}
+            SkinButton(onClick={vm.storage.edit().putString("speechLanguage",language.trim()).putFloat("speechRate",rate).apply();val offset=if(vm.bookMode)vm.bookOffset.coerceAtLeast(0) else paragraphOffsets.getOrElse(scroll.firstVisibleItemIndex){text.length};speech.start(text,offset,language.trim(),rate)},modifier=Modifier.fillMaxWidth()){Text("Read from here")}
+            Row {SkinTextButton(onClick={speech.pauseOrResume()},enabled=speech.active){Text(if(speech.paused)"Resume" else "Pause")};SkinTextButton(onClick={speech.stop()}){Text("Stop")}}
+            SkinTextButton(onClick={speechOptions=false}){Text("Done")}
         }
     }
     if(notes) ModalBottomSheet(onDismissRequest={notes=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),shape=RoundedCornerShape(topStart=16.dp,topEnd=16.dp)) {
@@ -221,10 +222,10 @@ import androidx.lifecycle.LifecycleEventObserver
                     if(currentChapter.notesAfter.isNotBlank()) { Text("After chapter",style=MaterialTheme.typography.titleMedium); Text(currentChapter.notesAfter,fontFamily=readingFamily,fontSize=vm.preferences.fontSize.sp,lineHeight=(vm.preferences.fontSize*vm.preferences.lineSpacing).sp) }
                 }
             }
-            Button(onClick={notes=false},modifier=Modifier.fillMaxWidth()) { Text("Done") }
+            SkinButton(onClick={notes=false},modifier=Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
-    if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("Chapter text will be sent to your translation service.")},confirmButton={TextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={TextButton(onClick={translationConsent=false}) { Text("Cancel") }})
+    if(translationConsent) AlertDialog(onDismissRequest={translationConsent=false},title={Text("Send chapter for translation?")},text={Text("Chapter text will be sent to your translation service.")},confirmButton={SkinTextButton(onClick={vm.storage.edit().putBoolean("translationConsented",true).apply(); translationConsent=false; tools=false; vm.translate()}) { Text("Translate") }},dismissButton={SkinTextButton(onClick={translationConsent=false}) { Text("Cancel") }})
     if(appearance) ModalBottomSheet(
         onDismissRequest = { appearance = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -232,12 +233,12 @@ import androidx.lifecycle.LifecycleEventObserver
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             ReadingAppearanceControls(vm)
-            Button(onClick = { appearance = false }, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+            SkinButton(onClick = { appearance = false }, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
     if(bookmarkDialog) AlertDialog(onDismissRequest = { bookmarkDialog = false }, title = { Text("Add bookmark") }, text = {
         OutlinedTextField(bookmarkName, { bookmarkName = it }, label = { Text("Bookmark name") }, singleLine = true)
-    }, confirmButton = { TextButton(onClick = { vm.addBookmark(bookmarkName); bookmarkDialog = false }, enabled = bookmarkName.isNotBlank()) { Text("Save bookmark") } }, dismissButton = { TextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") } })
+    }, confirmButton = { SkinTextButton(onClick = { vm.addBookmark(bookmarkName); bookmarkDialog = false }, enabled = bookmarkName.isNotBlank()) { Text("Save bookmark") } }, dismissButton = { SkinTextButton(onClick = { bookmarkDialog = false }) { Text("Cancel") } })
     if(bookmarksMenu) ModalBottomSheet(onDismissRequest = { bookmarksMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item { Text("Bookmarks", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp)) }
@@ -245,7 +246,7 @@ import androidx.lifecycle.LifecycleEventObserver
             items(vm.bookmarks, key = { it.id }) { bookmark ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { MenuRow(bookmark.title, supportingText = "Chapter ${bookmark.chapter + 1}", onClick = { vm.jumpBookmark(bookmark); bookmarksMenu = false }) }
-                    TextButton(onClick = { vm.removeBookmark(bookmark) }) { Text("Delete") }
+                    SkinTextButton(onClick = { vm.removeBookmark(bookmark) }) { Text("Delete") }
                 }
             }
         }

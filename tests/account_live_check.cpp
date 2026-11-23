@@ -10,6 +10,7 @@
 #include "loginmanager.h"
 #include "kudos.h"
 #include "archivebookmark.h"
+#include "archivepages.h"
 int main(int argc,char **argv) {
     QApplication app(argc,argv);QStandardPaths::setTestModeEnabled(true);
     if(argc<2 || argc>3){QTextStream(stderr)<<"Pass the native cookie file for a read-only check.\n";return 2;}
@@ -39,6 +40,11 @@ int main(int argc,char **argv) {
     const auto html=get("/works/"+work+"?view_adult=true");if(!siteIdentityMatches(html,user))return 1;
     const auto form=parseArchiveBookmark(html,work);
     if(!form.error.isEmpty()){QTextStream(stdout)<<form.error<<"\n";return 1;}
+    for(const auto &kind:QStringList{"bookmarks","subscriptions","inbox"}) {
+        const auto page=ArchivePages::parse(get("/users/"+user+"/"+kind),kind,user,{},1);
+        if(!page.error.isEmpty()){QTextStream(stdout)<<"Native "<<kind<<" parser failed: "<<page.error<<"\n";return 1;}
+        QTextStream(stdout)<<"Native "<<kind<<" list validated ("<<page.entries.size()<<" entries on the first page).\n";
+    }
     QTextStream(stdout)<<"Native session confirmed. Live AO3 bookmark form validated; "<<form.pseuds.size()<<" pseud choice(s). No account writes performed.\n";
     return 0;
 }

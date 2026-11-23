@@ -16,6 +16,8 @@
 #include "websession.h"
 #include <QImage>
 #include "seriesnavigation.h"
+#include "archivepages.h"
+#include "commentmanagement.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -33,6 +35,7 @@ public:
     bool workAccountPending(const QString &id) const {return m_workAccountPending.contains(id);}
     void fetchArchiveBookmark(const QString &workId);
     void saveArchiveBookmark(const ArchiveBookmarkForm &draft,bool deleting=false);
+    void entitySubscription(const QString &type,const QString &target,int desired=-1);
     void setWorkSubscribed(const QString &workId,bool subscribed);
     void setMarkedForLater(const QString &workId,bool later);
     void giveKudos(const QString &workId);
@@ -44,11 +47,15 @@ public:
     void checkSession();
     void logout();
     void fetchDashboard();
+    void fetchCommentEdit(const QString &context,const QString &id);
+    void manageComment(const QString &context,const QString &id,const QString &label);
     void fetchCommentForm(const QString &workId,const QString &replyId={});
     void submitComment(const QString &workId,const CommentForm &form,const QString &text,const QString &pseud={},const QString &guestName={},const QString &guestEmail={});
     void fetchComments(const QString &workId,int page=1);
     void fetchUserWorks(int page = 1);
     void fetchAccountReadings(bool later,int page=1);
+    void fetchArchivePage(const QString &kind,const QString &id={},int page=1);
+    void performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label);
     void fetchProfileAvatar(const QString &username,const QUrl &url);
     void fetchAuthorProfile(const QString &username);
     void fetchAuthorWorks(const QString &username, int page = 1, bool bookmarks = false);
@@ -78,6 +85,9 @@ signals:
     void loginFailed(const QString &reason);
     void sessionChecked(bool valid, const UserInfo &user);
     void loggedOut();
+    void entitySubscriptionFetched(const QString &type,const QString &target,bool available,bool subscribed,const QString &message);
+    void archivePageFetched(const QString &kind,const QString &id,const ArchivePage &page);
+    void archiveActionFinished(const QString &message,bool uncertain);
     void accountReadingsFetched(bool later,const SearchResult &result);
     void userWorksFetched(const SearchResult &result);
     void profileAvatarFetched(const QString &username,const QImage &image);
@@ -107,4 +117,7 @@ private:
     quint64 m_listingGeneration = 0;
     QMap<QString,QString> m_kudosStatus;
     QSet<QString> m_workAccountPending;
+    QSet<QString> m_listMutations;
+    QSet<QString> m_entityPending;
+    QHash<QString,quint64> m_entityRevisions;
 };

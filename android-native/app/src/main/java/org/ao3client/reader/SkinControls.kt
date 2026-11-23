@@ -31,8 +31,10 @@ fun AppSkin.colorScheme():ColorScheme {
     var text by rememberSaveable{mutableStateOf(initial.text)}
     var accent by rememberSaveable{mutableStateOf(initial.accent)}
     var onAccent by rememberSaveable{mutableStateOf(initial.onAccent)}
-    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent}
-    val candidate=AppSkin(name,background,surface,text,accent,onAccent)
+    var uiScale by rememberSaveable{mutableStateOf(initial.uiScale.toFloat())}
+    var cornerRadius by rememberSaveable{mutableStateOf(initial.cornerRadius.toFloat())}
+    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent;uiScale=s.uiScale.toFloat();cornerRadius=s.cornerRadius.toFloat()}
+    val candidate=AppSkin(name,background,surface,text,accent,onAccent,uiScale.toDouble(),cornerRadius.toInt(),2)
     val parsed=runCatching{AppSkin.parse(candidate.json().toByteArray())}
     val valid=parsed.getOrNull()
     var previewJson by rememberSaveable{mutableStateOf(initial.json())}
@@ -42,14 +44,24 @@ fun AppSkin.colorScheme():ColorScheme {
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->if(uri!=null)try{context.contentResolver.openOutputStream(uri)?.use{it.write(draft.toByteArray())}?:error("Cannot save the file.")}catch(e:Exception){vm.error=e.message}}
     Column(Modifier.fillMaxSize()) {
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("light" to "Light","dark" to "Dark","sepia" to "Sepia").forEach{(key,label)->OutlinedButton(onClick={fill(AppSkin.preset(key))}){Text(label)}}}
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("light" to "Light","dark" to "Dark","sepia" to "Sepia").forEach{(key,label)->SkinOutlinedButton(onClick={fill(AppSkin.preset(key))}){Text(label)}}}
         OutlinedTextField(name,{name=it.take(60)},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
         listOf(Triple("Background",background,{v:String->background=v}),Triple("Surface",surface,{v:String->surface=v}),Triple("Text",text,{v:String->text=v}),Triple("Accent",accent,{v:String->accent=v}),Triple("Text on accent",onAccent,{v:String->onAccent=v})).forEach{(label,value,set)->OutlinedTextField(value,{set(it.take(7))},Modifier.fillMaxWidth(),label={Text(label)},singleLine=true)}
-        MaterialTheme(colorScheme=preview.colorScheme()) {Surface(color=MaterialTheme.colorScheme.background,modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){Text("Chapter title",style=MaterialTheme.typography.titleLarge);Surface(color=MaterialTheme.colorScheme.surface){Text("A preview of your reading text.",Modifier.padding(12.dp))};Button(onClick={}){Text("Button")}}}}
+        Text("Interface size: ${(uiScale*100).toInt()}%")
+        Slider(value=uiScale,onValueChange={uiScale=it},valueRange=1f..1.5f,steps=9)
+        Text("Control corners: ${cornerRadius.toInt()}")
+        Slider(value=cornerRadius,onValueChange={cornerRadius=it},valueRange=0f..24f,steps=23)
+        val density=androidx.compose.ui.platform.LocalDensity.current
+        CompositionLocalProvider(LocalSkinRadius provides preview.cornerRadius,androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(preview.uiScale/(vm.appSkin?.uiScale ?: 1.0)).toFloat(),density.fontScale)) {MaterialTheme(colorScheme=preview.colorScheme(),shapes=preview.shapes()) {Surface(color=MaterialTheme.colorScheme.background,modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){Text("Chapter title",style=MaterialTheme.typography.titleLarge);Surface(color=MaterialTheme.colorScheme.surface){Text("A preview of your reading text.",Modifier.padding(12.dp))};SkinButton(onClick={}){Text("Button")}}}}}
         if(valid==null)Text(parsed.exceptionOrNull()?.message.orEmpty(),color=MaterialTheme.colorScheme.error)
 
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick={import.launch(arrayOf("application/json","text/plain","application/octet-stream"))}){Text("Import")};OutlinedButton(onClick={if(valid!=null){draft=valid.json();export.launch("ao3-skin.json")}},enabled=valid!=null){Text("Export")};TextButton(onClick={fill(AppSkin.preset(vm.preferences.theme));vm.applySkin(null);vm.notice="App skin reset."}){Text("Reset")}}
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){SkinOutlinedButton(onClick={import.launch(arrayOf("application/json","text/plain","application/octet-stream"))}){Text("Import")};SkinOutlinedButton(onClick={if(valid!=null){draft=valid.json();export.launch("ao3-skin.json")}},enabled=valid!=null){Text("Export")};SkinTextButton(onClick={fill(AppSkin.preset(vm.preferences.theme));vm.applySkin(null);vm.notice="App skin reset."}){Text("Reset")}}
     }
-    Surface(tonalElevation=2.dp){Button(onClick={if(valid!=null){vm.applySkin(valid);vm.notice="App skin applied."}},enabled=valid!=null,modifier=Modifier.fillMaxWidth().padding(16.dp)){Text("Apply skin")}}
+    Surface(tonalElevation=2.dp){SkinButton(onClick={if(valid!=null){vm.applySkin(valid);vm.notice="App skin applied."}},enabled=valid!=null,modifier=Modifier.fillMaxWidth().padding(16.dp)){Text("Apply skin")}}
     }
+}
+
+internal fun AppSkin.shapes():Shapes {
+    val shape=androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius.dp)
+    return Shapes(small=shape,medium=shape)
 }

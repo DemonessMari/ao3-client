@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if(uri!=null)vm.importFont(context.contentResolver,uri) }
     var expanded by remember { mutableStateOf(false) }
     if(vm.importedFonts.isNotEmpty())Box {
-        OutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()) { Text(vm.importedFonts.firstOrNull { it.id==vm.preferences.fontFamily }?.name ?: "Imported fonts",maxLines=2,overflow=TextOverflow.Ellipsis) }
+        SkinOutlinedButton(onClick={expanded=true},modifier=Modifier.fillMaxWidth()) { Text(vm.importedFonts.firstOrNull { it.id==vm.preferences.fontFamily }?.name ?: "Imported fonts",maxLines=2,overflow=TextOverflow.Ellipsis) }
         DropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {vm.importedFonts.forEach { font -> DropdownMenuItem(text={Text(font.name,maxLines=2,overflow=TextOverflow.Ellipsis)},onClick={expanded=false;vm.appearance(family=font.id)}) }}
     }
     if(ReaderFontStore.validId(vm.preferences.fontFamily))Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
     }
     vm.fontError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
     FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick={picker.launch(arrayOf("*/*"))},enabled=!vm.fontImporting) {Text(if(vm.fontImporting)"Importing…" else "Import font")}
-        if(ReaderFontStore.validId(vm.preferences.fontFamily))TextButton(onClick={vm.removeFont(vm.preferences.fontFamily)},enabled=!vm.fontImporting) {Text("Remove font")}
+        SkinOutlinedButton(onClick={picker.launch(arrayOf("*/*"))},enabled=!vm.fontImporting) {Text(if(vm.fontImporting)"Importing…" else "Import font")}
+        if(ReaderFontStore.validId(vm.preferences.fontFamily))SkinTextButton(onClick={vm.removeFont(vm.preferences.fontFamily)},enabled=!vm.fontImporting) {Text("Remove font")}
     }
 }

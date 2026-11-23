@@ -5,14 +5,24 @@ permissions:
 jobs:
   desktop:
     runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_DISABLE_SANDBOX: '1'
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y qt6-base-dev cmake ninja-build python3 libglib2.0-bin
+      - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build python3 libglib2.0-bin libnss3 libasound2t64
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          modules: qtwebengine qtwebchannel qtpositioning
+          cache: true
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build --parallel 2
+      - run: cmake --build build --parallel 1
       - run: ctest --test-dir build --output-on-failure
       - run: QT_QPA_PLATFORM=offscreen build/ao3-client --smoke-test
       - run: ./scripts/package-desktop.sh
+        env:
+          PKG_CONFIG_PATH: ${{ env.QT_ROOT_DIR }}/lib/pkgconfig
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-linux

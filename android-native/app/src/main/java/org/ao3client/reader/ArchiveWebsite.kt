@@ -138,8 +138,8 @@ fun ArchiveWebsiteScreen(vm:ClientState) {
             view
         },modifier=Modifier.fillMaxWidth().weight(1f))
     }
-    if(clear)AlertDialog(onDismissRequest={clear=false},title={Text("Clear website sign-in?")},text={Text("Clear the embedded AO3 website’s cookies and cache? Native sign-in is separate.")},confirmButton={TextButton(onClick={
+    if(clear)AlertDialog(onDismissRequest={clear=false},title={Text("Clear website sign-in?")},text={Text("Clear the embedded AO3 website’s cookies and cache? Native sign-in is separate.")},confirmButton={SkinTextButton(onClick={
         clear=false;view?.stopLoading();view?.clearCache(true);view?.clearHistory();view?.webStorageClear();CookieManager.getInstance().removeAllCookies {CookieManager.getInstance().flush();if(state.view===view)view?.loadUrl(Archive.BASE+"/users/login")}
-    }) {Text("Clear")}},dismissButton={TextButton(onClick={clear=false}) {Text("Cancel")}})
+    }) {Text("Clear")}},dismissButton={SkinTextButton(onClick={clear=false}) {Text("Cancel")}})
 }
 private fun WebView.webStorageClear() {WebStorage.getInstance().deleteAllData()}

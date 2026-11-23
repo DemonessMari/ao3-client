@@ -372,6 +372,38 @@ void AO3Client::fetchDashboard()
     });
 }
 
+void AO3Client::fetchArchivePage(const QString &kind,const QString &id,int page)
+{
+    const auto user=m_loginManager->username();const auto route=ArchivePages::route(kind,user,id);
+    if(route.isEmpty() || (kind!="series" && !m_loginManager->isLoggedIn())){emit errorOccurred("Sign in to open this AO3 list.");return;}
+    page=qBound(1,page,1000000);const auto generation=++m_listingGeneration;const auto auth=m_authGeneration;
+    auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+route+"?page="+QString::number(page))));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,kind,id,page,user,generation,auth]{reply->deleteLater();if(auth!=m_authGeneration || generation!=m_listingGeneration || (kind!="series" && (!m_loginManager->isLoggedIn() || user!=m_loginManager->username())))return;
+        ArchivePage out;if(ao3RequestFailed(reply))out.error=ao3NetworkError(reply);else out=ArchivePages::parse(QString::fromUtf8(reply->readAll()),kind,user,id,page);emit archivePageFetched(kind,id,out);
+    });
+}
+void AO3Client::performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label)
+{
+    if(!QStringList{"subscriptions","inbox"}.contains(kind) || !m_loginManager->isLoggedIn())return;
+    const auto user=m_loginManager->username();const auto route=ArchivePages::route(kind,user,id);if(route.isEmpty())return;
+    const auto key=kind+":"+entry;if(m_listMutations.contains(key))return;m_listMutations.insert(key);const auto auth=m_authGeneration;
+    const QUrl source("https://archiveofourown.org"+route+"?page="+QString::number(qBound(1,page,1000000)));
+    auto *fresh=m_manager->get(makeRequest(source));
+    connect(fresh,&QNetworkReply::finished,this,[this,fresh,source,kind,id,page,entry,label,user,key,auth]{
+        fresh->deleteLater();if(auth!=m_authGeneration){m_listMutations.remove(key);return;}
+        PageAction action;if(ao3RequestFailed(fresh))action.error=ao3NetworkError(fresh);else action=ArchivePages::action(QString::fromUtf8(fresh->readAll()),kind,user,id,page,entry,label);
+        if(!action.error.isEmpty()){m_listMutations.remove(key);emit archiveActionFinished(action.error,false);return;}
+        QByteArray data;for(auto it=action.fields.cbegin();it!=action.fields.cend();++it){if(!data.isEmpty())data+='&';data+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        auto request=makeRequest(QUrl("https://archiveofourown.org"+action.path));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",source.toEncoded());
+        auto *posted=m_manager->post(request,data);
+        connect(posted,&QNetworkReply::finished,this,[this,posted,kind,id,page,entry,label,user,key,auth]{
+            posted->deleteLater();m_listMutations.remove(key);if(auth!=m_authGeneration)return;
+            ArchivePage out;bool confirmed=false;if(!ao3RequestFailed(posted)){out=ArchivePages::parse(QString::fromUtf8(posted->readAll()),kind,user,id,page);if(out.error.isEmpty()){const ArchiveEntry *found=nullptr;for(const auto &e:out.entries)if(e.id==entry){found=&e;break;}confirmed=(label=="Unsubscribe" || label=="Delete from inbox")?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}}
+            if(confirmed){emit archivePageFetched(kind,id,out);emit archiveActionFinished("Change confirmed by AO3.",false);}else emit archiveActionFinished("Could not confirm the change. Refresh the AO3 list before trying again.",true);
+        });
+    });
+}
+
 void AO3Client::fetchAccountReadings(bool later,int page)
 {
     const auto info=m_loginManager->userInfo();
@@ -803,27 +835,57 @@ void AO3Client::fetchAuthorWorks(const QString &username, int page, bool bookmar
 }
 
 void AO3Client::fetchComments(const QString &workId,int page) {
-    if(!QRegularExpression("^\\d+$").match(workId).hasMatch() || page<1) {emit errorOccurred("Invalid comments request");return;}
+    if(!QRegularExpression("^(?:[0-9]+|comment:[0-9]+)$").match(workId).hasMatch() || page<1) {emit errorOccurred("Invalid comments request");return;}
     const auto generation=m_authGeneration; const auto revision=++m_commentsGeneration;
-    auto *reply=m_manager->get(makeRequest(QUrl(QStringLiteral("https://archiveofourown.org/works/%1/comments?page=%2").arg(workId).arg(page))));
+    const auto route=workId.startsWith("comment:")?"/comments/"+workId.mid(8):"/works/"+workId+"/comments";
+    auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+route+"?page="+QString::number(page))));
     connect(reply,&QNetworkReply::finished,this,[this,reply,workId,page,generation,revision] {
         reply->deleteLater(); if(generation!=m_authGeneration || revision!=m_commentsGeneration)return;
         if(ao3RequestFailed(reply)) {emit errorOccurred(ao3NetworkError(reply));return;}
-        const auto result=parseCommentPage(QString::fromUtf8(reply->readAll()),page);
+        const auto html=QString::fromUtf8(reply->readAll());auto result=parseCommentPage(html,page);ArchivePages::Document document(html);
+        for(auto &comment:result.comments){comment.actions=commentControls(document,comment.id).keys();for(int i=0;i<document.list.size();++i)if(document.list[i].attrs.value("id")=="navigation_for_comment_"+comment.id && document.trusted(i)){comment.canReply=false;for(int j:document.select("li",{},i))if(document.list[j].attrs.value("id")=="add_comment_reply_link_"+comment.id)comment.canReply=true;break;}}
         if(!result.error.isEmpty())emit errorOccurred(result.error);else emit commentsFetched(workId,result);
     });
 }
 
+void AO3Client::fetchCommentEdit(const QString &context,const QString &id)
+{
+    if(!m_loginManager->isLoggedIn() || !QRegularExpression("^[0-9]+$").match(id).hasMatch())return;
+    const auto user=m_loginManager->username();const auto auth=m_authGeneration;const QUrl source("https://archiveofourown.org/comments/"+id+"/edit");
+    auto *reply=m_manager->get(makeRequest(source));connect(reply,&QNetworkReply::finished,this,[this,reply,context,id,user,auth,source]{reply->deleteLater();if(auth!=m_authGeneration)return;CommentForm form;
+        if(ao3RequestFailed(reply))form.error=ao3NetworkError(reply);else {const auto html=QString::fromUtf8(reply->readAll());if(!siteIdentityMatches(html,user))form.error="Your AO3 session changed. Check native sign-in.";else {form=parseCommentForm(html);if(!form.editing || ArchivePages::path(form.action)!="/comments/"+id)form.error="AO3 did not return this comment's edit form.";}}
+        form.context=id;form.source=source.toString();emit commentFormFetched(context,form);
+    });
+}
+void AO3Client::manageComment(const QString &context,const QString &id,const QString &label)
+{
+    if(!m_loginManager->isLoggedIn() || !QRegularExpression("^[0-9]+$").match(id).hasMatch() || label=="Edit")return;
+    const auto user=m_loginManager->username();const auto auth=m_authGeneration;const QUrl source("https://archiveofourown.org/comments/"+id);
+    auto submit=[this,context,user,auth,source](const CommentControl &control){
+        if(control.path.isEmpty()){emit commentSubmitted(context,{{},"AO3 did not return the confirmation form.",false});return;}
+        QByteArray body;for(auto it=control.fields.cbegin();it!=control.fields.cend();++it){if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        auto request=makeRequest(QUrl("https://archiveofourown.org"+control.path));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",source.toEncoded());auto *posted=m_manager->post(request,body);
+        connect(posted,&QNetworkReply::finished,this,[this,posted,context,user,auth]{posted->deleteLater();if(auth!=m_authGeneration)return;CommentSubmission result;result.uncertain=true;result.error="Could not confirm the change. Refresh comments before trying again.";if(!ao3RequestFailed(posted)){const auto html=QString::fromUtf8(posted->readAll());if(siteIdentityMatches(html,user))result=parseCommentSubmission(html,true);}emit commentSubmitted(context,result);});
+    };
+    auto *reply=m_manager->get(makeRequest(source));connect(reply,&QNetworkReply::finished,this,[this,reply,context,id,label,user,auth,submit]{reply->deleteLater();if(auth!=m_authGeneration)return;
+        if(ao3RequestFailed(reply)){emit commentSubmitted(context,{{},ao3NetworkError(reply),false});return;}const auto html=QString::fromUtf8(reply->readAll());if(!siteIdentityMatches(html,user)){emit commentSubmitted(context,{{},"Your AO3 session changed. Check native sign-in.",false});return;}
+        const auto controls=commentControls(ArchivePages::Document(html),id);if(!controls.contains(label)){emit commentSubmitted(context,{{},"AO3 no longer permits this action. Refresh comments.",false});return;}const auto control=controls.value(label);
+        if(label!="Delete"){submit(control);return;}
+        auto *confirmation=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+control.path)));connect(confirmation,&QNetworkReply::finished,this,[this,confirmation,context,id,user,auth,submit]{confirmation->deleteLater();if(auth!=m_authGeneration)return;if(ao3RequestFailed(confirmation)){emit commentSubmitted(context,{{},ao3NetworkError(confirmation),false});return;}const auto html=QString::fromUtf8(confirmation->readAll());if(!siteIdentityMatches(html,user)){emit commentSubmitted(context,{{},"Your AO3 session changed.",false});return;}submit(commentDeleteControl(html,id));});
+    });
+}
+
 void AO3Client::fetchCommentForm(const QString &workId,const QString &replyId) {
-    if(!QRegularExpression("^\\d+$").match(workId).hasMatch() || (!replyId.isEmpty() && !QRegularExpression("^\\d+$").match(replyId).hasMatch())) {emit errorOccurred("Invalid comment target");return;}
+    if(!QRegularExpression("^(?:[0-9]+|comment:[0-9]+)$").match(workId).hasMatch() || (!replyId.isEmpty() && !QRegularExpression("^\\d+$").match(replyId).hasMatch())) {emit errorOccurred("Invalid comment target");return;}
     const auto generation=m_authGeneration;const auto revision=++m_commentFormGeneration;
-    const auto path=replyId.isEmpty()?QString("/works/%1/comments/new").arg(workId):QString("/comments/%1/comments/new").arg(replyId);
+    const auto parent=replyId.isEmpty() && workId.startsWith("comment:")?workId.mid(8):replyId;
+    const auto path=parent.isEmpty()?QString("/works/%1/comments/new").arg(workId):QString("/comments/%1/comments/new").arg(parent);
     const auto url=QUrl("https://archiveofourown.org"+path);auto *reply=m_manager->get(makeRequest(url));
-    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,replyId,generation,url,revision] {
+    connect(reply,&QNetworkReply::finished,this,[this,reply,workId,parent,generation,url,revision] {
         reply->deleteLater();if(generation!=m_authGeneration || revision!=m_commentFormGeneration)return;
-        CommentForm form;form.context=replyId;
+        CommentForm form;form.context=parent;
         if(ao3RequestFailed(reply))form.error=ao3NetworkError(reply);
-        else {form=parseCommentForm(QString::fromUtf8(reply->readAll()));form.context=replyId;form.source=url.toString();}
+        else {form=parseCommentForm(QString::fromUtf8(reply->readAll()));form.context=parent;form.source=url.toString();}
         emit commentFormFetched(workId,form);
     });
 }
@@ -864,6 +926,24 @@ void AO3Client::setMarkedForLater(const QString &id,bool later) {
             posted->deleteLater();const auto html=QString::fromUtf8(posted->readAll());const auto result=parseReadingAction(html,id);
             finish(posted->error()==QNetworkReply::NoError && siteIdentityMatches(html,user) && !result.action.isEmpty() && result.action!=action?success:QString("Could not confirm the change. Check your Marked for Later list on AO3."));
         });
+    });
+}
+
+void AO3Client::entitySubscription(const QString &type,const QString &target,int desired)
+{
+    if(!m_loginManager->isLoggedIn() || !QStringList{"User","Series"}.contains(type) || desired< -1 || desired>1 || !(type=="Series"?QRegularExpression("^[0-9]+$"):QRegularExpression("^[A-Za-z0-9_]+$")).match(target).hasMatch())return;
+    const auto user=m_loginManager->username();const auto auth=m_authGeneration;const auto key=type+":"+target+":"+QString::number(auth);if(m_entityPending.contains(key))return;
+    const auto revision=++m_entityRevisions[key];if(desired>=0)m_entityPending.insert(key);
+    const QUrl source("https://archiveofourown.org"+(type=="Series"?QString("/series/"):QString("/users/"))+target);
+    auto finish=[this,type,target,desired,key,revision,auth](bool available,bool subscribed,const QString &message){if(desired>=0)m_entityPending.remove(key);if(auth==m_authGeneration && revision==m_entityRevisions.value(key))emit entitySubscriptionFetched(type,target,available,subscribed,message);};
+    auto *reply=m_manager->get(makeRequest(source));connect(reply,&QNetworkReply::finished,this,[this,reply,type,target,desired,user,auth,source,finish]{
+        reply->deleteLater();if(auth!=m_authGeneration){finish(false,false,{});return;}
+        const auto html=QString::fromUtf8(reply->readAll());const auto form=parseWorkSubscription(html,type=="Series"?target:QString(),user,type);
+        if(ao3RequestFailed(reply) || !siteIdentityMatches(html,user) || form.path.isEmpty()){finish(false,false,desired<0?QString():QString("Subscription unavailable. Check native sign-in and this page on AO3."));return;}
+        if(desired<0 || form.subscribed==bool(desired)){finish(true,form.subscribed,{});return;}
+        QByteArray body;for(auto it=form.fields.cbegin();it!=form.fields.cend();++it){if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(it.key())+'='+QUrl::toPercentEncoding(it.value());}
+        auto request=makeRequest(QUrl("https://archiveofourown.org"+form.path));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",source.toEncoded());auto *posted=m_manager->post(request,body);
+        connect(posted,&QNetworkReply::finished,this,[this,posted,type,desired,user,auth,form,finish]{posted->deleteLater();if(auth!=m_authGeneration){finish(false,false,{});return;}const auto html=QString::fromUtf8(posted->readAll());const auto updated=parseWorkSubscription(html,form.fields.value("subscription[subscribable_id]"),user,type);const bool confirmed=!ao3RequestFailed(posted) && siteIdentityMatches(html,user) && !updated.path.isEmpty() && updated.subscribed==bool(desired);finish(confirmed,bool(desired),confirmed?QString("Subscription confirmed by AO3."):QString("Could not confirm the subscription change. Check subscriptions on AO3 before retrying."));});
     });
 }
 
