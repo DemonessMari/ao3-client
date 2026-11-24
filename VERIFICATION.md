@@ -60,3 +60,14 @@ Android: 125 tests pass and one live-network test is skipped. Release lint repor
 The example combines a Bryan Goff photograph under the Unsplash License, an unmodified OpenMoji star by Vanessa Boutzikoudi under CC BY-SA 4.0, and the credited neos component adaptation under MIT. Source and license details are included in the portable skin and package. No upstream Stargazer CSS was copied.
 
 Physical-phone installation and visual acceptance remain pending: no device was connected during this pass. Automated checks do not establish physical layout, rotation, file-picker handling or long-session memory behavior. Remaining website-parity and authenticated-write limits above still apply.
+
+
+## 3.2.0-rc.20
+
+2026-11-24: all six desktop suites pass. Added checks verify the full title remains on one line, the window reaches 900/1100/1440 logical-pixel widths, search stays centered, and navigation belongs to the header. The header check also passes with QT_FONT_DPI=144. Rendered wide and narrow Neos Nebula layouts were inspected.
+
+A synthetic wide avatar verifies center cropping across the circular account button, corner clipping and click handling. A solid image verifies background-cover rendering reaches all four corners of a larger target. Existing checks cover skin import/export, old versions, banner spacing, repeated application and reset. These checks use local test images, not server profile-picture availability.
+
+Removed redundant image/inheritance explanations and decorative source headings, and shortened bundled skin names. Credits, licenses, controls and validation errors remain. Home no longer has an extra outer frame, flat navigation remains flat under custom skins, and fill-area image controls no longer offer ignored sizes/offsets.
+
+Physical-phone visual acceptance remains pending. Android also uses background-cover fill and edge-to-edge profile-picture cropping. Full website parity and authenticated-write acceptance remain incomplete.

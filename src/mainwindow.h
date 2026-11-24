@@ -67,6 +67,7 @@ private:
     QVector<QPair<QPair<QString,QString>,int>> m_listsTrail;
     void closeArchiveList();
     void setupUI();
+    void layoutDesktopHeader();
     void openArchiveWebsite(const QUrl &url);
     ArchiveWeb *m_archiveWebsite=nullptr;
     int m_archiveWebsiteReturn=0;
@@ -177,7 +178,7 @@ private:
 
     // Search view (splitter)
     QSplitter *m_searchSplitter;
-    QListWidget *m_workList;
+    QListWidget *m_workList=nullptr;
     WorkDetailWidget *m_detailWidget;
 
     // Pagination

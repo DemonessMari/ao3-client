@@ -2,6 +2,7 @@
 #include "readerspeech.h"
 #include "accountreadings.h"
 #include "profileavatar.h"
+#include "accountbutton.h"
 #include "readerfonts.h"
 #include <QBuffer>
 #include "appskin.h"
@@ -172,8 +173,20 @@ private slots:
     void headerIdentityAndSearchCentering() {
         const auto originalPalette=QApplication::palette();auto restore=qScopeGuard([&]{QApplication::setPalette(originalPalette);});applyAppSkin();
         MainWindow window;installNetwork(window);window.show();auto *name=window.findChild<QLabel *>("appName");auto *search=window.findChild<QWidget *>("headerSearch");QVERIFY(name);QVERIFY(search);QCOMPARE(name->text(),QString("Archive of Our Own"));
-        for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
+        for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);QCOMPARE(window.width(),width);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());QVERIFY(!name->wordWrap());QVERIFY(name->width()>=name->fontMetrics().horizontalAdvance(name->text()));QCOMPARE(window.m_navBar->parentWidget(),window.m_headerBar);}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
+    }
+    void avatarCropsToCircleAndBackgroundCoversWindow() {
+        QImage image(300,100,QImage::Format_ARGB32);image.fill(Qt::red);
+        {QPainter p(&image);p.fillRect(QRect(100,0,100,100),Qt::green);p.fillRect(QRect(200,0,100,100),Qt::blue);}
+        AccountButton button;button.resize(44,44);button.setProperty("accountAvatar",true);button.setProperty("accountImage",image);button.show();QTest::qWait(20);
+        const auto rendered=button.grab().toImage();QCOMPARE(rendered.pixelColor(22,22),QColor(Qt::green));QCOMPARE(rendered.pixelColor(4,22),QColor(Qt::green));QCOMPARE(rendered.pixelColor(39,22),QColor(Qt::green));QVERIFY(rendered.pixelColor(1,1)!=QColor(Qt::green));
+        QSignalSpy clicked(&button,&QPushButton::clicked);QTest::mouseClick(&button,Qt::LeftButton);QCOMPARE(clicked.count(),1);
+        AppSkin skin=AppSkin::preset(1);skin.version=4;QImage red(8,8,QImage::Format_RGB32);red.fill(Qt::red);QByteArray bytes;QBuffer buffer(&bytes);buffer.open(QIODevice::WriteOnly);QVERIFY(red.save(&buffer,"PNG"));
+        skin.images["red"]=QJsonObject{{"data","data:image/png;base64,"+QString::fromLatin1(bytes.toBase64())}};
+        skin.layers.append(QJsonObject{{"image","red"},{"target","window"},{"placement","background"},{"fit","cover"},{"anchor","center"},{"width",128},{"height",128},{"opacity",.1},{"offsetX",0},{"offsetY",0}});
+        QImage canvas(1400,800,QImage::Format_RGB32);canvas.fill(QColor(skin.background));{QPainter p(&canvas);drawSkinLayers(p,skin,"window",canvas.rect(),skin.background,skin.text);}
+        for(const QPoint point:{QPoint(0,0),QPoint(1399,0),QPoint(0,799),QPoint(1399,799),QPoint(700,400)})QVERIFY(canvas.pixelColor(point)!=QColor(skin.background));
     }
     void portableImageSkinsValidateRenderAndReset() {
         QFile file(":/skins/illustrated/nebula.json");QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();AppSkin skin,round;QString error;QVERIFY2(AppSkin::parse(bytes,skin,error),qPrintable(error));QCOMPARE(skin.version,4);QCOMPARE(skin.images.size(),2);QCOMPARE(skin.layers.size(),3);QVERIFY(AppSkin::parse(skin.json(),round,error));QCOMPARE(round.images,skin.images);QCOMPARE(round.layers,skin.layers);
@@ -181,10 +194,10 @@ private slots:
         for(const auto &change:QList<QPair<QString,QJsonValue>>{{"image","missing"},{"target","reader"},{"fit","script"},{"opacity",1.1},{"width",9000},{"offsetX",-999}}){auto bad=root;auto layers=bad["layers"].toArray();auto layer=layers[0].toObject();layer[change.first]=change.second;layers[0]=layer;bad["layers"]=layers;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));}
         auto bad=root;auto assets=bad["images"].toObject();auto a=assets["nebula"].toObject();a["data"]="https://example.com/image.jpg";assets["nebula"]=a;bad["images"]=assets;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));
         const auto before=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(before.isValid())QSettings().setValue("appearance/skin",before);else QSettings().remove("appearance/skin");applyAppSkin();});
-        MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();QTest::qWait(30);const int base=window.m_headerBar->height();QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(60);QVERIFY(window.m_headerBar->height()>=base+90);const int height=window.m_headerBar->height();applyAppSkin();QTest::qWait(20);QCOMPARE(window.m_headerBar->height(),height);
+        MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();QTest::qWait(30);const int base=window.m_headerBar->height();QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(60);QVERIFY(window.m_headerBar->layout()->contentsMargins().bottom()>=96);QVERIFY(window.m_navBar->geometry().bottom()<window.m_headerBar->height()-96);const int height=window.m_headerBar->height();applyAppSkin();QTest::qWait(20);QCOMPARE(window.m_headerBar->height(),height);
         window.m_searchInput->setText("layer click check");window.m_searchButton->disconnect(&window);QSignalSpy clicks(window.m_searchButton,&QPushButton::clicked);QTest::mouseClick(window.m_searchButton,Qt::LeftButton);QCOMPARE(clicks.count(),1);
         SearchResult result;Work work;work.id="987654";work.title="Image-layer sample";work.author="Test author";work.summary="Text remains readable over decorative images.";result.works.append(work);result.totalResults=1;window.onSearchCompleted(result);QTest::qWait(50);
-        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))window.grab().save("/tmp/ao3-image-skin-main.png");
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS")){window.grab().save("/tmp/ao3-image-skin-main.png");window.resize(900,850);QTest::qWait(30);window.grab().save("/tmp/ao3-image-skin-narrow.png");window.resize(1440,900);QTest::qWait(30);}
         QImage canvas(360,180,QImage::Format_ARGB32_Premultiplied);canvas.fill(QColor("#263b53"));{QPainter painter(&canvas);drawSkinLayers(painter,skin,"cards",canvas.rect(),"#263b53","#e7edf5");}QVERIFY(canvas.pixelColor(300,130)!=QColor("#263b53"));if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))canvas.save("/tmp/ao3-image-skin-card.png");
         const double alpha=safeSkinOpacity("#263b53","#e7edf5",1);QVERIFY(alpha>0 && alpha<1);
         bool saved=false;QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),6);tabs->setCurrentIndex(5);auto *list=dialog->findChild<QComboBox *>("skinImageLayers");QVERIFY(list);QCOMPARE(list->count(),3);if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))dialog->grab().save("/tmp/ao3-image-skin-editor.png");auto *box=dialog->findChild<QDialogButtonBox *>();QVERIFY(box);QVERIFY(box->button(QDialogButtonBox::Save)->isEnabled());box->button(QDialogButtonBox::Save)->click();saved=true;});editAppSkin(&window);QVERIFY(saved);AppSkin exported;QVERIFY(customAppSkin(exported));QCOMPARE(exported.images,skin.images);QCOMPARE(exported.layers,skin.layers);

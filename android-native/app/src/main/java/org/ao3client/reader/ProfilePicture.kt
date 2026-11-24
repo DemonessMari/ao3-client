@@ -31,6 +31,6 @@ internal fun decodeAvatarBitmap(bytes:ByteArray):Bitmap? {
 @Composable private fun ProfilePictureContent(vm:ClientState,username:String,url:String?,alt:String,size:Dp) {
     val bitmap by produceState<Bitmap?>(null,username,url,vm.username){value=null;try{value=withContext(Dispatchers.IO){vm.profilePictureBytes(username,url)?.let(::decodeAvatarBitmap)}}catch(e:CancellationException){throw e}catch(_:Exception){value=null}}
     Surface(modifier=Modifier.size(size).semantics(mergeDescendants=true){contentDescription=alt.ifBlank{"Profile picture for $username"}},shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surfaceVariant){
-        Box(Modifier.fillMaxSize().padding(4.dp),contentAlignment=Alignment.Center){val image=bitmap;if(image!=null)Image(image.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=ContentScale.Fit) else Text(username.take(1).uppercase(),style=if(size<60.dp)MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineLarge)}
+        Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){val image=bitmap;if(image!=null)Image(image.asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop) else Text(username.take(1).uppercase(),style=if(size<60.dp)MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineLarge)}
     }
 }

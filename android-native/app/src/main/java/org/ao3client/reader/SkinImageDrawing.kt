@@ -58,7 +58,7 @@ private fun DrawScope.drawSkinLayer(bitmap:Bitmap,layer:SkinLayer,opacity:Double
         val right=ceil(source.right).toInt().coerceIn(left+1,bitmap.width);val bottom=ceil(source.bottom).toInt().coerceIn(top+1,bitmap.height)
         drawContext.canvas.nativeCanvas.drawBitmap(bitmap,android.graphics.Rect(left,top,right,bottom),destination,paint)
     }
-    if(banner){paintAt(RectF(0f,0f,size.width,size.height));return}
+    if(banner || (layer.placement=="background" && layer.fit=="cover")){paintAt(RectF(0f,0f,size.width,size.height));return}
     if(layer.fit=="tile"){
         val count=ceil(size.width/w+2)*ceil(size.height/h+2);if(count>1024){val factor=sqrt(count/1024);w*=factor;h*=factor}
         var y=dy%h-h;while(y<size.height){var x=dx%w-w;while(x<size.width){drawContext.canvas.nativeCanvas.drawBitmap(bitmap,null,RectF(x,y,x+w,y+h),paint);x+=w};y+=h};return

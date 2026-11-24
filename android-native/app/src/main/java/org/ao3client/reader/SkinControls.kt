@@ -32,7 +32,6 @@ fun AppSkin.colorScheme():ColorScheme {
     val context=LocalContext.current
     val scope=rememberCoroutineScope()
     val initial=vm.appSkin?:AppSkin.preset(vm.preferences.theme)
-    // Keep invalid field edits visible while validating the complete draft.
     var name by rememberSaveable{mutableStateOf(initial.name)}
     var background by rememberSaveable{mutableStateOf(initial.background)}
     var surface by rememberSaveable{mutableStateOf(initial.surface)}
@@ -76,7 +75,6 @@ fun AppSkin.colorScheme():ColorScheme {
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("buttons" to "Buttons","inputs" to "Inputs","cards" to "Cards","header" to "Header").forEach{(key,title)->FilterChip(selected=componentRole==key,onClick={componentRole=key},label={Text(title)})}}
         val rule=source.optJSONObject(componentRole) ?: org.json.JSONObject()
         fun change(key:String,value:Any?){val all=org.json.JSONObject(componentJson);val next=all.optJSONObject(componentRole) ?: org.json.JSONObject();if(value==null)next.remove(key) else next.put(key,value);if(next.length()==0)all.remove(componentRole) else all.put(componentRole,next);componentJson=all.toString()}
-        Text("Empty colors inherit the theme.",style=MaterialTheme.typography.bodySmall)
         listOf("background" to "Background","text" to "Text","border" to "Border").forEach{(key,title)->SkinOutlinedTextField(rule.optString(key),{change(key,it.take(7).takeIf{v->v.isNotEmpty()})},Modifier.fillMaxWidth(),label={Text(title)},placeholder={Text("Inherit")},singleLine=true)}
         listOf("cornerRadius" to "Corners","padding" to "Spacing","textScale" to "Text size","borderWidth" to "Border width").forEach{(key,title)->
             val inherited=!rule.has(key)

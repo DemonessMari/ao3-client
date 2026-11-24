@@ -40,7 +40,7 @@
 namespace {
 QString skinRole(const QWidget *widget) {
     for(auto *w=widget;w;w=w->parentWidget()){if(w->objectName()=="skinPreview")break;if(qobject_cast<const QMenu *>(w) || w->property("skinEditor").toBool())return {};}
-    if(qobject_cast<const QPushButton *>(widget))return "buttons";
+    if(auto *button=qobject_cast<const QPushButton *>(widget))return button->isFlat()?"navigation":"buttons";
     if(qobject_cast<const QLineEdit *>(widget)||qobject_cast<const QComboBox *>(widget)||qobject_cast<const QAbstractSpinBox *>(widget)||qobject_cast<const QTextEdit *>(widget))return "inputs";
     for(auto *w=widget;w;w=w->parentWidget())if(!w->property("skinRole").toString().isEmpty())return w->property("skinRole").toString();
     return {};
@@ -80,6 +80,16 @@ public:
     void drawControl(ControlElement element,const QStyleOption *option,QPainter *painter,const QWidget *widget=nullptr)const override {
         if(!custom || element!=CE_PushButton){QProxyStyle::drawControl(element,option,painter,widget);return;}
         const auto *button=qstyleoption_cast<const QStyleOptionButton *>(option);if(!button)return;
+        if(button->features & QStyleOptionButton::Flat){
+            painter->save();
+            if(button->state & (State_MouseOver|State_Sunken|State_On|State_HasFocus)){
+                QColor tint=button->palette.color(QPalette::Highlight);tint.setAlpha(35);
+                painter->setRenderHint(QPainter::Antialiasing);painter->setPen(Qt::NoPen);painter->setBrush(tint);painter->drawRoundedRect(button->rect.adjusted(1,1,-1,-1),4,4);
+            }
+            painter->restore();
+            auto label=*button;label.palette.setColor(QPalette::ButtonText,button->palette.color(QPalette::WindowText));
+            QProxyStyle::drawControl(CE_PushButtonLabel,&label,painter,widget);return;
+        }
         const bool enabled=button->state & State_Enabled;
         const bool active=button->state & (State_Sunken|State_On|State_MouseOver);
         const auto group=enabled?QPalette::Active:QPalette::Disabled;
@@ -258,7 +268,6 @@ void editAppSkin(QWidget *parent) {
     QJsonObject imageData;QJsonArray layerData;std::function<void()> refreshImages;
     for(const auto &role:QStringList{"buttons","inputs","cards","header"}){
         auto *componentForm=addTab(role.left(1).toUpper()+role.mid(1));
-        auto *hint=new QLabel("Leave a field empty to inherit the theme.",&dialog);hint->setWordWrap(true);componentForm->addRow(hint);
         for(const auto &pair:QList<QPair<QString,QString>>{{"background","Background"},{"text","Text"},{"border","Border"},{"cornerRadius","Corners (0–24)"},{"padding","Spacing (0–24)"},{"textScale","Text scale (0.85–1.5)"},{"borderWidth","Border width (0–3)"}}){
             auto *field=new QLineEdit(&dialog);field->setMaxLength(7);field->setMinimumHeight(32);field->setPlaceholderText("Inherit");field->setObjectName("skin_"+role+"_"+pair.first);componentFields[role][pair.first]=field;componentForm->addRow(pair.second,field);
         }

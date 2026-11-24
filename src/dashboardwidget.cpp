@@ -7,7 +7,7 @@
 
 DashboardWidget::DashboardWidget(QWidget *parent) : QWidget(parent)
 {
-    auto *outer=new QVBoxLayout(this);auto *scroll=new QScrollArea(this);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);outer->addWidget(scroll);
+    auto *outer=new QVBoxLayout(this);outer->setContentsMargins(0,0,0,0);auto *scroll=new QScrollArea(this);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);outer->addWidget(scroll);
     auto *body=new QWidget(scroll);scroll->setWidget(body);auto *layout=new QVBoxLayout(body);layout->setContentsMargins(24,24,24,24);layout->setSpacing(16);
     m_greetingLabel=new QLabel("Home",body);auto font=m_greetingLabel->font();font.setPointSize(20);font.setBold(true);m_greetingLabel->setFont(font);m_greetingLabel->setWordWrap(true);layout->addWidget(m_greetingLabel);
     m_infoLabel=new QLabel(body);m_infoLabel->setWordWrap(true);layout->addWidget(m_infoLabel);

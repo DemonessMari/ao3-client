@@ -35,7 +35,7 @@ inline void drawSkinLayers(QPainter &p,const AppSkin &skin,const QString &target
         const auto fit=layer.value("fit").toString();double width=layer.value("width").toInt()*scale,height=layer.value("height").toInt()*scale;
         const double dx=layer.value("offsetX").toInt()*scale,dy=layer.value("offsetY").toInt()*scale;
         auto paint=[&](const QRectF &rect){QRectF source(image.rect()),destination=rect;if(fit=="cover"){const double factor=qMax(rect.width()/image.width(),rect.height()/image.height());source=QRectF((image.width()-rect.width()/factor)/2,(image.height()-rect.height()/factor)/2,rect.width()/factor,rect.height()/factor);}else if(fit=="contain"){const auto size=QSizeF(image.size()).scaled(rect.size(),Qt::KeepAspectRatio);destination=QRectF(rect.center()-QPointF(size.width()/2,size.height()/2),size);}p.drawImage(destination,image,source);};
-        if(banner){paint(bounds);continue;}
+        if(banner || (placement=="background" && fit=="cover")){paint(bounds);continue;}
         if(fit=="tile"){
             const double count=std::ceil(bounds.width()/width+2)*std::ceil(bounds.height()/height+2);if(count>1024){const double factor=std::sqrt(count/1024);width*=factor;height*=factor;}
             const double x=bounds.left()+std::fmod(dx,width)-width,y=bounds.top()+std::fmod(dy,height)-height;

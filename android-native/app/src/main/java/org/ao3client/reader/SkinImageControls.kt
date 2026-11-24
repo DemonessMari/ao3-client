@@ -45,7 +45,6 @@ internal fun importSkinImage(bytes:ByteArray):SkinImage {
         try {val image=withContext(Dispatchers.IO){val bytes=context.contentResolver.openInputStream(uri)?.use{it.readBytesBounded(8*1024*1024)} ?: error("Cannot read the image.");importSkinImage(bytes)};require(vm.draftSkinImages.size<4){"Use at most four images."};val id=(1..5).map{"image-$it"}.first{it !in vm.draftSkinImages};vm.draftSkinImages=vm.draftSkinImages+(id to image);addLayer(id)}catch(e:CancellationException){throw e}catch(e:Exception){vm.error=e.message}finally{busy=false}
     }}
     Text("Images",style=MaterialTheme.typography.titleMedium)
-    Text("Images stay in the skin file. Decorations sit beneath text and never receive taps. Text contrast can reduce decoration opacity; banners keep their requested opacity.",style=MaterialTheme.typography.bodySmall)
     SkinOutlinedButton(onClick={picker.launch(arrayOf("image/png","image/jpeg"))},enabled=!busy && vm.draftSkinImages.size<4){Text(if(busy)"Importing…" else "Add image")}
     vm.draftSkinImages.forEach{(id,asset)->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         Text(id,style=MaterialTheme.typography.titleSmall)
@@ -62,14 +61,15 @@ internal fun importSkinImage(bytes:ByteArray):SkinImage {
         OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
             Row(verticalAlignment=Alignment.CenterVertically){Text("${index+1}. ${layer.target} · ${layer.placement}",Modifier.weight(1f),style=MaterialTheme.typography.titleSmall);SkinTextButton(onClick={expanded=!expanded}){Text(if(expanded)"Collapse" else "Edit")};SkinTextButton(onClick={vm.draftSkinLayers=vm.draftSkinLayers.filterIndexed{i,_->i!=index}}){Text("Remove")}}
             if(expanded){
+                val fillsArea=layer.placement=="background" && layer.fit=="cover"
                 Text("Target");FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("window","header","cards").forEach{v->FilterChip(selected=layer.target==v,onClick={update(layer.copy(target=v,placement=if(v!="header" && layer.placement=="banner")"overlay" else layer.placement))},label={Text(v)})}}
                 Text("Placement");FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("background","overlay","banner").forEach{v->FilterChip(selected=layer.placement==v,enabled=v!="banner" || vm.draftSkinLayers.filterIndexed{i,_->i!=index}.none{it.placement=="banner"},onClick={update(layer.copy(placement=v,target=if(v=="banner")"header" else layer.target,fit=if(v=="banner")"cover" else layer.fit,height=if(v=="banner")layer.height.coerceAtMost(240) else layer.height))},label={Text(v)})}}
                 Text("Image fit");FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("contain","cover","tile").forEach{v->FilterChip(selected=layer.fit==v,enabled=layer.placement!="banner" || v!="tile",onClick={update(layer.copy(fit=v))},label={Text(v)})}}
-                if(layer.placement!="banner" && layer.fit!="tile"){Text("Anchor");FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("top-left","top-right","center","bottom-left","bottom-right").forEach{v->FilterChip(selected=layer.anchor==v,onClick={update(layer.copy(anchor=v))},label={Text(v)})}}}
-                if(layer.placement!="banner"){Text("Width · ${layer.width}");Slider(layer.width.toFloat(),{update(layer.copy(width=it.toInt()))},valueRange=16f..1024f,steps=62)}
-                Text("Height · ${layer.height}");Slider(layer.height.toFloat(),{update(layer.copy(height=it.toInt()))},valueRange=16f..(if(layer.placement=="banner")240f else 1024f))
+                if(layer.placement!="banner" && layer.fit!="tile" && !fillsArea){Text("Anchor");FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("top-left","top-right","center","bottom-left","bottom-right").forEach{v->FilterChip(selected=layer.anchor==v,onClick={update(layer.copy(anchor=v))},label={Text(v)})}}}
+                if(layer.placement!="banner" && !fillsArea){Text("Width · ${layer.width}");Slider(layer.width.toFloat(),{update(layer.copy(width=it.toInt()))},valueRange=16f..1024f,steps=62)}
+                if(!fillsArea){Text("Height · ${layer.height}");Slider(layer.height.toFloat(),{update(layer.copy(height=it.toInt()))},valueRange=16f..(if(layer.placement=="banner")240f else 1024f))}
                 Text("Opacity · ${(layer.opacity*100).toInt()}%");Slider(layer.opacity.toFloat(),{update(layer.copy(opacity=it.toDouble()))},valueRange=0f..1f)
-                if(layer.placement!="banner"){Text("Horizontal offset · ${layer.offsetX}");Slider(layer.offsetX.toFloat(),{update(layer.copy(offsetX=it.toInt()))},valueRange=-256f..256f);Text("Vertical offset · ${layer.offsetY}");Slider(layer.offsetY.toFloat(),{update(layer.copy(offsetY=it.toInt()))},valueRange=-256f..256f)}
+                if(layer.placement!="banner" && !fillsArea){Text("Horizontal offset · ${layer.offsetX}");Slider(layer.offsetX.toFloat(),{update(layer.copy(offsetX=it.toInt()))},valueRange=-256f..256f);Text("Vertical offset · ${layer.offsetY}");Slider(layer.offsetY.toFloat(),{update(layer.copy(offsetY=it.toInt()))},valueRange=-256f..256f)}
             }
         }}
     }}

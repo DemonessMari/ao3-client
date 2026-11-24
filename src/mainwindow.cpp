@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "accountbutton.h"
 #ifdef AO3_WEBENGINE
 #include "archiveweb.h"
 #endif
@@ -195,7 +196,7 @@ MainWindow::MainWindow(QWidget *parent)
         if(m_loginManager->isLoggedIn() && profile.username==m_loginManager->username() && profile.username!=m_profileUsername && profile.error.isEmpty() && !profile.avatarUrl.isEmpty())m_client->fetchProfileAvatar(profile.username,QUrl(profile.avatarUrl));
     });
     connect(m_client,&AO3Client::profileAvatarFetched,this,[this](const QString &username,const QImage &image){
-        if(m_loginManager->isLoggedIn() && username==m_loginManager->username() && !image.isNull()){m_loginButton->setText({});m_loginButton->setIcon(QIcon(QPixmap::fromImage(image)));m_loginButton->setIconSize(QSize(32,32));}
+        if(m_loginManager->isLoggedIn() && username==m_loginManager->username() && !image.isNull()){m_loginButton->setText({});m_loginButton->setProperty("accountImage",image);m_loginButton->update();}
     });
     connect(m_client, &AO3Client::authorProfileFetched, this, [this](const AuthorProfile &profile) {
         if(profile.username != m_profileUsername) return;
@@ -258,7 +259,6 @@ void MainWindow::setupUI()
     mainLayout->setSpacing(0);
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    // ── Header ──
     m_headerBar = new QWidget(centralWidget);m_headerBar->setProperty("skinRole","header");
     m_headerBar->setMinimumHeight(72);
     m_headerBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
@@ -330,7 +330,7 @@ void MainWindow::setupUI()
     m_userGreeting->hide();
     headerLayout->addWidget(m_userGreeting, 0, 5);
 
-    m_loginButton = new QPushButton(QStringLiteral("Log In"), m_headerBar);
+    m_loginButton = new AccountButton(QStringLiteral("Log In"), m_headerBar);
     m_loginButton->setMinimumHeight(32);
     m_loginButton->setStyleSheet(QStringLiteral(
         "QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid); border-radius: 4px; padding: 2px 18px; font-size: 10pt; }"
@@ -347,21 +347,20 @@ void MainWindow::setupUI()
 
     if(!mobileUi()) {
         delete headerLayout;delete headerSpacer;headerLayout=new QGridLayout(m_headerBar);headerLayout->setContentsMargins(16,8,16,8);headerLayout->setHorizontalSpacing(12);
-        auto *identity=new QWidget(m_headerBar);auto *identityLayout=new QHBoxLayout(identity);identityLayout->setContentsMargins(0,0,0,0);identityLayout->setSpacing(8);identityLayout->addWidget(m_logoLabel);
-        auto *name=new QLabel("Archive of Our Own",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(13);font.setBold(true);name->setFont(font);name->setWordWrap(true);name->setFixedWidth(150);identityLayout->addWidget(name);
+        auto *identity=new QWidget(m_headerBar);identity->setObjectName("headerIdentity");auto *identityLayout=new QHBoxLayout(identity);identityLayout->setContentsMargins(0,0,0,0);identityLayout->setSpacing(8);identityLayout->addWidget(m_logoLabel);
+        auto *name=new QLabel("Archive of Our Own",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(13);font.setBold(true);name->setFont(font);name->setWordWrap(false);identityLayout->addWidget(name);
         auto *searchGroup=new QWidget(m_headerBar);searchGroup->setObjectName("headerSearch");auto *searchLayout=new QHBoxLayout(searchGroup);searchLayout->setContentsMargins(0,0,0,0);searchLayout->setSpacing(8);m_searchInput->setMinimumWidth(180);searchLayout->addWidget(m_searchInput,1);searchLayout->addWidget(m_searchButton);searchLayout->addWidget(m_filterButton);searchGroup->setMaximumWidth(640);
         headerLayout->addWidget(identity,0,0,Qt::AlignLeft);headerLayout->addWidget(searchGroup,0,1);headerLayout->addWidget(m_loginButton,0,2,Qt::AlignRight);m_loginButton->setMaximumWidth(190);
-        const int balance=qMax(200,identity->sizeHint().width());headerLayout->setColumnMinimumWidth(0,balance);headerLayout->setColumnMinimumWidth(2,balance);headerLayout->setColumnStretch(0,1);headerLayout->setColumnStretch(1,2);headerLayout->setColumnStretch(2,1);
+        const int balance=identity->sizeHint().width();headerLayout->setColumnMinimumWidth(0,balance);headerLayout->setColumnMinimumWidth(2,balance);headerLayout->setColumnStretch(0,1);headerLayout->setColumnStretch(1,2);headerLayout->setColumnStretch(2,1);
     }
     mainLayout->addWidget(m_headerBar);
 
-    // ── Navigation ──
     m_navBar = new QWidget(centralWidget);
     m_navBar->setObjectName(QStringLiteral("navigationBar"));
-    m_navBar->setStyleSheet(QStringLiteral("QWidget#navigationBar { background: palette(button); border-bottom: 2px solid palette(mid); }"));
+    m_navBar->setStyleSheet(QStringLiteral("QWidget#navigationBar { background: transparent; }"));
     auto *navLayout = new QHBoxLayout(m_navBar);
-    navLayout->setContentsMargins(16, 0, 16, 2);
-    navLayout->setSpacing(2);
+    navLayout->setContentsMargins(0, 0, 0, 0);
+    navLayout->setSpacing(8);
 
     auto makeNavBtn = [](const QString &text) {
         auto *btn = new QPushButton(text);
@@ -429,9 +428,15 @@ void MainWindow::setupUI()
                 "QPushButton:checked { background: palette(button); color: palette(highlight); font-weight: bold; }"));
         }
         readingSettings->setCheckable(false);
-    } else mainLayout->addWidget(m_navBar);
+    } else {
+        headerLayout->addWidget(m_navBar,1,0,1,3);
+        headerLayout->setVerticalSpacing(6);
+        headerLayout->setSizeConstraint(QLayout::SetNoConstraint);
+        m_headerBar->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Minimum);
+        m_headerBar->installEventFilter(this);
+        QTimer::singleShot(0,this,&MainWindow::layoutDesktopHeader);
+    }
 
-    // ── Content ──
     m_contentStack = mobileUi() ? new MobileStack(centralWidget) : new QStackedWidget(centralWidget);
     m_contentStack->setObjectName(QStringLiteral("contentPages"));m_contentStack->setProperty("skinLayerTarget","window");
     m_contentStack->setStyleSheet(QStringLiteral("QStackedWidget#contentPages { background: palette(base); }"));
@@ -989,14 +994,14 @@ void MainWindow::setLoggedInState(bool loggedIn)
     if (loggedIn) {
         QString name = m_loginManager->userInfo().username;
         m_loginButton->setAccessibleName("Account: "+name);
-        m_loginButton->setFixedSize(44,44);
-        if(m_accountPictureUser!=name){m_loginButton->setIcon({});m_loginButton->setText(name.left(1).toUpper());m_accountPictureUser=name;m_client->fetchAuthorProfile(name);}
+        m_loginButton->setProperty("accountAvatar",true);m_loginButton->setFixedSize(44,44);
+        if(m_accountPictureUser!=name){m_loginButton->setIcon({});m_loginButton->setProperty("accountImage",QVariant());m_loginButton->setText(name.left(1).toUpper());m_accountPictureUser=name;m_client->fetchAuthorProfile(name);}
         m_loginButton->setToolTip(name);
         m_loginButton->setEnabled(true);
         m_userGreeting->setText(QString());
         m_userGreeting->hide();
     } else {
-        m_accountPictureUser.clear();m_loginButton->setIcon({});m_loginButton->setMinimumSize(0,32);m_loginButton->setMaximumSize(190,QWIDGETSIZE_MAX);m_loginButton->setAccessibleName("Sign in");
+        m_accountPictureUser.clear();m_loginButton->setProperty("accountAvatar",false);m_loginButton->setProperty("accountImage",QVariant());m_loginButton->setIcon({});m_loginButton->setMinimumSize(0,32);m_loginButton->setMaximumSize(190,QWIDGETSIZE_MAX);m_loginButton->setAccessibleName("Sign in");
         m_loginButton->setText(mobileUi() ? QStringLiteral("Sign in") : QStringLiteral("Log In"));
         m_loginButton->setEnabled(true);
         m_userGreeting->hide();
@@ -1069,9 +1074,30 @@ void MainWindow::toggleReaderFullscreen()
     m_reader->setFullscreen(isFullScreen());
 }
 
+void MainWindow::layoutDesktopHeader()
+{
+    if(mobileUi())return;
+    auto *grid=qobject_cast<QGridLayout *>(m_headerBar->layout());
+    auto *identity=m_headerBar->findChild<QWidget *>("headerIdentity");
+    auto *search=m_headerBar->findChild<QWidget *>("headerSearch");
+    if(!grid || !identity || !search)return;
+    const int wing=qMax(identity->sizeHint().width(),m_loginButton->sizeHint().width());
+    const auto margins=grid->contentsMargins();
+    const bool stacked=m_headerBar->width()<2*wing+search->minimumSizeHint().width()+margins.left()+margins.right()+2*grid->horizontalSpacing();
+    int row,column,rowSpan,columnSpan;
+    grid->getItemPosition(grid->indexOf(search),&row,&column,&rowSpan,&columnSpan);
+    const int wanted=stacked?1:0;
+    if(row!=wanted){grid->removeWidget(search);grid->addWidget(search,wanted,stacked?0:1,1,stacked?3:1,stacked?Qt::AlignHCenter:Qt::Alignment{});grid->removeWidget(m_navBar);grid->addWidget(m_navBar,stacked?2:1,0,1,3);}
+    for(int column:{0,2}){
+        const int minimum=stacked?0:wing;
+        if(grid->columnMinimumWidth(column)!=minimum)grid->setColumnMinimumWidth(column,minimum);
+    }
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_workList->viewport() && event->type() == QEvent::Resize && !m_workResizeScheduled) {
+    if(watched==m_headerBar && (event->type()==QEvent::Resize || event->type()==QEvent::FontChange))layoutDesktopHeader();
+    if (m_workList && watched == m_workList->viewport() && event->type() == QEvent::Resize && !m_workResizeScheduled) {
         m_workResizeScheduled = true;
         QTimer::singleShot(0, this, [this] { resizeWorkItems(); m_workResizeScheduled = false; });
     }
