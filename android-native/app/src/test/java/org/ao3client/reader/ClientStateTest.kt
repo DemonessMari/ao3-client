@@ -112,6 +112,14 @@ class ClientStateTest {
         vm.appearance(margin=999,alignment="invalid");assertEquals(64,vm.preferences.margin);assertEquals("left",vm.preferences.alignment)
         vm.appearance(margin=-1,alignment="right");assertEquals(0,vm.preferences.margin);assertEquals("right",state(app).preferences.alignment)
     }
+    @Test fun imageDraftsAndExportsKeepCreditsWithoutReplacingTheAppliedSkin() {
+        val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
+        val skin=AppSkin.parse(javaClass.classLoader!!.getResourceAsStream("illustrated/nebula.json")!!.use{it.readBytes()})
+        vm.applySkin(skin);vm.showSkins();assertEquals(skin.images,vm.draftSkinImages);assertEquals(skin.layers,vm.draftSkinLayers)
+        vm.draftSkinLayers=emptyList();assertEquals(3,vm.appSkin!!.layers.size)
+        vm.pendingSkinExport=skin.json();assertEquals(skin,AppSkin.parse(vm.pendingSkinExport.toByteArray()))
+        vm.appearance(theme="light",useAppSkinColors=false);assertEquals(skin,state(app).appSkin)
+    }
     @Test fun readerAppearanceNeverRemovesTheCustomInterfaceSkin() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val vm=state(app)
         val skin=AppSkin.preset("dark").copy(version=3,cornerRadius=16,components=mapOf("cards" to mapOf("padding" to 12)))

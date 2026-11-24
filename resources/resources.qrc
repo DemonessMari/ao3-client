@@ -11,5 +11,8 @@
         <file alias="skins/neos/tumblr-blue.json">../skins/neos/tumblr-blue.json</file>
         <file alias="skins/neos/charcoal-rose.json">../skins/neos/charcoal-rose.json</file>
         <file alias="skins/neos/LICENSE">../skins/neos/LICENSE</file>
+        <file alias="skins/illustrated/nebula.json">../skins/illustrated/nebula.json</file>
+        <file alias="skins/illustrated/LICENSE-Unsplash.txt">../skins/illustrated/LICENSE-Unsplash.txt</file>
+        <file alias="skins/illustrated/LICENSE-OpenMoji.txt">../skins/illustrated/LICENSE-OpenMoji.txt</file>
     </qresource>
 </RCC>

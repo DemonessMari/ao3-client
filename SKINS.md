@@ -61,3 +61,18 @@ A complete example is in `tests/fixtures/app-skin-v3.json`. Font importing remai
 The App skin editor includes **Neos Blue** and **Neos Rose**, native adaptations of ZerafinaCSS's MIT-licensed [neos](https://github.com/ZerafinaCSS/neos). They include rounded controls, compact card spacing, separate form/content surfaces and a slim header. See [adaptation details](skins/neos/README.md) and its license for the supported design mapping.
 
 Reading theme, font, size, margins and alignment do not remove the app skin. Android offers **Use app skin colors for reading**; choosing a reading palette changes the reading area while preserving the custom interface. Desktop provides **Use app skin colors** in the reader options.
+
+
+## Portable image skins (version 4)
+
+Version 4 retains the version 3 fields and adds `images` and `layers`. The editor's Images controls import a local PNG/JPEG, add or remove layers, and change placement, fit, anchor, size, opacity and offsets. Imported images are resized before embedding. Import and Export keep the image bytes, credits, source and license in one JSON file. Existing version 1–3 files remain supported.
+
+An image object is keyed by a short lowercase ID and contains `data` (a `data:image/png;base64,...` or JPEG URL), `credit`, `source` and `license` strings. Those metadata fields are retained; source URLs are never fetched by the renderer.
+
+Each layer has an `image` ID, a `target` (`window`, `header`, `cards`), a `placement` (`background`, `overlay`, `banner`), a `fit` (`contain`, `cover`, `tile`), an `anchor` (`top-left`, `top-right`, `center`, `bottom-left`, `bottom-right`), integer `width`/`height`, `opacity`, and integer `offsetX`/`offsetY`. Sizes use native logical units. Regular layer sizes are 16–1024, offsets −256–256, and opacity 0–1.
+
+One header banner is allowed, 16–240 units tall. It reserves its own area, fills the available width and uses contain/cover; width, anchor and offsets do not affect banners. Background and overlay layers are painted beneath text and controls, in that order. Their opacity is reduced where needed to preserve text contrast; banners use their requested opacity. Decorations do not receive input. Tiling is bounded to avoid excessive drawing. Reading text retains its selected plain surface.
+
+Limits: four images, eight layers, 512 KB and two megapixels per embedded image, and 4 MB per complete version 4 file. Decoding is bounded and cached. The file picker accepts PNG/JPEG inputs up to 8 MB and resizes them before embedding. Large image drafts remain in the Android view model rather than the screen-state bundle. Older skin formats retain their 16 KB limit. Invalid imports leave the active skin unchanged.
+
+**Neos Nebula** demonstrates a photographic banner, a window background and a card decoration. It combines the credited neos component design with Bryan Goff's Unsplash photograph and Vanessa Boutzikoudi's OpenMoji star; see [image credits and licenses](skins/illustrated/README.md). No CSS or remote-image connection is required.

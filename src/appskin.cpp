@@ -1,4 +1,6 @@
 #include "appskin.h"
+#include "skinimagepaint.h"
+#include "skinimageeditor.h"
 #include "readerwidget.h"
 #include "readerfonts.h"
 #include <QApplication>
@@ -97,8 +99,10 @@ public:
 protected:
     void paintEvent(QPaintEvent *)override {
         const auto rule=skin.component(role);const auto bg=rule.value("background").toString(role=="header"?skin.background:skin.surface);
-        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);
-        p.setPen(width>0?QPen(QColor(rule.value("border").toString(skin.text)),width):QPen(Qt::NoPen));p.setBrush(QColor(bg));const int radius=rule.value("cornerRadius").toInt(skin.cornerRadius);p.drawRoundedRect(QRectF(rect()).adjusted(1,1,-1,-1),radius,radius);
+        QPainter p(this);const auto fg=rule.value("text").toString(skin.text);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);const int radius=rule.value("cornerRadius").toInt(skin.cornerRadius);
+        p.setRenderHint(QPainter::Antialiasing);QPainterPath path;path.addRoundedRect(QRectF(rect()).adjusted(1,1,-1,-1),radius,radius);p.fillPath(path,QColor(bg));p.save();p.setClipPath(path);const int banner=role=="header"?skinBannerHeight(skin,.5):0;
+        drawSkinLayers(p,skin,role,QRectF(0,0,this->width(),height()-banner),bg,fg,.5);if(banner)drawSkinLayers(p,skin,role,QRectF(0,height()-banner,this->width(),banner),bg,fg,.5,true);p.restore();if(width>0){p.setPen(QPen(QColor(rule.value("border").toString(skin.text)),width));p.drawPath(path);}
+
     }
 };
 QPointer<NativeSkinStyle> nativeStyle;
@@ -107,17 +111,31 @@ void skinButton(QWidget *widget,bool custom) {
     if(custom){if(!button->property("ao3OriginalStyle").isValid())button->setProperty("ao3OriginalStyle",button->styleSheet());if(!button->styleSheet().isEmpty())button->setStyleSheet({});}
     else if(button->property("ao3OriginalStyle").isValid()){button->setStyleSheet(button->property("ao3OriginalStyle").toString());button->setProperty("ao3OriginalStyle",QVariant());}
 }
+void configureSkinBanner(QWidget *widget) {
+    if(!nativeStyle || widget->property("skinRole").toString()!="header" || !widget->layout())return;
+    if(!widget->property("ao3BaseMargins").isValid()){const auto m=widget->layout()->contentsMargins();widget->setProperty("ao3BaseMargins",QVariantList{m.left(),m.top(),m.right(),m.bottom()});}
+    if(!widget->property("ao3BannerMinimum").isValid())widget->setProperty("ao3BannerMinimum",widget->minimumHeight());
+    const auto margins=widget->property("ao3BaseMargins").toList();const auto rule=nativeStyle->skin.component("header");const int banner=skinBannerHeight(nativeStyle->skin,nativeStyle->scale);
+    const int padding=rule.value("padding").toInt(-1);widget->layout()->setContentsMargins(padding<0?margins[0].toInt():padding,padding<0?margins[1].toInt():padding,padding<0?margins[2].toInt():padding,(padding<0?margins[3].toInt():padding)+banner);
+    widget->setMinimumHeight(widget->property("ao3BannerMinimum").toInt()+banner);
+}
 void componentWidget(QWidget *widget) {
     if(!nativeStyle)return;
     for(auto *parent=widget;parent;parent=parent->parentWidget())if(parent->objectName()=="skinPreview")return;
+    bool editor=false,reader=false;for(auto *parent=widget;parent;parent=parent->parentWidget()){editor|=parent->property("skinEditor").toBool();reader|=qobject_cast<ReaderWidget *>(parent)!=nullptr;}
+    if(auto *scroll=qobject_cast<QScrollArea *>(widget);scroll && !editor && !reader){
+        bool decorated=false;for(const auto &v:nativeStyle->skin.layers)if(v.toObject().value("target")=="window")decorated=true;
+        auto *viewport=scroll->viewport();if(!viewport->property("ao3OriginalFill").isValid())viewport->setProperty("ao3OriginalFill",viewport->autoFillBackground());viewport->setAutoFillBackground(decorated?false:viewport->property("ao3OriginalFill").toBool());viewport->setProperty("skinLayerTarget",decorated?QVariant("window"):QVariant());
+        if(auto *body=scroll->widget()){if(!body->property("ao3OriginalFill").isValid())body->setProperty("ao3OriginalFill",body->autoFillBackground());body->setAutoFillBackground(decorated?false:body->property("ao3OriginalFill").toBool());}
+    }
     const auto rule=nativeStyle->skin.component(skinRole(widget));
-    const bool overrideStyle=nativeStyle->skin.version==3 && !rule.isEmpty();
+    const bool overrideStyle=nativeStyle->skin.version>=3 && !rule.isEmpty();
     if(overrideStyle && !qobject_cast<QPushButton *>(widget)){if(!widget->property("ao3ComponentStyle").isValid())widget->setProperty("ao3ComponentStyle",widget->styleSheet());if(!widget->styleSheet().isEmpty())widget->setStyleSheet({});}
     else if(widget->property("ao3ComponentStyle").isValid()){widget->setStyleSheet(widget->property("ao3ComponentStyle").toString());widget->setProperty("ao3ComponentStyle",QVariant());}
     if(widget->property("ao3OriginalMinimumHeight").isValid()){
         widget->setMinimumHeight(widget->property("ao3OriginalMinimumHeight").toInt());widget->setMaximumHeight(widget->property("ao3OriginalMaximumHeight").toInt());
     }
-    if(!overrideStyle)return;
+    if(!overrideStyle){configureSkinBanner(widget);return;}
     const auto role=skinRole(widget);const auto &skin=nativeStyle->skin;
     const QColor bg(rule.value("background").toString(role=="buttons"?skin.accent:role=="header"?skin.background:skin.surface)),fg(rule.value("text").toString(role=="buttons"?skin.onAccent:skin.text));
     auto palette=widget->palette();
@@ -142,7 +160,7 @@ void componentWidget(QWidget *widget) {
         const int height=widget->fontMetrics().height()+2*rule.value("padding").toInt(6)+8;
         widget->setMaximumHeight(qMax(widget->maximumHeight(),height));widget->setMinimumHeight(qMax(widget->minimumHeight(),height));
     }
-    widget->updateGeometry();widget->update();
+    configureSkinBanner(widget);widget->updateGeometry();widget->update();
     if(widget->property("skinRole").toString()=="cards")for(auto *parent=widget->parentWidget();parent;parent=parent->parentWidget())if(auto *list=qobject_cast<QListWidget *>(parent)){for(int i=0;i<list->count();++i)if(list->itemWidget(list->item(i))==widget)list->item(i)->setSizeHint(widget->sizeHint());break;}
 }
 class SkinPolish final:public QObject {
@@ -150,11 +168,15 @@ public:using QObject::QObject;
     bool eventFilter(QObject *object,QEvent *event)override {
         auto *widget=qobject_cast<QWidget *>(object);if(!widget || !nativeStyle)return false;
         if(event->type()==QEvent::Polish && nativeStyle->custom)QTimer::singleShot(0,widget,[widget]{if(nativeStyle && nativeStyle->custom){skinButton(widget,true);componentWidget(widget);}});
-        if(event->type()==QEvent::Paint && nativeStyle->skin.version==3 && widget->property("skinRole").isValid()){
-            const auto role=widget->property("skinRole").toString();const auto rule=nativeStyle->skin.component(role);
-            if(rule.isEmpty())return false;
-            QPainter p(widget);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);
-            p.setPen(width>0?QPen(QColor(rule.value("border").toString(nativeStyle->skin.text)),width):QPen(Qt::NoPen));p.setBrush(widget->palette().color(QPalette::Window));const int r=rule.value("cornerRadius").toInt(nativeStyle->radius);p.drawRoundedRect(QRectF(widget->rect()).adjusted(1,1,-1,-1),r,r);return true;
+        if(event->type()==QEvent::Paint && nativeStyle->skin.version>=3 && (widget->property("skinRole").isValid() || widget->property("skinLayerTarget").isValid())){
+            const auto role=widget->property("skinLayerTarget").isValid()?widget->property("skinLayerTarget").toString():widget->property("skinRole").toString();const auto rule=nativeStyle->skin.component(role);
+            bool decorated=false;for(const auto &v:nativeStyle->skin.layers)if(v.toObject().value("target")==role)decorated=true;
+            if(rule.isEmpty() && !decorated)return false;
+            const auto &skin=nativeStyle->skin;const auto bg=rule.value("background").toString(role=="window" || role=="header"?skin.background:skin.surface),fg=rule.value("text").toString(skin.text);
+            QPainter p(widget);p.setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(role=="cards" || rule.contains("border")?1:0);const int radius=role=="window"?0:rule.value("cornerRadius").toInt(nativeStyle->radius);
+            QPainterPath path;path.addRoundedRect(QRectF(widget->rect()).adjusted(width/2,width/2,-width/2,-width/2),radius,radius);p.fillPath(path,QColor(bg));p.save();p.setClipPath(path);const int banner=role=="header"?skinBannerHeight(skin,nativeStyle->scale):0;
+            drawSkinLayers(p,skin,role,QRectF(0,0,widget->width(),widget->height()-banner),bg,fg,nativeStyle->scale);
+            if(banner)drawSkinLayers(p,skin,role,QRectF(0,widget->height()-banner,widget->width(),banner),bg,fg,nativeStyle->scale,true);p.restore();if(width>0){p.setPen(QPen(QColor(rule.value("border").toString(skin.text)),width));p.drawPath(path);}return true;
         }
         return false;
     }
@@ -223,7 +245,7 @@ void applyAppSkin() {
 void editAppSkin(QWidget *parent) {
     QDialog dialog(parent);dialog.setProperty("skinEditor",true);dialog.setWindowTitle("App skin");dialog.resize(600,qMin(820,qMax(560,dialog.screen()->availableGeometry().height()-40)));
     auto *layout=new QVBoxLayout(&dialog);
-    auto *presets=new QComboBox(&dialog);presets->addItems({"Custom","Light","Dark","Sepia","Neos Tumblr Blue","Neos Charcoal Rose"});layout->addWidget(presets);
+    auto *presets=new QComboBox(&dialog);presets->addItems({"Custom","Light","Dark","Sepia","Neos Tumblr Blue","Neos Charcoal Rose","Neos Nebula"});layout->addWidget(presets);
     layout->addWidget(new QLabel("Neos adaptations · ZerafinaCSS · MIT",&dialog));
     auto *follow=new QCheckBox("Follow system theme",&dialog);follow->setObjectName("followSystemTheme");follow->setChecked(QSettings().value("appearance/followSystem",false).toBool());layout->addWidget(follow);
     auto *tabs=new QTabWidget(&dialog);layout->addWidget(tabs,1);
@@ -233,6 +255,7 @@ void editAppSkin(QWidget *parent) {
     auto *scale=new QDoubleSpinBox(&dialog);scale->setRange(1,1.5);scale->setSingleStep(.05);scale->setDecimals(2);form->addRow("Interface scale",scale);
     auto *radius=new QSpinBox(&dialog);radius->setRange(0,24);form->addRow("Default corners",radius);
     QMap<QString,QMap<QString,QLineEdit *>> componentFields;
+    QJsonObject imageData;QJsonArray layerData;std::function<void()> refreshImages;
     for(const auto &role:QStringList{"buttons","inputs","cards","header"}){
         auto *componentForm=addTab(role.left(1).toUpper()+role.mid(1));
         auto *hint=new QLabel("Leave a field empty to inherit the theme.",&dialog);hint->setWordWrap(true);componentForm->addRow(hint);
@@ -240,6 +263,7 @@ void editAppSkin(QWidget *parent) {
             auto *field=new QLineEdit(&dialog);field->setMaxLength(7);field->setMinimumHeight(32);field->setPlaceholderText("Inherit");field->setObjectName("skin_"+role+"_"+pair.first);componentFields[role][pair.first]=field;componentForm->addRow(pair.second,field);
         }
     }
+    auto *imageForm=addTab("Images");
     auto *preview=new QWidget(&dialog);preview->setObjectName("skinPreview");preview->setAutoFillBackground(true);auto *pv=new QVBoxLayout(preview);
     auto *header=new SkinPreviewPanel("header",preview);auto *headerLayout=new QVBoxLayout(header);headerLayout->addWidget(new QLabel("Archive of Our Own",header));pv->addWidget(header);
     auto *card=new SkinPreviewPanel("cards",preview);auto *cardLayout=new QVBoxLayout(card);auto *cardText=new QLabel("Chapter title\nA preview of your reading text.",card);cardText->setWordWrap(true);cardLayout->addWidget(cardText);pv->addWidget(card);
@@ -251,23 +275,24 @@ void editAppSkin(QWidget *parent) {
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog);buttons->button(QDialogButtonBox::Save)->setText("Apply skin");layout->addWidget(buttons);
     bool filling=false;
     auto read=[&](AppSkin &skin,QString &error){
-        AppSkin draft{fields[0]->text(),fields[1]->text(),fields[2]->text(),fields[3]->text(),fields[4]->text(),fields[5]->text()};draft.version=3;draft.uiScale=scale->value();draft.cornerRadius=radius->value();
+        AppSkin draft{fields[0]->text(),fields[1]->text(),fields[2]->text(),fields[3]->text(),fields[4]->text(),fields[5]->text()};draft.version=imageData.isEmpty() && layerData.isEmpty()?3:4;draft.images=imageData;draft.layers=layerData;draft.uiScale=scale->value();draft.cornerRadius=radius->value();
         for(auto role=componentFields.begin();role!=componentFields.end();++role){QJsonObject rule;for(auto field=role.value().begin();field!=role.value().end();++field){const auto value=field.value()->text().trimmed();if(value.isEmpty())continue;if(QStringList{"background","text","border"}.contains(field.key()))rule[field.key()]=value;else {bool ok=false;const double n=value.toDouble(&ok);if(!ok){error="Enter a number for "+role.key()+" "+field.key()+".";return false;}rule[field.key()]=n;}}if(!rule.isEmpty())draft.components[role.key()]=rule;}
         return AppSkin::parse(draft.json(),skin,error);
     };
     auto update=[&]{if(filling)return;AppSkin skin;QString error;const bool ok=read(skin,error);errorLabel->setText(error);buttons->button(QDialogButtonBox::Save)->setEnabled(ok);exportButton->setEnabled(ok);if(!ok)return;
-        preview->setPalette(skin.palette());header->skin=skin;card->skin=skin;for(auto *panel:{header,card}){const int padding=skin.component(panel->role).value("padding").toInt(8);panel->layout()->setContentsMargins(padding,padding,padding,padding);}previewStyle->skin=skin;previewStyle->scale=skin.uiScale;previewStyle->radius=skin.cornerRadius;
+        preview->setPalette(skin.palette());header->skin=skin;card->skin=skin;for(auto *panel:{header,card}){const int padding=skin.component(panel->role).value("padding").toInt(8);panel->layout()->setContentsMargins(padding,padding,padding,padding+(panel->role=="header"?skinBannerHeight(skin,.5):0));}previewStyle->skin=skin;previewStyle->scale=skin.uiScale;previewStyle->radius=skin.cornerRadius;
         for(auto pair:QList<QPair<QWidget *,QString>>{{header,"header"},{card,"cards"},{input,"inputs"},{button,"buttons"}}){auto *w=pair.first;const auto r=skin.component(pair.second);auto p=skin.palette();const auto bg=r.value("background").toString(pair.second=="buttons"?skin.accent:pair.second=="header"?skin.background:skin.surface),fg=r.value("text").toString(pair.second=="buttons"?skin.onAccent:skin.text);for(auto role:{QPalette::Window,QPalette::Base,QPalette::Button})p.setColor(role,QColor(bg));for(auto role:{QPalette::WindowText,QPalette::Text,QPalette::ButtonText})p.setColor(role,QColor(fg));w->setPalette(p);w->setAutoFillBackground(w!=header && w!=card);auto f=dialog.font();f.setPointSizeF(f.pointSizeF()*skin.uiScale*r.value("textScale").toDouble(1));w->setFont(f);w->update();}
     };
-    auto fill=[&](const AppSkin &skin){filling=true;const QStringList values={skin.name,skin.background,skin.surface,skin.text,skin.accent,skin.onAccent};for(int i=0;i<fields.size();++i)fields[i]->setText(values[i]);scale->setValue(skin.uiScale);radius->setValue(skin.cornerRadius);for(auto role=componentFields.begin();role!=componentFields.end();++role){const auto rule=skin.component(role.key());for(auto f=role.value().begin();f!=role.value().end();++f)f.value()->setText(rule.contains(f.key())?(rule.value(f.key()).isString()?rule.value(f.key()).toString():QString::number(rule.value(f.key()).toDouble())):QString());}filling=false;update();};
+    refreshImages=addSkinImageEditor(&dialog,imageForm,imageData,layerData,update);
+    auto fill=[&](const AppSkin &skin){filling=true;imageData=skin.images;layerData=skin.layers;if(refreshImages)refreshImages();const QStringList values={skin.name,skin.background,skin.surface,skin.text,skin.accent,skin.onAccent};for(int i=0;i<fields.size();++i)fields[i]->setText(values[i]);scale->setValue(skin.uiScale);radius->setValue(skin.cornerRadius);for(auto role=componentFields.begin();role!=componentFields.end();++role){const auto rule=skin.component(role.key());for(auto f=role.value().begin();f!=role.value().end();++f)f.value()->setText(rule.contains(f.key())?(rule.value(f.key()).isString()?rule.value(f.key()).toString():QString::number(rule.value(f.key()).toDouble())):QString());}filling=false;update();};
     for(auto *field:fields)QObject::connect(field,&QLineEdit::textChanged,&dialog,update);
     for(const auto &role:componentFields)for(auto *field:role)QObject::connect(field,&QLineEdit::textChanged,&dialog,update);
     QObject::connect(scale,&QDoubleSpinBox::valueChanged,&dialog,update);QObject::connect(radius,&QSpinBox::valueChanged,&dialog,update);
     AppSkin manual;customAppSkin(manual);fill(resolvedAppSkin(QGuiApplication::styleHints()->colorScheme()==Qt::ColorScheme::Dark));tabs->setEnabled(!follow->isChecked());presets->setEnabled(!follow->isChecked());
     QObject::connect(follow,&QCheckBox::toggled,&dialog,[&](bool checked){if(checked){QString error;read(manual,error);fill(AppSkin::preset(QGuiApplication::styleHints()->colorScheme()==Qt::ColorScheme::Dark?1:0));}else fill(manual);tabs->setEnabled(!checked);presets->setEnabled(!checked);});
-    QObject::connect(presets,&QComboBox::activated,&dialog,[&](int i){if(i>=1 && i<=3)fill(AppSkin::preset(i-1));else if(i>=4){QFile file(":/skins/neos/"+QString(i==4?"tumblr-blue":"charcoal-rose")+".json");AppSkin skin;QString error;if(file.open(QIODevice::ReadOnly) && AppSkin::parse(file.readAll(),skin,error))fill(skin);else errorLabel->setText(error.isEmpty()?"Cannot load bundled skin.":error);}});
+    QObject::connect(presets,&QComboBox::activated,&dialog,[&](int i){if(i>=1 && i<=3)fill(AppSkin::preset(i-1));else if(i>=4){QFile file(":/skins/"+QStringList{"neos/tumblr-blue","neos/charcoal-rose","illustrated/nebula"}.value(i-4)+".json");AppSkin skin;QString error;if(file.open(QIODevice::ReadOnly) && AppSkin::parse(file.readAll(),skin,error))fill(skin);else errorLabel->setText(error.isEmpty()?"Cannot load bundled skin.":error);}});
     QObject::connect(reset,&QPushButton::clicked,&dialog,[&]{follow->setChecked(false);fill(AppSkin::preset(0));});
-    QObject::connect(importButton,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getOpenFileName(&dialog,"Import app skin",{},"Skin files (*.json)");if(path.isEmpty())return;QFile file(path);AppSkin skin;QString error;if(!file.open(QIODevice::ReadOnly)||!AppSkin::parse(file.read(16385),skin,error)){QMessageBox::warning(&dialog,"Cannot import skin",error.isEmpty()?"Cannot read the file.":error);return;}follow->setChecked(false);presets->setCurrentIndex(0);fill(skin);});
+    QObject::connect(importButton,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getOpenFileName(&dialog,"Import app skin",{},"Skin files (*.json)");if(path.isEmpty())return;QFile file(path);AppSkin skin;QString error;if(!file.open(QIODevice::ReadOnly)||!AppSkin::parse(file.read(skinMaxFileBytes+1),skin,error)){QMessageBox::warning(&dialog,"Cannot import skin",error.isEmpty()?"Cannot read the file.":error);return;}follow->setChecked(false);presets->setCurrentIndex(0);fill(skin);});
     QObject::connect(exportButton,&QPushButton::clicked,&dialog,[&]{AppSkin skin;QString error;if(!read(skin,error))return;const auto path=QFileDialog::getSaveFileName(&dialog,"Export app skin","ao3-skin.json","Skin files (*.json)");if(path.isEmpty())return;QSaveFile file(path);const auto bytes=skin.json();if(!file.open(QIODevice::WriteOnly)||file.write(bytes)!=bytes.size()||!file.commit())QMessageBox::warning(&dialog,"Export failed","Could not save the skin file.");});
     QObject::connect(buttons,&QDialogButtonBox::accepted,&dialog,[&]{AppSkin skin;QString error;if(!read(skin,error))return;QSettings settings;settings.setValue("appearance/followSystem",follow->isChecked());if(!follow->isChecked())settings.setValue("appearance/skin",skin.json());applyAppSkin();dialog.accept();});
     QObject::connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);dialog.exec();

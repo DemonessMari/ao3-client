@@ -79,7 +79,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var appSkin by mutableStateOf(runCatching { AppSkin.parse(storage.getString("appSkin", "")!!.toByteArray()) }.getOrNull())
         private set
     var skinReturn="home"
-    fun showSkins(){skinReturn=screen;navigate("skins")}
+    fun showSkins(){draftSkinImages=appSkin?.images.orEmpty();draftSkinLayers=appSkin?.layers.orEmpty();skinReturn=screen;navigate("skins")}
+    internal var draftSkinImages by mutableStateOf(appSkin?.images.orEmpty())
+    internal var draftSkinLayers by mutableStateOf(appSkin?.layers.orEmpty())
+    internal var pendingSkinExport=""
     fun applySkin(skin:AppSkin?){val valid=skin?.let{AppSkin.parse(it.json().toByteArray())};appSkin=valid;storage.edit().apply{if(valid==null)remove("appSkin") else putString("appSkin",valid.json())}.apply()}
     var screen by mutableStateOf("home")
     var settingsReturn = "home"

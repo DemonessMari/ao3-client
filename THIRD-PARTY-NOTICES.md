@@ -40,3 +40,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+## Neos Nebula artwork
+
+The native component design derives from ZerafinaCSS neos (MIT), credited above. The image variant adds:
+
+- Orion Nebula photograph by Bryan Goff, https://unsplash.com/photos/f7YQo-eYHdM, under the Unsplash License: https://unsplash.com/license. Header crop distributed by intothisshadow's Stargazer skin; its CSS is not included.
+- OpenMoji star (2B50) by Vanessa Boutzikoudi, 2018, https://github.com/hfg-gmuend/openmoji, CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/. Original image bytes are unchanged.
+
+Image credits, source URLs and licenses are embedded in the portable skin and retained on export. See the license files under `skins/illustrated`. Asset licenses are separate from the application's MIT license.

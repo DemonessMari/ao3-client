@@ -47,3 +47,16 @@ Skin editor inheritance rows now align text and switches with explicit spacing; 
 Phone visual acceptance and rc.18 installation are pending: no device was connected during this pass. Physical layout, large fonts, rotation and long-session checks remain separate from automated validation.
 
 The desktop installation in `~/Applications/ao3-client` matches the tested rc.18 binary and passes an isolated startup check from `/tmp`; existing application data is retained.
+
+
+## 3.2.0-rc.19
+
+2026-11-24: native skin version 4 adds embedded PNG/JPEG assets, background and overlay layers, and a reserved header banner in both editions. Assets are bounded by file size, dimensions, count and decoded cache size. Images are painted beneath controls without receiving input or fetching remote resources. Decoration opacity is bounded across stacked layers to preserve text contrast; reading content retains its plain reading surface.
+
+Desktop regression checks cover the bundled Neos Nebula skin, image/credit round trips, rejected remote images and invalid layer fields, native rendering, button interaction, editor preservation, repeat application and banner removal. The rendered editor and example were inspected. All six desktop suites pass with the final stacked-opacity adjustment. The installed desktop binary matches the build and passes isolated startup from /tmp, retaining existing app data.
+
+Android: 125 tests pass and one live-network test is skipped. Release lint reports zero errors and 39 warnings. APK and AAB signatures verify and the APK passes 16 KB alignment checks. The portable example and image licenses are included. Android version code is 34.
+
+The example combines a Bryan Goff photograph under the Unsplash License, an unmodified OpenMoji star by Vanessa Boutzikoudi under CC BY-SA 4.0, and the credited neos component adaptation under MIT. Source and license details are included in the portable skin and package. No upstream Stargazer CSS was copied.
+
+Physical-phone installation and visual acceptance remain pending: no device was connected during this pass. Automated checks do not establish physical layout, rotation, file-picker handling or long-session memory behavior. Remaining website-parity and authenticated-write limits above still apply.

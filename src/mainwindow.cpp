@@ -433,7 +433,7 @@ void MainWindow::setupUI()
 
     // ── Content ──
     m_contentStack = mobileUi() ? new MobileStack(centralWidget) : new QStackedWidget(centralWidget);
-    m_contentStack->setObjectName(QStringLiteral("contentPages"));
+    m_contentStack->setObjectName(QStringLiteral("contentPages"));m_contentStack->setProperty("skinLayerTarget","window");
     m_contentStack->setStyleSheet(QStringLiteral("QStackedWidget#contentPages { background: palette(base); }"));
 
     // Dashboard view (0)

@@ -6,14 +6,16 @@
 #include <QSettings>
 #include <QPalette>
 #include <cmath>
+#include "skinimages.h"
 
 class QWidget;
 struct AppSkin {
     QString name="Light", background="#fff8f5", surface="#ffffff", text="#292723", accent="#920b19", onAccent="#ffffff";
     double uiScale=1.0;int cornerRadius=8,version=1;
     QJsonObject components;
+    QJsonObject images;QJsonArray layers;
     QJsonObject component(const QString &role) const {return components.value(role).toObject();}
-    QByteArray json() const { QJsonObject o{{"format","ao3-client-skin"},{"version",version},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}};if(version>=2){o["uiScale"]=uiScale;o["cornerRadius"]=cornerRadius;}if(version>=3)o["components"]=components;return QJsonDocument(o).toJson(); }
+    QByteArray json() const { QJsonObject o{{"format","ao3-client-skin"},{"version",version},{"name",name},{"background",background},{"surface",surface},{"text",text},{"accent",accent},{"onAccent",onAccent}};if(version>=2){o["uiScale"]=uiScale;o["cornerRadius"]=cornerRadius;}if(version>=3)o["components"]=components;if(version>=4){o["images"]=images;o["layers"]=layers;}return QJsonDocument(o).toJson(); }
     static AppSkin preset(int index) {
         if(index==1)return {"Dark","#191b1e","#25272b","#e7e1d8","#ffb3b9","#350009"};
         if(index==2)return {"Sepia","#f1e3c7","#fff2d9","#292723","#843d21","#ffffff"};
@@ -25,11 +27,13 @@ struct AppSkin {
     }
     static double contrast(const QString &a,const QString &b) {double x=luminance(a),y=luminance(b);return (qMax(x,y)+.05)/(qMin(x,y)+.05);}
     static bool parse(const QByteArray &bytes,AppSkin &skin,QString &error) {
-        if(bytes.size()>16384){error="Skin files must be smaller than 16 KB.";return false;}
+        if(bytes.size()>skinMaxFileBytes){error="Skin files must be at most 4 MB.";return false;}
         QJsonParseError e;const auto doc=QJsonDocument::fromJson(bytes,&e);const auto o=doc.object();
-        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || (o.value("version").toDouble()!=1 && o.value("version").toDouble()!=2 && o.value("version").toDouble()!=3)){error="Choose an AO3 Client skin JSON file (version 1, 2 or 3).";return false;}
+        if(e.error!=QJsonParseError::NoError || !doc.isObject() || o.value("format").toString()!="ao3-client-skin" || (o.value("version").toDouble()!=1 && o.value("version").toDouble()!=2 && o.value("version").toDouble()!=3 && o.value("version").toDouble()!=4)){error="Choose an AO3 Client skin JSON file (version 1, 2, 3 or 4).";return false;}
         QStringList keys={"format","version","name","background","surface","text","accent","onAccent"};if(o.value("version").toInt()>=2)keys.append({"uiScale","cornerRadius"});
-        if(o.value("version").toInt()==3)keys.append("components");
+        if(o.value("version").toInt()>=3)keys.append("components");
+        if(o.value("version").toInt()==4)keys.append({"images","layers"});
+        if(o.value("version").toInt()<4 && bytes.size()>16384){error="Legacy skin files must be at most 16 KB.";return false;}
         for(auto it=o.begin();it!=o.end();++it)if(!keys.contains(it.key())){error="Unknown skin field: "+it.key();return false;}
         AppSkin candidate;candidate.version=o.value("version").toInt();
         if(candidate.version>=2){const auto scale=o.value("uiScale"),radius=o.value("cornerRadius");if(!scale.isDouble() || !radius.isDouble() || !std::isfinite(scale.toDouble()) || scale.toDouble()<1 || scale.toDouble()>1.5 || radius.toDouble()<0 || radius.toDouble()>24 || radius.toDouble()!=std::floor(radius.toDouble())){error="Interface scale must be 1–1.5; corner radius must be a whole number from 0 to 24.";return false;}candidate.uiScale=scale.toDouble();candidate.cornerRadius=radius.toInt();}
@@ -39,7 +43,7 @@ struct AppSkin {
             const auto value=o.value(pair.first).toString();if(!QRegularExpression("^#[0-9a-fA-F]{6}$").match(value).hasMatch()){error="Use opaque #RRGGBB colors for "+pair.first+".";return false;}*pair.second=value.toLower();
         }
         if(contrast(candidate.text,candidate.background)<4.5 || contrast(candidate.text,candidate.surface)<4.5 || contrast(candidate.onAccent,candidate.accent)<4.5 || contrast(candidate.accent,candidate.background)<4.5 || contrast(candidate.accent,candidate.surface)<4.5){error="Increase contrast: text and accents need 4.5:1 against their backgrounds.";return false;}
-        if(candidate.version==3){
+        if(candidate.version>=3){
             if(!o.value("components").isObject()){error="Components must be an object.";return false;}
             candidate.components=o.value("components").toObject();
             for(auto it=candidate.components.begin();it!=candidate.components.end();++it){
@@ -62,6 +66,7 @@ struct AppSkin {
                 it.value()=rule;
             }
         }
+        if(candidate.version==4){if(!validateSkinImages(o,error))return false;candidate.images=o.value("images").toObject();candidate.layers=o.value("layers").toArray();}
         skin=candidate;error.clear();return true;
     }
     QPalette palette() const {

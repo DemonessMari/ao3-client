@@ -36,12 +36,17 @@ internal fun Map<String,Any>.color(key:String,fallback:Color)=(get(key) as? Stri
     MaterialTheme(colorScheme=scheme.copy(surface=bg,onSurface=fg,onSurfaceVariant=fg,background=bg,onBackground=fg,surfaceContainer=bg,primary=fg),typography=typography){ProvideTextStyle(typography.bodyLarge.copy(color=fg),content)}
 }
 @Composable internal fun SkinHeader(content:@Composable ()->Unit){
-    val rule=skinRule("header")
-    SkinRole("header"){Surface(shape=skinShape("header"),border=skinBorder("header"),color=MaterialTheme.colorScheme.background){Box(Modifier.fillMaxWidth().padding(rule.number("padding",0.0).dp)){content()}}}
+    val rule=skinRule("header");val banner=LocalAppSkin.current?.layers?.firstOrNull{it.target=="header" && it.placement=="banner"}
+    SkinRole("header"){Surface(shape=skinShape("header"),border=skinBorder("header"),color=MaterialTheme.colorScheme.background){Column{
+        Box(Modifier.fillMaxWidth()) {SkinImageCanvas("header",Modifier.matchParentSize(),background=MaterialTheme.colorScheme.background,foreground=MaterialTheme.colorScheme.onBackground);Box(Modifier.fillMaxWidth().padding(rule.number("padding",0.0).dp)){content()}}
+        if(banner!=null)SkinImageCanvas("header",Modifier.fillMaxWidth().height(banner.height.dp),banner=true)
+    }}}
 }
 @Composable internal fun SkinCard(onClick:()->Unit,modifier:Modifier=Modifier,content:@Composable ColumnScope.()->Unit){
     val rule=skinRule("cards")
-    SkinRole("cards"){Card(onClick=onClick,modifier=modifier,shape=skinShape("cards"),border=skinBorder("cards"),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface)){Column(Modifier.padding(rule.number("padding",16.0).dp),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)}}
+    SkinRole("cards"){Card(onClick=onClick,modifier=modifier,shape=skinShape("cards"),border=skinBorder("cards"),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface)){
+        Box{SkinImageCanvas("cards",Modifier.matchParentSize(),background=MaterialTheme.colorScheme.surface,foreground=MaterialTheme.colorScheme.onSurface);Column(Modifier.padding(rule.number("padding",16.0).dp),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)}
+    }}
 }
 @Composable private fun skinInputColors():TextFieldColors {
     val r=skinRule("inputs");val s=MaterialTheme.colorScheme;val fg=r.color("text",s.onSurface);val bg=r.color("background",s.surface);val border=if(r.containsKey("borderWidth"))Color.Transparent else r.color("border",s.outline)

@@ -44,4 +44,18 @@ class AppSkinTest {
             assertEquals(10,skin.components.getValue("cards")["padding"])
         }
     }
+    @Test fun embeddedImageSkinRoundTripsAndRejectsUnsafeLayers() {
+        val bytes=javaClass.classLoader!!.getResourceAsStream("illustrated/nebula.json")!!.use{it.readBytes()}
+        val skin=AppSkin.parse(bytes);assertEquals(4,skin.version);assertEquals(2,skin.images.size);assertEquals(3,skin.layers.size);assertEquals(skin,AppSkin.parse(skin.json().toByteArray()))
+        assertTrue(skin.images.getValue("nebula").credit.contains("Bryan Goff"));assertEquals(2240 to 375,skinImageSize(skin.images.getValue("nebula").bytes()))
+        fun rejects(key:String,value:Any){val o=JSONObject(String(bytes));o.getJSONArray("layers").getJSONObject(0).put(key,value);assertTrue("$key",runCatching{AppSkin.parse(o.toString().toByteArray())}.isFailure)}
+        rejects("image","missing");rejects("target","reader");rejects("fit","script");rejects("opacity",1.1);rejects("width",9000);rejects("offsetX",-999)
+        val o=JSONObject(String(bytes));o.getJSONObject("images").getJSONObject("nebula").put("data","https://example.com/image.jpg");assertTrue(runCatching{AppSkin.parse(o.toString().toByteArray())}.isFailure)
+        assertTrue(runCatching{AppSkin.parse(ByteArray(SKIN_MAX_BYTES+1))}.isFailure)
+    }
+    @Test fun decorationOpacityPreservesContrast() {
+        val alpha=safeSkinOpacity("#263b53","#e7edf5",1.0)
+        assertTrue(alpha>0 && alpha<1)
+        for(edge in listOf(0,255)){val bg="#"+listOf(0x26,0x3b,0x53).joinToString(""){"%02x".format(kotlin.math.round(it*(1-alpha)+edge*alpha).toInt())};assertTrue(AppSkin.contrast(bg,"#e7edf5")>=4.49)}
+    }
 }

@@ -5,6 +5,7 @@
 #include "readerfonts.h"
 #include <QBuffer>
 #include "appskin.h"
+#include "skinimagepaint.h"
 #include <QtTest>
 #include "bookview.h"
 #include <QTextBlock>
@@ -174,6 +175,21 @@ private slots:
         for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
     }
+    void portableImageSkinsValidateRenderAndReset() {
+        QFile file(":/skins/illustrated/nebula.json");QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();AppSkin skin,round;QString error;QVERIFY2(AppSkin::parse(bytes,skin,error),qPrintable(error));QCOMPARE(skin.version,4);QCOMPARE(skin.images.size(),2);QCOMPARE(skin.layers.size(),3);QVERIFY(AppSkin::parse(skin.json(),round,error));QCOMPARE(round.images,skin.images);QCOMPARE(round.layers,skin.layers);
+        const auto root=QJsonDocument::fromJson(bytes).object();
+        for(const auto &change:QList<QPair<QString,QJsonValue>>{{"image","missing"},{"target","reader"},{"fit","script"},{"opacity",1.1},{"width",9000},{"offsetX",-999}}){auto bad=root;auto layers=bad["layers"].toArray();auto layer=layers[0].toObject();layer[change.first]=change.second;layers[0]=layer;bad["layers"]=layers;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));}
+        auto bad=root;auto assets=bad["images"].toObject();auto a=assets["nebula"].toObject();a["data"]="https://example.com/image.jpg";assets["nebula"]=a;bad["images"]=assets;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));
+        const auto before=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(before.isValid())QSettings().setValue("appearance/skin",before);else QSettings().remove("appearance/skin");applyAppSkin();});
+        MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();QTest::qWait(30);const int base=window.m_headerBar->height();QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(60);QVERIFY(window.m_headerBar->height()>=base+90);const int height=window.m_headerBar->height();applyAppSkin();QTest::qWait(20);QCOMPARE(window.m_headerBar->height(),height);
+        window.m_searchInput->setText("layer click check");window.m_searchButton->disconnect(&window);QSignalSpy clicks(window.m_searchButton,&QPushButton::clicked);QTest::mouseClick(window.m_searchButton,Qt::LeftButton);QCOMPARE(clicks.count(),1);
+        SearchResult result;Work work;work.id="987654";work.title="Image-layer sample";work.author="Test author";work.summary="Text remains readable over decorative images.";result.works.append(work);result.totalResults=1;window.onSearchCompleted(result);QTest::qWait(50);
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))window.grab().save("/tmp/ao3-image-skin-main.png");
+        QImage canvas(360,180,QImage::Format_ARGB32_Premultiplied);canvas.fill(QColor("#263b53"));{QPainter painter(&canvas);drawSkinLayers(painter,skin,"cards",canvas.rect(),"#263b53","#e7edf5");}QVERIFY(canvas.pixelColor(300,130)!=QColor("#263b53"));if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))canvas.save("/tmp/ao3-image-skin-card.png");
+        const double alpha=safeSkinOpacity("#263b53","#e7edf5",1);QVERIFY(alpha>0 && alpha<1);
+        bool saved=false;QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),6);tabs->setCurrentIndex(5);auto *list=dialog->findChild<QComboBox *>("skinImageLayers");QVERIFY(list);QCOMPARE(list->count(),3);if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))dialog->grab().save("/tmp/ao3-image-skin-editor.png");auto *box=dialog->findChild<QDialogButtonBox *>();QVERIFY(box);QVERIFY(box->button(QDialogButtonBox::Save)->isEnabled());box->button(QDialogButtonBox::Save)->click();saved=true;});editAppSkin(&window);QVERIFY(saved);AppSkin exported;QVERIFY(customAppSkin(exported));QCOMPARE(exported.images,skin.images);QCOMPARE(exported.layers,skin.layers);
+        QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(30);QVERIFY(window.m_headerBar->height()<=base+5);
+    }
     void bundledCommunitySkinsLoadAndRender() {
         const auto previous=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(previous.isValid())QSettings().setValue("appearance/skin",previous);else QSettings().remove("appearance/skin");applyAppSkin();});
         for(const auto &name:QStringList{"tumblr-blue","charcoal-rose"}){
@@ -185,7 +201,7 @@ private slots:
     void componentSkinEditorPreviewsWithoutApplying() {
         const auto before=QSettings().value("appearance/skin");bool visited=false;
         QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});
-            auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),5);
+            auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),6);
             auto *background=dialog->findChild<QLineEdit *>("skin_buttons_background");auto *foreground=dialog->findChild<QLineEdit *>("skin_buttons_text");QVERIFY(background);QVERIFY(foreground);background->setText("#174a8b");foreground->setText("#ffffff");tabs->setCurrentIndex(1);
             auto *preview=dialog->findChild<QWidget *>("skinPreview");QVERIFY(preview);QVERIFY(preview->findChild<QPushButton *>()->palette().color(QPalette::Button)==QColor("#174a8b"));
             if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))dialog->grab().save("/tmp/ao3-skin-editor-v3.png");visited=true;dialog->reject();

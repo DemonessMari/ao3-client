@@ -97,7 +97,9 @@ class MainActivity : ComponentActivity() {
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
-    Scaffold(
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    SkinImageCanvas("window",Modifier.matchParentSize())
+    Scaffold(containerColor=Color.Transparent,
         topBar = { ClientTopBar(vm) },
         bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
             NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
@@ -127,6 +129,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 }
 @Composable private fun ClientTopBar(vm: ClientState) {
     val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
@@ -161,7 +164,7 @@ class MainActivity : ComponentActivity() {
     }
     SkinHeader {
     if(vm.screen in listOf("home","search","library","settings","account")) {
-        Surface(color=MaterialTheme.colorScheme.surface) {
+        Surface(color=Color.Transparent) {
             Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top+WindowInsetsSides.Horizontal)).heightIn(min=64.dp).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 navigation()
                 androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.icon),contentDescription=null,modifier=Modifier.size(width=44.dp,height=36.dp))
@@ -172,7 +175,7 @@ class MainActivity : ComponentActivity() {
     } else TopAppBar(title={Text(when(vm.screen) {
         "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
         "archiveList" -> vm.archiveList?.title.orEmpty(); "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
-    },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()})
+    },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent,scrolledContainerColor=Color.Transparent))
     }
 }
 

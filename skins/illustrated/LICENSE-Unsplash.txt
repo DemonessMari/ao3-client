@@ -1,0 +1,9 @@
+Orion Nebula photograph by Bryan Goff, published September 2, 2017.
+https://unsplash.com/photos/f7YQo-eYHdM
+License: https://unsplash.com/license
+
+Unsplash grants an irrevocable, nonexclusive, worldwide copyright license to download, copy, modify, distribute, perform, and use images from Unsplash for free, including commercial use. The license excludes compiling images to replicate a similar or competing service. Images may not be sold without significant modification.
+
+This header crop is distributed by intothisshadow in the Stargazer skin, which credits the photograph above:
+https://github.com/intothisshadow/AO3-SiteSkin_Stargazer/blob/main/images/header.jpg
+No Stargazer CSS code is included. The native component design derives from ZerafinaCSS neos (MIT).

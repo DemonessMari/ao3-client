@@ -14,6 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 
 fun AppSkin.colorScheme():ColorScheme {
     fun c(hex:String)=Color(android.graphics.Color.parseColor(hex))
@@ -26,8 +30,8 @@ fun AppSkin.colorScheme():ColorScheme {
 }
 @Composable private fun SkinEditor(vm:ClientState) {
     val context=LocalContext.current
+    val scope=rememberCoroutineScope()
     val initial=vm.appSkin?:AppSkin.preset(vm.preferences.theme)
-    var draft by rememberSaveable {mutableStateOf(initial.json())}
     // Keep invalid field edits visible while validating the complete draft.
     var name by rememberSaveable{mutableStateOf(initial.name)}
     var background by rememberSaveable{mutableStateOf(initial.background)}
@@ -39,23 +43,28 @@ fun AppSkin.colorScheme():ColorScheme {
     var cornerRadius by rememberSaveable{mutableStateOf(initial.cornerRadius.toFloat())}
     var componentJson by rememberSaveable{mutableStateOf(org.json.JSONObject(initial.components.mapValues{org.json.JSONObject(it.value)}).toString())}
     var componentRole by rememberSaveable{mutableStateOf("buttons")}
-    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent;uiScale=s.uiScale.toFloat();cornerRadius=s.cornerRadius.toFloat();componentJson=org.json.JSONObject(s.components.mapValues{org.json.JSONObject(it.value)}).toString()}
+    fun fill(s:AppSkin){name=s.name;background=s.background;surface=s.surface;text=s.text;accent=s.accent;onAccent=s.onAccent;uiScale=s.uiScale.toFloat();cornerRadius=s.cornerRadius.toFloat();componentJson=org.json.JSONObject(s.components.mapValues{org.json.JSONObject(it.value)}).toString();vm.draftSkinImages=s.images;vm.draftSkinLayers=s.layers}
     val source=org.json.JSONObject(componentJson)
     val components=source.keys().asSequence().associateWith{role->val r=source.getJSONObject(role);r.keys().asSequence().associateWith{r.get(it)}}
-    val candidate=AppSkin(name,background,surface,text,accent,onAccent,uiScale.toDouble(),cornerRadius.toInt(),3,components)
-    val parsed=runCatching{AppSkin.parse(candidate.json().toByteArray())}
-    val valid=parsed.getOrNull()
-    var previewJson by rememberSaveable{mutableStateOf(initial.json())}
-    if(valid!=null)SideEffect{previewJson=valid.json()}
-    val preview=valid?:runCatching{AppSkin.parse(previewJson.toByteArray())}.getOrDefault(initial)
-    val import=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->if(uri!=null)try{val bytes=context.contentResolver.openInputStream(uri)?.use{val buffer=ByteArray(16385);var count=0;while(count<buffer.size){val n=it.read(buffer,count,buffer.size-count);if(n<0)break;if(n==0)break;count+=n};buffer.copyOf(count)}?:error("Cannot read the file.");fill(AppSkin.parse(bytes))}catch(e:Exception){vm.error=e.message}}
-    val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->if(uri!=null)try{context.contentResolver.openOutputStream(uri)?.use{it.write(draft.toByteArray())}?:error("Cannot save the file.")}catch(e:Exception){vm.error=e.message}}
+    val candidate=AppSkin(name,background,surface,text,accent,onAccent,uiScale.toDouble(),cornerRadius.toInt(),if(vm.draftSkinImages.isEmpty() && vm.draftSkinLayers.isEmpty())3 else 4,components,vm.draftSkinImages,vm.draftSkinLayers)
+    val parsed=runCatching{AppSkin.parse(candidate.copy(version=3,images=emptyMap(),layers=emptyList()).json().toByteArray())}
+    val valid=parsed.getOrNull()?.copy(version=candidate.version,images=candidate.images,layers=candidate.layers)
+    var lastPreview by remember{mutableStateOf(initial)}
+    if(valid!=null)SideEffect{lastPreview=valid}
+    val preview=valid ?: lastPreview
+    val import=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->if(uri!=null)scope.launch{try{
+        val skin=withContext(Dispatchers.IO){val bytes=context.contentResolver.openInputStream(uri)?.use{val buffer=ByteArray(SKIN_MAX_BYTES+1);var count=0;while(count<buffer.size){val n=it.read(buffer,count,buffer.size-count);if(n<=0)break;count+=n};buffer.copyOf(count)} ?: error("Cannot read the file.");AppSkin.parse(bytes)};fill(skin)
+    }catch(e:CancellationException){throw e}catch(e:Exception){vm.error=e.message}}}
+    val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->if(uri!=null)scope.launch{try{
+        val pending=vm.pendingSkinExport;require(pending.isNotEmpty()){ "Export expired. Please try again." }
+        withContext(Dispatchers.IO){context.contentResolver.openOutputStream(uri)?.use{it.write(pending.toByteArray())} ?: error("Cannot save the file.")};if(vm.pendingSkinExport==pending)vm.pendingSkinExport=""
+    }catch(e:CancellationException){throw e}catch(e:Exception){vm.error=e.message}}}
     Column(Modifier.fillMaxSize()) {
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){listOf("light" to "Light","dark" to "Dark","sepia" to "Sepia").forEach{(key,label)->SkinOutlinedButton(onClick={fill(AppSkin.preset(key))}){Text(label)}}}
         Text("neos · ZerafinaCSS · MIT",style=MaterialTheme.typography.bodySmall)
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            listOf("tumblr-blue" to "Neos Blue","charcoal-rose" to "Neos Rose").forEach{(file,title)->SkinOutlinedButton(onClick={try{fill(context.assets.open("neos/$file.json").use{AppSkin.parse(it.readBytes())})}catch(e:Exception){vm.error=e.message}}){Text(title)}}
+            listOf("neos/tumblr-blue" to "Neos Blue","neos/charcoal-rose" to "Neos Rose","illustrated/nebula" to "Neos Nebula").forEach{(file,title)->SkinOutlinedButton(onClick={try{fill(context.assets.open("$file.json").use{AppSkin.parse(it.readBytes())})}catch(e:Exception){vm.error=e.message}}){Text(title)}}
         }
         SkinOutlinedTextField(name,{name=it.take(60)},Modifier.fillMaxWidth(),label={Text("Name")},singleLine=true)
         listOf(Triple("Background",background,{v:String->background=v}),Triple("Surface",surface,{v:String->surface=v}),Triple("Text",text,{v:String->text=v}),Triple("Accent",accent,{v:String->accent=v}),Triple("Text on accent",onAccent,{v:String->onAccent=v})).forEach{(label,value,set)->SkinOutlinedTextField(value,{set(it.take(7))},Modifier.fillMaxWidth(),label={Text(label)},singleLine=true)}
@@ -83,11 +92,12 @@ fun AppSkin.colorScheme():ColorScheme {
                 HorizontalDivider()
             }
         }
+        SkinImageControls(vm)
         val density=androidx.compose.ui.platform.LocalDensity.current
         CompositionLocalProvider(LocalAppSkin provides preview, LocalSkinRadius provides preview.cornerRadius,androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density*(preview.uiScale/(vm.appSkin?.uiScale ?: 1.0)).toFloat(),density.fontScale)) {MaterialTheme(colorScheme=preview.colorScheme(),shapes=preview.shapes()) {Surface(color=MaterialTheme.colorScheme.background,modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){SkinHeader{Text("Archive of Our Own",Modifier.padding(8.dp),style=MaterialTheme.typography.titleLarge)};SkinCard(onClick={}){Text("Chapter title");Text("A preview of your reading text.")};SkinOutlinedTextField("Search preview",{},Modifier.fillMaxWidth(),singleLine=true);SkinButton(onClick={}){Text("Button")}}}}}
         if(valid==null)Text(parsed.exceptionOrNull()?.message.orEmpty(),color=MaterialTheme.colorScheme.error)
 
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){SkinOutlinedButton(onClick={import.launch(arrayOf("application/json","text/plain","application/octet-stream"))}){Text("Import")};SkinOutlinedButton(onClick={if(valid!=null){draft=valid.json();export.launch("ao3-skin.json")}},enabled=valid!=null){Text("Export")};SkinTextButton(onClick={fill(AppSkin.preset(vm.preferences.theme));vm.applySkin(null);vm.notice="App skin reset."}){Text("Reset")}}
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){SkinOutlinedButton(onClick={import.launch(arrayOf("application/json","text/plain","application/octet-stream"))}){Text("Import")};SkinOutlinedButton(onClick={if(valid!=null){vm.pendingSkinExport=valid.json();export.launch("ao3-skin.json")}},enabled=valid!=null){Text("Export")};SkinTextButton(onClick={fill(AppSkin.preset(vm.preferences.theme));vm.applySkin(null);vm.notice="App skin reset."}){Text("Reset")}}
     }
     Surface(tonalElevation=2.dp){SkinButton(onClick={if(valid!=null){vm.applySkin(valid);vm.notice="App skin applied."}},enabled=valid!=null,modifier=Modifier.fillMaxWidth().padding(16.dp)){Text("Apply skin")}}
     }

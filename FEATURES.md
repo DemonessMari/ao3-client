@@ -1,6 +1,6 @@
 # Feature coverage
 
-3.2.0-rc.18 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
+3.2.0-rc.19 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |
@@ -11,7 +11,7 @@
 | Comments | Reading, paging, posting, replies, editing, deletion, offered moderation/freezing controls and paginated inbox with individual and bulk read/unread/delete | Role-specific tools |
 | Series and collections | Full series listings, memberships and previous/next visible work navigation from work details and the reader | Related works, gifts, collections and challenges |
 | Account | Avatar account menu, sign-in, persistent native session, sign-out, verified website-session handoff; paginated AO3 Reading History and Marked for Later lists with activity and deleted-work entries | Preferences, profile/pseuds, mute/block, invitations and account management |
-| Appearance | Reader theme/font/spacing/margins/alignment controls; local TrueType/OpenType font importing for reading and native interface text; optional system theme; native app-skin editor, preview and shared JSON import/export with interface scale and independent button, input, card and header colors, borders, spacing, corners and text scale; credited native neos adaptations | Official site/work skin browsing, selection and editing |
+| Appearance | Reader theme/font/spacing/margins/alignment controls; local TrueType/OpenType font importing for reading and native interface text; optional system theme; native app-skin editor, preview and shared JSON import/export with interface scale and independent button, input, card and header colors, borders, spacing, corners and text scale; credited native neos adaptations; portable embedded images, background/overlay layers, header banners, placement and opacity controls | Official site/work skin browsing, selection and editing |
 | Creating works | — | Drafts, preview/post/edit/import, chapters, series, co-creators and permitted participant tools |
 | Help and policies | Privacy/security/license documents | AO3 help, news, support and abuse forms |
 
