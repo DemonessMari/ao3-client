@@ -1,3 +1,4 @@
+#include "discoverysearch.h"
 #include "profileavatar.h"
 #include <memory>
 #include "ao3client.h"
@@ -270,6 +271,18 @@ void AO3Client::search(const QString &query, int page, const SearchFilters &filt
     });
 }
 
+void AO3Client::searchDiscovery(const QString &kind,const QMap<QString,QString> &values,int page)
+{
+    const auto url=DiscoverySearch::url(kind,values,page);if(url.isEmpty())return;
+    page=qBound(1,page,1000000);const auto revision=++m_listingGeneration;const auto auth=m_authGeneration;
+    auto *reply=m_manager->get(makeRequest(url));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,kind,page,revision,auth]{
+        reply->deleteLater();if(revision!=m_listingGeneration || auth!=m_authGeneration)return;
+        ArchivePage result;if(ao3RequestFailed(reply))result.error=ao3NetworkError(reply);else result=DiscoverySearch::parse(QString::fromUtf8(reply->readAll()),kind,page);
+        emit archivePageFetched("search:"+kind,{},result);
+    });
+}
+
 void AO3Client::fetchWorkSeries(const QString &workId)
 {
     if(!QRegularExpression("^[0-9]+$").match(workId).hasMatch())return;
@@ -384,10 +397,11 @@ void AO3Client::fetchArchivePage(const QString &kind,const QString &id,int page)
 }
 void AO3Client::performArchiveAction(const QString &kind,const QString &id,int page,const QString &entry,const QString &label,const QStringList &selection)
 {
-    if(!QStringList{"subscriptions","inbox"}.contains(kind) || !m_loginManager->isLoggedIn())return;
+    if(!QStringList{"subscriptions","inbox","history"}.contains(kind) || !m_loginManager->isLoggedIn())return;
+    if(kind=="history" && label=="Clear history")page=1;
     const auto user=m_loginManager->username();const auto route=ArchivePages::route(kind,user,id);if(route.isEmpty())return;
-    const auto key=kind+":"+entry;if(m_listMutations.contains(key))return;m_listMutations.insert(key);const auto auth=m_authGeneration;
-    const QUrl source("https://archiveofourown.org"+route+"?page="+QString::number(qBound(1,page,1000000)));
+    const auto key=kind=="history"?kind:kind+":"+entry;if(m_listMutations.contains(key))return;m_listMutations.insert(key);const auto auth=m_authGeneration;
+    const QUrl source("https://archiveofourown.org"+route+(kind=="history" && label=="Clear history"?"/confirm_clear":"?page="+QString::number(qBound(1,page,1000000))));
     auto *fresh=m_manager->get(makeRequest(source));
     connect(fresh,&QNetworkReply::finished,this,[this,fresh,source,kind,id,page,entry,label,user,key,auth,selection]{
         fresh->deleteLater();if(auth!=m_authGeneration){m_listMutations.remove(key);return;}
@@ -404,7 +418,7 @@ void AO3Client::performArchiveAction(const QString &kind,const QString &id,int p
         auto *posted=m_manager->post(request,data);
         connect(posted,&QNetworkReply::finished,this,[this,posted,kind,id,page,entry,label,user,key,auth,selection]{
             posted->deleteLater();m_listMutations.remove(key);if(auth!=m_authGeneration)return;
-            ArchivePage out;bool confirmed=false;if(!ao3RequestFailed(posted)){out=ArchivePages::parse(QString::fromUtf8(posted->readAll()),kind,user,id,page);if(out.error.isEmpty()){const ArchiveEntry *found=nullptr;for(const auto &e:out.entries)if(e.id==entry){found=&e;break;}confirmed=(label=="Unsubscribe" || label=="Delete from inbox")?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}}
+            ArchivePage out;bool confirmed=false;if(!ao3RequestFailed(posted)){out=ArchivePages::parse(QString::fromUtf8(posted->readAll()),kind,user,id,page);if(out.error.isEmpty()){const ArchiveEntry *found=nullptr;for(const auto &e:out.entries)if(e.id==entry){found=&e;break;}confirmed=label=="Clear history"?out.entries.isEmpty():(label=="Unsubscribe" || label=="Delete from inbox" || label=="Delete from history")?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}}
             if(confirmed && !selection.isEmpty())for(const auto &selected:selection){const ArchiveEntry *found=nullptr;for(const auto &item:out.entries)if(item.id==selected){found=&item;break;}confirmed &= label=="Delete from inbox"?!found:label=="Mark read"?found && !found->unread:label=="Mark unread" && found && found->unread;}
             if(confirmed){emit archivePageFetched(kind,id,out);emit archiveActionFinished("Change confirmed by AO3.",false);}else emit archiveActionFinished("Could not confirm the change. Refresh the AO3 list before trying again.",true);
         });

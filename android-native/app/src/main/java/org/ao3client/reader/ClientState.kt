@@ -396,12 +396,23 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     internal var archiveId="";private set
     var archiveReturn="home";private set
     var archiveUncertain by mutableStateOf(false);private set
+    internal var discoveryDraft by mutableStateOf<Map<String,Map<String,String>>>(emptyMap())
+    private var discoveryApplied=emptyMap<String,Map<String,String>>()
+    internal var discoveryEditing by mutableStateOf(true)
+    internal fun startDiscovery(kind:String){discoveryEditing=true;showArchiveList("search:$kind",page=0)}
+    internal fun submitDiscovery(){val kind=archiveKind.removePrefix("search:");discoveryApplied=discoveryApplied+(kind to discoveryDraft[kind].orEmpty());discoveryEditing=false;archiveList=null;showArchiveList(archiveKind)}
     fun showArchiveList(kind:String,id:String="",page:Int=1) {
-        if(kind!="series" && username==null){navigate("login");return}
+        if(kind!="series" && !kind.startsWith("search:") && username==null){navigate("login");return}
         if(screen!="archiveList"){archiveReturn=screen;archiveList=null;archiveTrail.clear();archiveOrigin=selected?.let{SeriesOrigin(it,chapters,chapter,translation,if(detailsReturn=="archiveList") "home" else detailsReturn,readerReturn)}}
         if(screen=="reader")saveProgress()
         archiveKind=kind;archiveId=id;archiveUncertain=false;navigate("archiveList")
         val user=username.orEmpty()
+        if(kind.startsWith("search:")) {
+            val mode=kind.removePrefix("search:")
+            if(page==0){archiveList=ArchivePage(DiscoverySearch.title(mode),emptyList(),0,1);return}
+            val values=discoveryApplied[mode].orEmpty()
+            load {archiveList=withContext(Dispatchers.IO){archive.discovery(mode,values,page)}};return
+        }
         load {val result=withContext(Dispatchers.IO){archive.archivePage(kind,user,id,page)};if(kind=="series" || username==user)archiveList=result}
         if(kind=="series")subscriptionState("Series",id)
     }
@@ -420,6 +431,13 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     }
     fun openArchiveEntry(target:String) {
         when {
+            target.startsWith("/works/search?")->{
+                val uri=android.net.Uri.parse(target)
+                for(field in listOf("fandom_names","character_names","relationship_names","freeform_names")) {
+                    val tag=uri.getQueryParameter("work_search[$field]")
+                    if(!tag.isNullOrBlank()){query="";filters=mapOf(field to listOf(tag));search();break}
+                }
+            }
             target.matches(Regex("/works/[0-9]+"))->openListedWork(target.substringAfterLast('/'))
             target.matches(Regex("/series/[0-9]+"))->{archiveList?.let{archiveTrail+=Triple(archiveKind,archiveId,it.page)};showArchiveList("series",target.substringAfterLast('/'))}
             target.startsWith("/users/")->showProfile(target)

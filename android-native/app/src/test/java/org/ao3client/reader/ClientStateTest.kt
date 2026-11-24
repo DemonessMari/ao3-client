@@ -21,6 +21,26 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun publicDiscoveryKeepsAppliedOptionsWhenPagingAndDraftsWhenSwitching() {
+        val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
+        val app=TestApp(directory.newFolder(),MemoryPreferences())
+        val vm=ClientState(app,false,{prefs->Archive(prefs,connectionFactory={url->
+            calls+=url.file
+            val html=javaClass.classLoader!!.getResource("discovery-${url.path.split('/')[1]}.html")!!.readText()
+            object:java.net.HttpURLConnection(url){
+                override fun connect(){};override fun disconnect(){};override fun usingProxy()=false
+                override fun getResponseCode()=200
+                override fun getInputStream()=java.io.ByteArrayInputStream(html.toByteArray())
+                override fun getHeaderFields():Map<String,List<String>> = emptyMap()
+            }
+        })}).also{models+=it}
+        vm.navigate("search");vm.startDiscovery("people");assertEquals("archiveList",vm.screen);assertEquals(0,vm.archiveList!!.page);assertTrue(calls.isEmpty())
+        vm.discoveryDraft=mapOf("people" to mapOf("name" to "Writer"));vm.submitDiscovery();awaitLoaded(vm)
+        assertNull(vm.error);assertEquals(1,vm.archiveList!!.entries.size)
+        vm.discoveryDraft=mapOf("people" to mapOf("name" to "Unsubmitted"));vm.showArchiveList("search:people",page=2);awaitLoaded(vm)
+        val request=java.net.URLDecoder.decode(calls.last(),"UTF-8");assertTrue(request.contains("people_search[name]=Writer"));assertTrue(request.contains("page=2"));assertFalse(request.contains("Unsubmitted"))
+        vm.navigate(vm.archiveReturn);assertEquals("search",vm.screen);vm.startDiscovery("tags");assertEquals("Unsubmitted",vm.discoveryDraft["people"]!!["name"]);assertEquals(0,vm.archiveList!!.page)
+    }
     @Test fun backupProvidersOpenOffTheUiThreadAndCloseAfterRoundTrip() {
         val root=directory.newFolder();val prefs=MemoryPreferences();val fic=Fic("654321","Backup round trip","Writer");val chapters=listOf(Chapter("One","Saved offline text 世界"))
         ReadingLibrary(File(root,"reading-library")).saveOffline(fic,chapters)

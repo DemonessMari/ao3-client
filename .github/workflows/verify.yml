@@ -1,5 +1,9 @@
 name: Verify clients
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -39,6 +43,11 @@ jobs:
           cache-dependency-path: |
             android-native/**/*.gradle*
             android-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ runner.os }}-robolectric-api34-v1
+      - run: ./scripts/prepare-android-tests.sh
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools

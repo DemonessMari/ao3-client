@@ -12,16 +12,27 @@ private fun Element.trusted()=(listOf(this)+parents()).none{it.hasClass("userstu
 private fun entryTarget(root:Element):String=root.select("a[href]").firstOrNull {it.trusted() && ao3Path(it.attr("href"))?.matches(Regex("/(?:works/[0-9]+(?:/chapters/[0-9]+)?|series/[0-9]+|users/[A-Za-z0-9_]+(?:/pseuds/[^/]+)?)"))==true}?.let{ao3Path(it.attr("href"))}.orEmpty()
 internal fun archivePageRoute(kind:String,user:String,id:String=""):String {
     require(user.isEmpty() || user.matches(Regex("[A-Za-z0-9_]+")))
-    return when(kind){"series"->{require(id.matches(Regex("[0-9]+")));"/series/$id"};"bookmarks","subscriptions","inbox"->{require(user.isNotBlank());"/users/$user/$kind"};else->error("Unknown AO3 list.")}
+    return when(kind){"history"->{require(user.isNotBlank());"/users/$user/readings"};"series"->{require(id.matches(Regex("[0-9]+")));"/series/$id"};"bookmarks","subscriptions","inbox"->{require(user.isNotBlank());"/users/$user/$kind"};else->error("Unknown AO3 list.")}
 }
 internal fun parseArchivePage(html:String,kind:String,user:String,id:String,page:Int):ArchivePage {
     require(html.length<=8*1024*1024){"AO3 page is too large."}
     if(kind!="series")require(ArchiveParser.sessionIdentity(html)==user){"AO3 could not verify this account. Check native sign-in."}
     val doc=Jsoup.parse(html)
-    val marker=when(kind){"series"->"series-show";"bookmarks"->"bookmarks-index";"subscriptions"->"subscriptions-index";"inbox"->"inbox-show";else->error("Unknown AO3 list.")}
+    val marker=when(kind){"series"->"series-show";"bookmarks"->"bookmarks-index";"subscriptions"->"subscriptions-index";"inbox"->"inbox-show";"history"->"readings-index";else->error("Unknown AO3 list.")}
     val main=doc.select("#main.$marker").firstOrNull{it.trusted()} ?: error("AO3 did not return this list. Open it on AO3 to check availability.")
+    if(kind=="history")require(doc.select(".error").none{it.trusted()}){"AO3 reported an error while updating reading history."}
     val title=main.selectFirst("h2.heading")?.text().orEmpty().ifBlank{kind.replaceFirstChar{it.uppercase()}}
     val entries=when(kind){
+        "history"->main.select("ol.reading.work > li.reading.work").filter{it.trusted()}.mapIndexed{index,item->
+            val heading=item.select("h4.heading").firstOrNull{it.trusted()}
+            val form=item.select("form").firstOrNull{f->
+                val key=ao3Path(f.attr("action"))?.let{Regex("/users/"+Regex.escape(user)+"/readings/([0-9]+)").matchEntire(it)?.groupValues?.get(1)}
+                val fields=f.select("input[type=hidden][name]:not([disabled])").filter{it.trusted()}.associate{it.attr("name") to it.attr("value")}
+                f.trusted() && f.attr("method").equals("post",true) && key!=null && fields["reading"]==key && fields["_method"]=="delete" && !fields["authenticity_token"].isNullOrBlank()
+            }
+            val key=form?.let{ao3Path(it.attr("action"))?.substringAfterLast('/')}
+            ArchiveEntry(key ?: "unavailable-$index",heading?.text().orEmpty().ifBlank{"Unavailable work"},item.select("h4.viewed").firstOrNull{it.trusted()}?.text().orEmpty(),heading?.let(::entryTarget).orEmpty(),if(key!=null)listOf("Delete from history") else emptyList())
+        }
         "series","bookmarks"->main.select(if(kind=="series")"ul.series.work > li.work" else "ol.bookmark > li.bookmark").filter{it.trusted()}.mapIndexed{index,item->
             val heading=item.selectFirst("h4.heading")
             val clean=item.clone();clean.select("form, ul.actions").remove()
@@ -44,21 +55,31 @@ internal fun parseArchivePage(html:String,kind:String,user:String,id:String,page
     return ArchivePage(title,entries,current,pages,if(kind=="series")main.select("dl.series.meta").joinToString("\n\n"){it.wholeText().trim()} else "")
 }
 internal fun pageAction(html:String,kind:String,user:String,id:String,page:Int,entryId:String,action:String):PageAction {
+    require(html.length<=8*1024*1024){"AO3 page is too large."}
+    if(kind=="history" && action=="Clear history") {
+        require(ArchiveParser.sessionIdentity(html)==user){"AO3 could not verify this account."}
+        val path="/users/$user/readings/clear"
+        val form=Jsoup.parse(html).select("form").firstOrNull{it.trusted() && ao3Path(it.attr("action"))==path && it.attr("method").equals("post",true)} ?: error("AO3 did not return a history-clearing form.")
+        val fields=form.select("input[type=hidden][name]:not([disabled])").filter{it.trusted()}.associate{it.attr("name") to it.attr("value")}
+        val token=fields["authenticity_token"];require(!token.isNullOrBlank() && "_method" !in fields)
+        return PageAction(path,mapOf("authenticity_token" to token))
+    }
     val parsed=parseArchivePage(html,kind,user,id,page)
     val entry=parsed.entries.singleOrNull{it.id==entryId} ?: error("This entry changed. Refresh the list.")
     require(action in entry.actions){"This action is unavailable."}
     val main=Jsoup.parse(html).selectFirst("#main")!!
-    if(kind=="subscriptions") {
-        val path="/users/$user/subscriptions/$entryId"
+    if(kind=="subscriptions" || kind=="history") {
+        val path="/users/$user/${if(kind=="history")"readings" else "subscriptions"}/$entryId"
         val form=main.select("form").firstOrNull{it.trusted() && ao3Path(it.attr("action"))==path && it.attr("method").equals("post",true)} ?: error("Subscription form unavailable.")
-        val fields=form.select("input[type=hidden][name]:not([disabled])").filter{it.trusted() && it.attr("name") in setOf("authenticity_token","_method")}.associate{it.attr("name") to it.attr("value")}
+        val fields=form.select("input[type=hidden][name]:not([disabled])").filter{it.trusted() && it.attr("name") in (if(kind=="history")setOf("authenticity_token","_method","reading") else setOf("authenticity_token","_method"))}.associate{it.attr("name") to it.attr("value")}
         require(fields["_method"]=="delete" && !fields["authenticity_token"].isNullOrBlank())
-        return PageAction(path,fields)
+        if(kind=="history")require(fields["reading"]==entryId)
+        return PageAction(if(kind=="history")"$path?page=$page" else path,fields)
     }
     require(kind=="inbox")
     val form=main.selectFirst("form#inbox-form") ?: error("Inbox form unavailable.")
     val path=ao3Path(form.attr("action"));require(path=="/users/$user/inbox" && form.attr("method").equals("post",true))
-    val fields=form.select("input[type=hidden][name]:not([disabled])").filter{it.trusted() && it.attr("name") in setOf("authenticity_token","_method")}.associate{it.attr("name") to it.attr("value")}.toMutableMap()
+    val fields=form.select("input[type=hidden][name]:not([disabled])").filter{it.trusted() && it.attr("name") in (if(kind=="history")setOf("authenticity_token","_method","reading") else setOf("authenticity_token","_method"))}.associate{it.attr("name") to it.attr("value")}.toMutableMap()
     require(fields["_method"]=="put" && !fields["authenticity_token"].isNullOrBlank())
     val key=when(action){"Mark read"->"read";"Mark unread"->"unread";else->"delete"}
     val button=form.select("input[type=submit][name]:not([disabled]), button[name]:not([disabled])").firstOrNull{it.trusted() && it.attr("name")==key} ?: error("Inbox action unavailable.")

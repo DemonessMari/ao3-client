@@ -1,3 +1,4 @@
+#include "discoverysearch.h"
 #include <QTabWidget>
 #include "readerspeech.h"
 #include "accountreadings.h"
@@ -98,6 +99,38 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void historyMutationsValidateOwnedRecordIdsAndConfirmationForms() {
+        auto fixture=[](const QString &name){QFile f(QString(AO3_FIXTURE_DIR)+"/"+name+".html");if(!f.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(f.readAll());};
+        const auto html=fixture("archive-history");const auto list=ArchivePages::parse(html,"history","Writer",{},1);QVERIFY(list.error.isEmpty());QCOMPARE(list.entries.size(),2);QCOMPARE(list.entries[0].id,QString("81"));QCOMPARE(list.entries[1].id,QString("82"));QCOMPARE(list.entries[0].target,QString("/works/123"));QVERIFY(list.entries[1].target.isEmpty());
+        const auto action=ArchivePages::action(html,"history","Writer",{},1,"81","Delete from history");QVERIFY(action.error.isEmpty());QCOMPARE(QUrl(action.path).path(),QString("/users/Writer/readings/81"));QCOMPARE(action.fields.value("reading"),QString("81"));QCOMPARE(action.fields.value("authenticity_token"),QString("history+token"));
+        QVERIFY(!ArchivePages::action(html,"history","Other",{},1,"81","Delete from history").error.isEmpty());QVERIFY(!ArchivePages::action(html,"history","Writer",{},1,"999","Delete from history").error.isEmpty());
+        const auto confirm=fixture("history-clear");const auto clear=ArchivePages::action(confirm,"history","Writer",{},1,{},"Clear history");QVERIFY(clear.error.isEmpty());QCOMPARE(clear.path,QString("/users/Writer/readings/clear"));QCOMPARE(clear.fields.size(),1);QCOMPARE(clear.fields.value("authenticity_token"),QString("clear+token"));
+        QVERIFY(!ArchivePages::action(QString(confirm).replace("action=\"/users/Writer","action=\"https://evil.example/users/Writer"),"history","Writer",{},1,{},"Clear history").error.isEmpty());
+        QVERIFY(!ArchivePages::action("<blockquote class='userstuff'>"+confirm+"</blockquote>","history","Writer",{},1,{},"Clear history").error.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});
+        const QByteArray empty="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav><div id='main' class='readings-index'><h2 class='heading'>History</h2></div>";
+        network->requests.clear();network->operations.clear();network->bodies.clear();network->pages={html.toUtf8(),empty};QSignalSpy finished(window.m_client,&AO3Client::archiveActionFinished);
+        window.m_client->performArchiveAction("history",{},1,"81","Delete from history");QTRY_COMPARE(finished.size(),1);QVERIFY(!finished.last()[1].toBool());QCOMPARE(network->operations,QList<QNetworkAccessManager::Operation>({QNetworkAccessManager::GetOperation,QNetworkAccessManager::PostOperation}));QVERIFY(network->bodies.last().contains("reading=81"));
+        network->pages={confirm.toUtf8(),empty};window.m_client->performArchiveAction("history",{},3,{},"Clear history");QTRY_COMPARE(finished.size(),2);QVERIFY(!finished.last()[1].toBool());QCOMPARE(network->requests[2].path(),QString("/users/Writer/readings/confirm_clear"));QCOMPARE(network->requests[3].path(),QString("/users/Writer/readings/clear"));QCOMPARE(network->bodies.last(),QByteArray("authenticity_token=clear%2Btoken"));
+        network->pages={html.toUtf8(),QByteArray("<h1>Unavailable</h1>")};window.m_client->performArchiveAction("history",{},1,"81","Delete from history");QTRY_COMPARE(finished.size(),3);QVERIFY(finished.last()[1].toBool());QCOMPARE(network->requests.size(),6);
+    }
+
+    void discoverySearchKeepsNotesTypesAndSafeTargets() {
+        const auto fixture=[](const QString &kind){QFile f(QString(AO3_FIXTURE_DIR)+"/discovery-"+kind+".html");if(!f.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(f.readAll());};
+        const auto people=DiscoverySearch::parse(fixture("people"),"people",1);QVERIFY(people.error.isEmpty());QCOMPARE(people.entries.size(),1);QCOMPARE(people.entries.first().target,QString("/users/Writer/pseuds/Storyteller"));QCOMPARE(people.pages,3);
+        const auto tags=DiscoverySearch::parse(fixture("tags"),"tags",1);QVERIFY(tags.error.isEmpty());QCOMPARE(QUrlQuery(QUrl(tags.entries.first().target)).queryItemValue("work_search[freeform_names]"),QString("Friends & Family"));QVERIFY(tags.entries[1].target.isEmpty());QCOMPARE(tags.pages,2);
+        const auto bookmarks=DiscoverySearch::parse(fixture("bookmarks"),"bookmarks",1);QVERIFY(bookmarks.error.isEmpty());QCOMPARE(bookmarks.entries.size(),5);QCOMPARE(bookmarks.entries[0].target,bookmarks.entries[1].target);QVERIFY(bookmarks.entries[0].body.contains("First reader’s notes."));QVERIFY(bookmarks.entries[1].body.contains("Different notes."));QCOMPARE(bookmarks.entries[2].target,QString("/series/20"));QCOMPARE(bookmarks.entries[3].target,QString("/bookmarks/44"));QCOMPARE(bookmarks.pages,4);
+        const QUrlQuery query(DiscoverySearch::url("bookmarks",{{"bookmark_query","a & b/+"},{"show_private","1"}},2));QCOMPARE(query.queryItemValue("bookmark_search[bookmark_query]"),QString("a & b/+"));QVERIFY(!query.hasQueryItem("bookmark_search[show_private]"));QVERIFY(query.hasQueryItem("bookmark_search[bookmarkable_query]"));
+        QVERIFY(!DiscoverySearch::parse("Service unavailable","people",1).error.isEmpty());QVERIFY(!DiscoverySearch::parse("<blockquote class='userstuff'>"+fixture("people")+"</blockquote>","people",1).error.isEmpty());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);network->page=fixture("people").toUtf8();
+        window.showArchiveList("search:people",{},0);QVERIFY(window.m_listsData.page==0);auto *name=window.m_listsPage->findChild<QLineEdit *>("discovery_name");QVERIFY(name);
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_DISCOVERY")){window.resize(1100,800);window.show();QTest::qWait(50);window.grab().save("/tmp/ao3-discovery-form.png");}
+        name->setText("Writer");auto *submit=window.m_listsPage->findChild<QPushButton *>("discoverySearch");QVERIFY(submit);submit->click();QTRY_COMPARE(window.m_listsData.entries.size(),1);QCOMPARE(window.m_listsData.pages,3);
+        const auto request=network->requests.last();QCOMPARE(request.path(),QString("/people/search"));QCOMPARE(QUrlQuery(request).queryItemValue("people_search[name]"),QString("Writer"));
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_DISCOVERY")){QTest::qWait(50);window.grab().save("/tmp/ao3-discovery-results.png");}
+        window.openArchiveTarget(tags.entries.first().target);QCOMPARE(network->requests.last().path(),QString("/works/search"));QCOMPARE(QUrlQuery(network->requests.last()).queryItemValue("work_search[freeform_names]"),QString("Friends & Family"));
+    }
+
     void commentManagementUsesFreshPermissionForms() {
         QFile file(QStringLiteral(AO3_FIXTURE_DIR "/comment-managed.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
         const auto controls=commentControls(ArchivePages::Document(html),"55");QVERIFY(controls.contains("Edit"));QVERIFY(controls.contains("Delete"));QCOMPARE(controls.value("Freeze thread").fields.value("authenticity_token"),QString("freeze+token"));

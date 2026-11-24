@@ -1,3 +1,6 @@
+#include <QUuid>
+#include "taglineedit.h"
+#include "discoverysearch.h"
 #include "mainwindow.h"
 #include "accountbutton.h"
 #ifdef AO3_WEBENGINE
@@ -493,6 +496,13 @@ void MainWindow::setupUI()
     }
 
 
+    auto *searchModes=new QWidget(searchView);auto *modes=new QHBoxLayout(searchModes);modes->setContentsMargins(16,8,16,8);
+    modes->addWidget(new QLabel("Search:",searchModes));
+    for(const auto &mode:QVector<QPair<QString,QString>>{{"Works",""},{"People","people"},{"Tags","tags"},{"Bookmarks","bookmarks"}}) {
+        auto *button=new QPushButton(mode.first,searchModes);button->setObjectName("searchMode_"+mode.second);modes->addWidget(button);
+        connect(button,&QPushButton::clicked,this,[this,mode]{if(mode.second.isEmpty()){m_searchInput->setFocus();return;}m_discoveryEditing=true;m_listsFilter.clear();showArchiveList("search:"+mode.second,{},0);});
+    }
+    modes->addStretch();searchViewLayout->addWidget(searchModes);
     m_searchSplitter = new QSplitter(Qt::Horizontal, searchView);
     m_searchSplitter->setHandleWidth(1);
     m_searchSplitter->setStyleSheet(QStringLiteral("QSplitter::handle { background: palette(mid); }"));
@@ -853,7 +863,7 @@ void MainWindow::onLoginClicked()
         auto *profile=menu.addAction("My profile");auto *works=menu.addAction("My works");auto *later=menu.addAction("Marked for Later");auto *history=menu.addAction("AO3 reading history");auto *bookmarks=menu.addAction("My AO3 bookmarks");auto *subscriptions=menu.addAction("Subscriptions");auto *inbox=menu.addAction("Inbox");auto *verify=menu.addAction("Check native sign-in");menu.addSeparator();auto *logout=menu.addAction("Sign out");
         auto *selected=menu.exec(m_loginButton->mapToGlobal(QPoint(0,m_loginButton->height())));
         if(selected==profile)showProfile("/users/"+m_loginManager->username());
-        else if(selected==bookmarks)showArchiveList("bookmarks");else if(selected==subscriptions)showArchiveList("subscriptions");else if(selected==inbox)showArchiveList("inbox");else if(selected==later)showAccountReadings(true);else if(selected==history)showAccountReadings(false);else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
+        else if(selected==bookmarks)showArchiveList("bookmarks");else if(selected==subscriptions)showArchiveList("subscriptions");else if(selected==inbox)showArchiveList("inbox");else if(selected==later)showAccountReadings(true);else if(selected==history)showArchiveList("history");else if(selected==works)showUserWorks();else if(selected==verify){statusBar()->showMessage("Checking native sign-in...");m_client->checkSession();}else if(selected==logout)onLogout();
         return;
     }
     showLoginView();
@@ -1204,14 +1214,27 @@ void MainWindow::showAuthorListing(bool bookmarks)
 
 void MainWindow::showArchiveList(const QString &kind,const QString &id,int page)
 {
-    if(kind!="series" && !m_loginManager->isLoggedIn()){showLoginView();return;}
+    if(kind!="series" && !kind.startsWith("search:") && !m_loginManager->isLoggedIn()){showLoginView();return;}
     if(m_contentStack->currentWidget()==m_reader)m_reader->saveProgress();
     if(!m_listsPage){auto *scroll=new QScrollArea(m_contentStack);scroll->setWidgetResizable(true);m_listsPage=scroll;auto *body=new QWidget(scroll);m_listsLayout=new QVBoxLayout(body);m_listsLayout->setAlignment(Qt::AlignTop);scroll->setWidget(body);m_contentStack->addWidget(scroll);}
     if(m_contentStack->currentWidget()!=m_listsPage){m_listsReturn=m_contentStack->currentIndex();m_listsOrigin=m_detailWidget->currentWork();m_listsTrail.clear();}
-    m_listsKind=kind;m_listsId=id;m_listsUncertain=false;m_listsWorkTarget.clear();m_contentStack->setCurrentWidget(m_listsPage);m_listsData={};m_listsData.title="Loading...";renderArchiveList(m_listsData);m_client->fetchArchivePage(kind,id,page);if(kind=="series")m_client->entitySubscription("Series",id);
+    m_listsKind=kind;m_listsId=id;m_listsUncertain=false;m_listsWorkTarget.clear();m_contentStack->setCurrentWidget(m_listsPage);m_listsData={};m_listsData.title="Loading...";
+    if(kind.startsWith("search:")) {
+        const auto mode=kind.mid(7);m_listsData.page=page;m_listsData.pages=qMax(1,page);
+        if(page==0){m_client->cancelListing();m_listsData.title=DiscoverySearch::title(mode);}
+        renderArchiveList(m_listsData);if(page>0)m_client->searchDiscovery(mode,m_discoveryApplied.value(mode),page);return;
+    }
+    renderArchiveList(m_listsData);m_client->fetchArchivePage(kind,id,page);if(kind=="series")m_client->entitySubscription("Series",id);
 }
 void MainWindow::openArchiveTarget(const QString &target)
 {
+    const QUrl link(target);
+    if(link.path()=="/works/search") {
+        for(const auto &field:QStringList{"fandom_names","character_names","relationship_names","freeform_names"}) {
+            const auto tag=QUrlQuery(link).queryItemValue("work_search["+field+"]");
+            if(!tag.isEmpty()){m_searchInput->clear();m_filterPanel->setFilters({{field,{tag}}});performSearch();break;}
+        }return;
+    }
     const auto work=QRegularExpression("^/works/([0-9]+)$").match(target);const auto series=QRegularExpression("^/series/([0-9]+)$").match(target);const auto comment=QRegularExpression("^/comments/([0-9]+)$").match(target);
     if(work.hasMatch()){m_listsWorkTarget=work.captured(1);m_client->fetchWorkDetails(m_listsWorkTarget);}
     else if(series.hasMatch()){m_listsTrail.append({{m_listsKind,m_listsId},m_listsData.page});showArchiveList("series",series.captured(1));}
@@ -1227,10 +1250,47 @@ void MainWindow::renderArchiveList(const ArchivePage &page)
 {
     while(auto *item=m_listsLayout->takeAt(0)){if(item->widget())item->widget()->deleteLater();delete item;}
     auto *back=new QPushButton("Back",m_listsPage);m_listsLayout->addWidget(back);connect(back,&QPushButton::clicked,this,&MainWindow::closeArchiveList);
+    if(m_listsKind.startsWith("search:")) {
+        const auto kind=m_listsKind.mid(7);
+        auto *heading=new QLabel(DiscoverySearch::title(kind),m_listsPage);m_listsLayout->addWidget(heading);
+        auto *edit=new QPushButton(m_discoveryEditing?"Hide search options":"Edit search",m_listsPage);m_listsLayout->addWidget(edit);
+        connect(edit,&QPushButton::clicked,this,[this]{m_discoveryEditing=!m_discoveryEditing;renderArchiveList(m_listsData);});
+        if(m_discoveryEditing) {
+            auto *box=new QWidget(m_listsPage);auto *form=new QFormLayout(box);form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);form->setVerticalSpacing(12);
+            for(const auto &field:DiscoverySearch::fields(kind)) {
+                if(field.choices.isEmpty()) {
+                    const auto suggestion=field.key=="fandom" || field.key=="fandoms"?QString("fandom"):field.key=="other_tag_names" || field.key=="other_bookmark_tag_names"?QString("tag"):QString();
+                    QLineEdit *input;
+                    if(suggestion.isEmpty())input=new QLineEdit(box);
+                    else {
+                        auto *tags=new TagLineEdit(suggestion,box);input=tags;const auto key="discovery:"+kind+":"+field.key+":"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+                        connect(tags,&TagLineEdit::suggestionsRequested,this,[this,key](const QString &type,const QString &term,quint64 revision){m_client->fetchTagSuggestions(key,type,term,revision);});
+                        connect(m_client,&AO3Client::tagSuggestionsFetched,tags,[tags,key](const QString &field,quint64 revision,const QStringList &values,const QString &error){if(field==key)tags->showSuggestions(revision,values,error);});
+                    }
+                    input->setObjectName("discovery_"+field.key);input->setText(m_discoveryDraft.value(kind).value(field.key));form->addRow(field.label,input);
+                    connect(input,&QLineEdit::textChanged,this,[this,kind,field](const QString &v){m_discoveryDraft[kind][field.key]=v;});
+                    connect(input,&QLineEdit::returnPressed,this,[this,kind]{m_discoveryApplied[kind]=m_discoveryDraft.value(kind);m_discoveryEditing=false;m_listsFilter.clear();showArchiveList("search:"+kind,{},1);});
+                } else {
+                    auto *input=new QComboBox(box);input->setObjectName("discovery_"+field.key);input->addItem(field.key=="sort_column" && kind=="bookmarks"?"Best match":"Any","");for(const auto &choice:field.choices)input->addItem(choice.first,choice.second);
+                    input->setCurrentIndex(qMax(0,input->findData(m_discoveryDraft.value(kind).value(field.key))));form->addRow(field.label,input);
+                    connect(input,&QComboBox::currentIndexChanged,this,[this,kind,field,input]{m_discoveryDraft[kind][field.key]=input->currentData().toString();});
+                }
+            }
+            m_listsLayout->addWidget(box);
+            auto *search=new QPushButton("Search",m_listsPage);search->setObjectName("discoverySearch");m_listsLayout->addWidget(search);
+            connect(search,&QPushButton::clicked,this,[this,kind]{m_discoveryApplied[kind]=m_discoveryDraft.value(kind);m_discoveryEditing=false;m_listsFilter.clear();showArchiveList("search:"+kind,{},1);});
+            auto *reset=new QPushButton("Reset options",m_listsPage);m_listsLayout->addWidget(reset);connect(reset,&QPushButton::clicked,this,[this,kind]{m_discoveryDraft[kind].clear();renderArchiveList(m_listsData);});
+        }
+        if(page.page==0){m_listsLayout->addStretch();return;}
+    }
     auto *refresh=new QPushButton("Refresh",m_listsPage);m_listsLayout->addWidget(refresh);connect(refresh,&QPushButton::clicked,this,[this,page]{showArchiveList(m_listsKind,m_listsId,page.page);});
-    auto text=[this](const QString &value){auto *label=new QLabel(value,m_listsPage);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);label->setTextInteractionFlags(Qt::TextSelectableByMouse);m_listsLayout->addWidget(label);};text(page.error.isEmpty()?page.title:page.error);
+    auto text=[this](const QString &value){auto *label=new QLabel(value,m_listsPage);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);label->setTextInteractionFlags(Qt::TextSelectableByMouse);m_listsLayout->addWidget(label);};if(!m_listsKind.startsWith("search:") || !page.error.isEmpty() || page.title=="Loading...")text(page.error.isEmpty()?page.title:page.error);
     auto *filter=new QLineEdit(m_listsPage);filter->setPlaceholderText("Filter this page");filter->setText(m_listsFilter);m_listsLayout->addWidget(filter);
     connect(filter,&QLineEdit::textChanged,this,[this](const QString &value){m_listsFilter=value;});
+    if(m_listsKind=="history") {
+        auto *clear=new QPushButton("Clear entire AO3 history",m_listsPage);clear->setEnabled(!m_listsUncertain && page.error.isEmpty() && !page.entries.isEmpty());m_listsLayout->addWidget(clear);
+        connect(clear,&QPushButton::clicked,this,[this]{if(QMessageBox::question(this,"Clear AO3 history?","Permanently erase your AO3 reading history and Marked for Later list?")!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction("history",{},1,{},"Clear history");});
+    }
     if(m_listsKind=="inbox") {
         auto *count=new QLabel(QString::number(m_listsSelected.size())+" selected",m_listsPage);m_listsLayout->addWidget(count);
         auto *select=new QPushButton("Select visible",m_listsPage);auto *clear=new QPushButton("Clear selection",m_listsPage);m_listsLayout->addWidget(select);m_listsLayout->addWidget(clear);
@@ -1247,9 +1307,9 @@ void MainWindow::renderArchiveList(const ArchivePage &page)
     for(const auto &entry:page.entries){
         const int start=m_listsLayout->count();
         if(m_listsKind=="inbox" && !entry.selection.isEmpty()){auto *choose=new QCheckBox("Select comment",m_listsPage);choose->setChecked(m_listsSelected.contains(entry.id));m_listsLayout->addWidget(choose);connect(choose,&QCheckBox::toggled,this,[this,entry](bool checked){if(checked)m_listsSelected.insert(entry.id);else m_listsSelected.remove(entry.id);QTimer::singleShot(0,this,[this]{renderArchiveList(m_listsData);});});}
-        text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty())text(entry.body);
+        text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty() && entry.body!=entry.title)text(entry.body);
         if(!entry.target.isEmpty()){auto *open=new QPushButton(entry.target.startsWith("/comments/")?"Open thread":entry.target.startsWith("/bookmarks/")?"Open on AO3":"Open",m_listsPage);m_listsLayout->addWidget(open);connect(open,&QPushButton::clicked,this,[this,entry]{openArchiveTarget(entry.target);});}
-        for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if((action=="Unsubscribe" || action=="Delete from inbox") && QMessageBox::question(this,action+"?",entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
+        for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if((action=="Unsubscribe" || action=="Delete from inbox" || action=="Delete from history") && QMessageBox::question(this,action+"?",action=="Delete from history"?entry.title+"\n\nRemove this entry from your AO3 history and Marked for Later list?":entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
         QList<QWidget *> entryWidgets;for(int i=start;i<m_listsLayout->count();++i)if(auto *widget=m_listsLayout->itemAt(i)->widget())entryWidgets.append(widget);
         auto applyFilter=[entry,entryWidgets](const QString &value){const bool visible=(entry.title+"\n"+entry.body).contains(value,Qt::CaseInsensitive);for(auto *widget:entryWidgets)widget->setVisible(visible);};applyFilter(filter->text());connect(filter,&QLineEdit::textChanged,this,applyFilter);
     }

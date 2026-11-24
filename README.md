@@ -2,13 +2,13 @@
 
 Unofficial AO3 reader for Linux (Qt 6) and Android (Kotlin/Compose). Not affiliated with AO3 or OTW. MIT licensed.
 
-Both editions support search and filters, tag suggestions, sign-in, profiles, offline reading, favorites, bookmarks, progress, appearance settings, fullscreen, paged reading, translation and library backups.
+Both editions support work, people, tag and bookmark searches with filters, tag suggestions, sign-in, profiles, offline reading, favorites, bookmarks, progress, appearance settings, fullscreen, paged reading, translation and library backups.
 
-Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/author/series subscriptions, account lists and ordered series lists. Comments support reading, posting, replies, editing, deletion and the moderation controls offered by AO3. Work bookmarks support notes, tags, collections, pseuds, privacy and recommendations.
+Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/author/series subscriptions, account lists, confirmed history deletion/clearing and ordered series lists. Comments support reading, posting, replies, editing, deletion and the moderation controls offered by AO3. Work bookmarks support notes, tags, collections, pseuds, privacy and recommendations.
 
 The embedded AO3 website provides creator/account-management tools, bulk list management, external/series bookmark editing and original work formatting. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
 
-Android 3.2.0-rc.22 and Linux 3.2.0-rc.21 are prereleases. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
+3.2.0-rc.23 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 Native skins support component styling and embedded image layers without CSS. Import an image in the skin editor or try the bundled **Neos Nebula** preset. Image credits and licenses travel with exported skins. See [skin format](SKINS.md).
 

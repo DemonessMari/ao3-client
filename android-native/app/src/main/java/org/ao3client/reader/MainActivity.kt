@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showAccountReadings(false)}){Text("AO3 reading history")}; Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showArchiveList("history")}){Text("AO3 reading history")}; Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                         DropdownMenuItem(text={Text("My profile")},onClick={expanded=false;vm.showProfile("/users/$user")})
                         listOf("bookmarks" to "My AO3 bookmarks","subscriptions" to "Subscriptions","inbox" to "Inbox").forEach{(kind,title)->DropdownMenuItem(text={Text(title)},onClick={expanded=false;vm.showArchiveList(kind)})}
                         DropdownMenuItem(text={Text("Marked for Later")},onClick={expanded=false;vm.showAccountReadings(true)})
-                        DropdownMenuItem(text={Text("AO3 reading history")},onClick={expanded=false;vm.showAccountReadings(false)})
+                        DropdownMenuItem(text={Text("AO3 reading history")},onClick={expanded=false;vm.showArchiveList("history")})
                         DropdownMenuItem(text={Text("My works")},onClick={expanded=false;vm.myWorks()})
                         DropdownMenuItem(text={Text("Sign out")},onClick={expanded=false;vm.logout()})
                     }
@@ -203,6 +203,9 @@ class MainActivity : ComponentActivity() {
     val listState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
         if (!vm.ownWorks) {
+            FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf("people" to "People","tags" to "Tags","bookmarks" to "Bookmarks").forEach{(kind,title)->SkinTextButton(onClick={vm.startDiscovery(kind)}){Text(title)}}
+            }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SkinOutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); vm.search() }))

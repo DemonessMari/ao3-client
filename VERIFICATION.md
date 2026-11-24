@@ -92,3 +92,13 @@ Physical-phone visual, rotation, Back, accessibility and extended-session checks
 All 131 offline Android tests pass; one live-network test is skipped. The four new rendered tests cover blue and rose skins, both text-value APIs, empty and filled focus states, custom/default/zero border widths, square/rounded corners, floating labels and supporting text. Editing checks verify typing, replacing a selection and caret placement. Robolectric renders on Android API 34; these checks do not establish physical-device visual acceptance.
 
 This update changes Android only. Linux remains on 3.2.0-rc.21. Existing physical-phone and website-parity limitations still apply.
+
+## 3.2.0-rc.23
+
+2026-11-24: both editions add dedicated people, tag and bookmark searches and native AO3 history deletion/clearing. Request fields and result structures were checked against the official otwcode/otwarchive search forms, bookmark blurbs and readings controller/views. Public bookmark searches retain distinct entries and notes for the same work. Tag results choose the corresponding work-search field.
+
+All six desktop suites pass, including 68 functional checks. Rendered desktop forms/results were inspected. Android passes 140 offline tests; one live test is skipped. New fixtures check separate bookmark notes, series/external/deleted items, query encoding, correct pagination, unsubmitted drafts, spoofed links/forms inside user content, account ownership and reading-record IDs. Controlled network tests verify fresh tokens, GET/POST order, clear-history confirmation forms, error responses and no automatic retry after an uncertain write.
+
+No real history was deleted or cleared. Live acceptance of the new searches/actions is pending: AO3 returned HTTP 403/429 during read-only checks. Physical-phone visual and extended-session acceptance remain pending. Full native website parity remains incomplete.
+
+Verification runs on branch pushes and pull requests; publishing a tag no longer repeats the same checks. The Android test runtime is cached and fetched with checksum verification and bounded retries for transient dependency-download failures.

@@ -27,6 +27,8 @@ public:
 
     void search(const QString &query, int page = 1, const SearchFilters &filters = {});
     void fetchSearchOptions();
+    void cancelListing(){++m_listingGeneration;}
+    void searchDiscovery(const QString &kind,const QMap<QString,QString> &values,int page=1);
     void fetchTagSuggestions(const QString &field, const QString &type, const QString &term, quint64 revision);
     void fetchWorkSeries(const QString &workId);
     void fetchWorkDetails(const QString &workId);

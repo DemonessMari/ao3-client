@@ -20,6 +20,38 @@ class ArchiveNetworkTest {
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
     }
+    @Test fun historyDeleteAndClearRefetchFormsAndDoNotRetryUncertainWrites() {
+        val history=javaClass.classLoader!!.getResource("archive-history.html")!!.readText()
+        val confirmation=javaClass.classLoader!!.getResource("history-clear.html")!!.readText()
+        val empty="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Log out</a></nav><div id='main' class='readings-index'><h2 class='heading'>History</h2></div>"
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())history else empty).also{calls+=it}})
+        assertTrue(client.archivePageAction("history","Writer","",1,"81","Delete from history").entries.isEmpty())
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod});assertEquals("/users/Writer/readings/81",calls.last().url.path)
+        assertTrue(calls.last().written.toString("UTF-8").contains("reading=81"));assertTrue(calls.last().written.toString("UTF-8").contains("history%2Btoken"))
+        val clearCalls=mutableListOf<Reply>()
+        val clear=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(clearCalls.isEmpty())confirmation else empty).also{clearCalls+=it}})
+        val result=clear.archivePageAction("history","Writer","",3,"","Clear history")
+        assertEquals(1,result.page);assertTrue(result.entries.isEmpty());assertEquals(listOf("/users/Writer/readings/confirm_clear","/users/Writer/readings/clear"),clearCalls.map{it.url.path})
+        assertEquals("authenticity_token=clear%2Btoken",clearCalls.last().written.toString("UTF-8"))
+        val failedCalls=mutableListOf<Reply>()
+        val failed=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(failedCalls.isEmpty())200 else 503,history).also{failedCalls+=it}})
+        assertTrue(runCatching{failed.archivePageAction("history","Writer","",1,"81","Delete from history")}.isFailure);assertEquals(2,failedCalls.size)
+        val rejected=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(url.path.endsWith("confirm_clear"))confirmation else empty.replace("<h2", "<div class='error'>Some entries could not be deleted.</div><h2"))})
+        assertTrue(runCatching{rejected.archivePageAction("history","Writer","",1,"","Clear history")}.isFailure)
+    }
+    @Test fun publicDiscoveryUsesTheChosenSearchEndpointAndKeepsBookmarkNotes() {
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->
+            val kind=url.path.split('/')[1]
+            Reply(url,200,javaClass.classLoader!!.getResource("discovery-$kind.html")!!.readText()).also{calls+=it}
+        })
+        assertEquals(1,client.discovery("people",mapOf("name" to "Writer"),1).entries.size)
+        assertEquals(2,client.discovery("tags",mapOf("name" to "Friends & Family"),2).entries.size)
+        assertEquals(5,client.discovery("bookmarks",mapOf("bookmarker" to "Reader"),1).entries.size)
+        assertEquals(listOf("/people/search","/tags/search","/bookmarks/search"),calls.map{it.url.path})
+        assertTrue(calls.all{it.requestMethod=="GET" && it.closed})
+    }
     @Test fun commentModerationRefetchesPermissionAndNeverRetriesAnUncertainWrite() {
         val managed=javaClass.classLoader!!.getResource("comment-managed.html")!!.readText()
         val calls=mutableListOf<Reply>()

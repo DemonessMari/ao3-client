@@ -52,6 +52,8 @@ private slots:
 
 private:
     QString m_readingMode;
+    QMap<QString,QMap<QString,QString>> m_discoveryDraft,m_discoveryApplied;
+    bool m_discoveryEditing=true;
     void showArchiveList(const QString &kind,const QString &id={},int page=1);
     void openArchiveTarget(const QString &target);
     void renderArchiveList(const ArchivePage &page);

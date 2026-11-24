@@ -233,6 +233,7 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         error("AO3 redirected too many times")
     }
     fun search(query: String, page: Int, filters: Map<String,List<String>>) = ArchiveParser.listing(request(searchPath(query, page, filters)), page)
+    internal fun discovery(kind:String,values:Map<String,String>,page:Int)=DiscoverySearch.parse(request(DiscoverySearch.path(kind,values,page)),kind,page)
     fun avatar(url:String):ByteArray {require(avatarUrlAllowed(url));val cookie=synchronized(cookieLock){cookies.get(URI(url),emptyMap())["Cookie"]?.joinToString("; ")};return loadAvatarBytes(url,cookie,prefs.getString("networkUserAgent",null)?:"AO3Client/3.0 (Unofficial Android Reader)")}
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }
     fun authorWorks(user: String, page: Int, bookmarks: Boolean): Listing { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.listing(request("/users/${encode(user)}/${if(bookmarks) "bookmarks" else "works"}?page=$page"), page) }
@@ -257,14 +258,15 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         return parseArchivePage(request("$route?page=$page"),kind,user,id,page)
     }
     internal fun archivePageAction(kind:String,user:String,id:String,page:Int,entryId:String,label:String):ArchivePage {
-        require(kind in listOf("subscriptions","inbox"))
+        require(kind in listOf("subscriptions","inbox","history") && page in 1..1000000)
         val route=archivePageRoute(kind,user,id)
         val generation=cookieGeneration
-        val fresh=pageAction(request("$route?page=$page",expectedGeneration=generation),kind,user,id,page,entryId,label)
-        val html=try{request(fresh.path,fresh.fields,generation,referer=route+"?page=$page")}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
-        val result=try{parseArchivePage(html,kind,user,id,page)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
+        val source=if(kind=="history" && label=="Clear history")"$route/confirm_clear" else "$route?page=$page"
+        val fresh=pageAction(request(source,expectedGeneration=generation),kind,user,id,page,entryId,label)
+        val html=try{request(fresh.path,fresh.fields,generation,referer=source)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
+        val result=try{parseArchivePage(html,kind,user,id,if(label=="Clear history")1 else page)}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw IllegalStateException("Could not confirm the change. Refresh the AO3 list before trying again.",e)}
         val entry=result.entries.firstOrNull{it.id==entryId}
-        require(when(label){"Unsubscribe","Delete from inbox"->entry==null;"Mark read"->entry!=null && !entry.unread;"Mark unread"->entry?.unread==true;else->false}){"Could not confirm the change. Refresh the AO3 list before trying again."}
+        require(when(label){"Clear history"->result.entries.isEmpty();"Unsubscribe","Delete from inbox","Delete from history"->entry==null;"Mark read"->entry!=null && !entry.unread;"Mark unread"->entry?.unread==true;else->false}){"Could not confirm the change. Refresh the AO3 list before trying again."}
         return result
     }
     internal fun archiveInboxBatch(user:String,page:Int,ids:Set<String>,label:String):ArchivePage {
