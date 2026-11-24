@@ -6,7 +6,7 @@ import java.net.URI
 internal fun parseAccountReadings(html:String,user:String,page:Int):Listing {
     require(html.length<=8*1024*1024){"AO3 reading list is too large."}
     require(ArchiveParser.sessionIdentity(html)==user){"AO3 could not verify this account's reading list. Check native sign-in and try again."}
-    val doc=Jsoup.parse(html)
+    val doc=visibleListingDocument(html)
     val main=doc.select("#main.readings-index").firstOrNull{it.parents().none{p->p.hasClass("userstuff")}}
         ?: error("AO3 did not return your reading list. If history is disabled, enable it in AO3 preferences.")
     val lists=main.select("ol.reading.work").filter{it.parents().none{p->p.hasClass("userstuff")}}

@@ -31,7 +31,8 @@ inline QUrl url(const QString &kind,const QMap<QString,QString> &values,int page
     if(!q.hasQueryItem(QString(prefix)+"["+primary+"]"))q.addQueryItem(QString(prefix)+"["+primary+"]","");
     q.addQueryItem("page",QString::number(qBound(1,page,1000000)));u.setQuery(q);return u;
 }
-inline ArchivePage parse(const QString &html,const QString &kind,int page) {
+inline ArchivePage parse(const QString &source,const QString &kind,int page) {
+    const QString html=CommentHtml::visibleListingHtml(source);
     using namespace CommentHtml;using namespace ArchivePages;
     ArchivePage out;out.title=title(kind);out.page=out.pages=page;
     if(fields(kind).isEmpty() || html.size()>8*1024*1024){out.error="Invalid AO3 search response.";return out;}

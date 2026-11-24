@@ -18,6 +18,7 @@
 #include "seriesnavigation.h"
 #include "archivepages.h"
 #include "commentmanagement.h"
+#include "accountform.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -27,6 +28,8 @@ public:
 
     void search(const QString &query, int page = 1, const SearchFilters &filters = {});
     void fetchSearchOptions();
+    void fetchAccountForm(const QString &kind,const QString &id={});
+    void saveAccountForm(const AccountForm &original,const QMap<QString,QStringList> &draft);
     void cancelListing(){++m_listingGeneration;}
     void searchDiscovery(const QString &kind,const QMap<QString,QString> &values,int page=1);
     void fetchTagSuggestions(const QString &field, const QString &type, const QString &term, quint64 revision);
@@ -65,6 +68,8 @@ public:
     LoginManager *loginManager() const;
 
 signals:
+    void accountFormFetched(const AccountForm &form);
+    void accountFormSaved(const QString &source,const ArchiveFormResult &result);
     void archiveBookmarkFetched(const ArchiveBookmarkForm &form);
     void archiveBookmarkSaved(const QString &workId,const ArchiveFormResult &result);
     void accountActionFinished(const QString &workId,const QString &message);
@@ -99,6 +104,8 @@ signals:
 private:
     void loadProfileAvatar(const QString &username,const QUrl &url,quint64 revision,quint64 auth,int redirects);
     quint64 m_avatarRevision=0;
+    quint64 m_accountFormRevision=0;
+    bool m_accountFormSending=false;
     void verifySession(bool loginAttempt, quint64 generation);
     QNetworkRequest makeRequest(const QUrl &url) const;
     SearchResult parseSearchResults(const QString &html, const QString &query, int page);

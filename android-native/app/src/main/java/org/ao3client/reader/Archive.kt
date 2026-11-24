@@ -64,7 +64,7 @@ object Catalogue {
 
 object ArchiveParser {
     fun listing(html: String, page: Int): Listing {
-        val doc = Jsoup.parse(html)
+        val doc =visibleListingDocument(html)
         val works = doc.select("li.work[id^=work_], li.bookmark[id^=bookmark_]").mapNotNull { item ->
             val link = item.selectFirst("h4.heading a[href^=/works/]") ?: return@mapNotNull null
             val workId = Regex("^/works/(\\d+)$").find(link.attr("href"))?.groupValues?.get(1) ?: return@mapNotNull null
@@ -233,6 +233,19 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         error("AO3 redirected too many times")
     }
     fun search(query: String, page: Int, filters: Map<String,List<String>>) = ArchiveParser.listing(request(searchPath(query, page, filters)), page)
+    internal fun accountForm(kind:String,id:String,user:String):AccountForm=AccountForms.parse(request(AccountForms.source(kind,user,id)),kind,user,id)
+    internal fun saveAccountForm(original:AccountForm,draft:Map<String,List<String>>):ArchiveFormResult {
+        val generation=cookieGeneration
+        require(original.source==AccountForms.source(original.kind,original.user,original.id))
+        val fresh=AccountForms.parse(request(original.source,expectedGeneration=generation),original.kind,original.user,original.id)
+        val values=AccountForms.submission(original,fresh,draft)
+        val repeated=values.flatMap{(name,list)->list.map{name to it}}
+        return try {
+            val html=request(fresh.path,emptyMap(),generation,referer=fresh.source,extraFields=repeated)
+            if(ArchiveParser.sessionIdentity(html)!=original.user)ArchiveFormResult("Could not confirm this account after saving. Check sign-in before trying again.",uncertain=true)
+            else ArchiveBookmarks.result(html).let{if(it.uncertain)it.copy(message="Could not confirm the change. Reload the account page before trying again.") else it}
+        }catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){ArchiveFormResult("Could not confirm the change. Reload the account page before trying again.",uncertain=true)}
+    }
     internal fun discovery(kind:String,values:Map<String,String>,page:Int)=DiscoverySearch.parse(request(DiscoverySearch.path(kind,values,page)),kind,page)
     fun avatar(url:String):ByteArray {require(avatarUrlAllowed(url));val cookie=synchronized(cookieLock){cookies.get(URI(url),emptyMap())["Cookie"]?.joinToString("; ")};return loadAvatarBytes(url,cookie,prefs.getString("networkUserAgent",null)?:"AO3Client/3.0 (Unofficial Android Reader)")}
     fun profile(user: String): AuthorProfile { require(user.matches(Regex("[A-Za-z0-9_]+"))); return ArchiveParser.profile(request("/users/${encode(user)}/profile"), user) }

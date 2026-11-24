@@ -51,6 +51,15 @@ private slots:
     void showLoginView();
 
 private:
+    void showAccountEditor(const QString &kind,const QString &id={},bool reload=false);
+    void renderAccountEditor();
+    QWidget *m_accountEditor=nullptr;
+    QVBoxLayout *m_accountEditorLayout=nullptr;
+    AccountForm m_accountForm;
+    QString m_accountFormKind,m_accountFormId,m_accountFormMessage;
+    QMap<QString,QStringList> m_accountDraft;
+    int m_accountEditorReturn=0;
+    bool m_accountSending=false,m_accountUncertain=false;
     QString m_readingMode;
     QMap<QString,QMap<QString,QString>> m_discoveryDraft,m_discoveryApplied;
     bool m_discoveryEditing=true;

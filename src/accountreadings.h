@@ -6,7 +6,8 @@ struct AccountReadingDocument {
     QStringList unavailable;
     int pages=1;
 };
-inline AccountReadingDocument accountReadingDocument(const QString &html,const QString &user,int page) {
+inline AccountReadingDocument accountReadingDocument(const QString &source,const QString &user,int page) {
+    const QString html=CommentHtml::visibleListingHtml(source);
     using namespace CommentHtml;AccountReadingDocument out;out.pages=page;
     if(html.size()>8*1024*1024){out.error="AO3 reading list is too large.";return out;}
     if(!siteIdentityMatches(html,user)){out.error="AO3 could not verify this account's reading list. Check native sign-in and try again.";return out;}

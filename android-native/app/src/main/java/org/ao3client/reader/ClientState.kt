@@ -21,6 +21,16 @@ data class Preferences(val language: String = "en", val filterLanguage: Boolean 
 class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true, archiveFactory:(android.content.SharedPreferences)->Archive={Archive(it)}) : AndroidViewModel(app) {
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = archiveFactory(storage)
+    internal var accountForm by mutableStateOf<AccountForm?>(null);private set
+    internal var accountDraft by mutableStateOf<Map<String,List<String>>>(emptyMap())
+    internal var accountSending by mutableStateOf(false);private set
+    internal var accountUncertain by mutableStateOf(false);private set
+    internal var accountFormKind="";private set
+    internal var accountFormId="";private set
+    internal var accountFormReturn="account";private set
+    internal var pendingAccountForm by mutableStateOf<Triple<String,String,Boolean>?>(null)
+    private var accountSaveRevision=0
+    private var accountSaveJob:Job?=null
     var autoScrollSpeed by mutableIntStateOf(storage.getInt("autoScrollSpeed",30).coerceIn(10,120));private set
     var volumeNavigation by mutableStateOf(storage.getBoolean("volumeNavigation",false));private set
     var volumeUp by mutableIntStateOf(storage.getInt("volumeUp",-1).coerceIn(-1,1));private set
@@ -123,7 +133,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
                 archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
                 commentsPage=null;commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision
                 searchListing=null;accountListing=null;archiveList=null;entitySubscriptions.clear();profile=null;profileListing=null;saveProgress();selected=null;chapters=emptyList();ownWorks=false
-                username=user;screen="account";notice="Website sign-in verified for the native reader."
+                clearAccountEditor();username=user;screen="account";notice="Website sign-in verified for the native reader."
             } catch(e:CancellationException) {throw e}
               catch(e:Exception) {if(generation==kudosGeneration)error=e.message ?: "Website sign-in could not be verified"}
             finally {websiteImporting=false}
@@ -305,7 +315,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     var readerRevision by mutableIntStateOf(0)
     private var requestRevision = 0
     private var sessionJob: Job? = null
-    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { val confirmed=withContext(Dispatchers.IO) { archive.session() };if(username!=confirmed){accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false};username=confirmed } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
+    init { if(ReaderFontStore.validId(preferences.fontFamily) && importedFonts.none { it.id==preferences.fontFamily })appearance(family="serif"); if(preferences.service=="https://translate.cutie.dating") { preferences=preferences.copy(service=""); storage.edit().putString("service","").putBoolean("translationConsented",false).apply() }; refreshLibrary(); if(storage.getBoolean("resumeReader",false)) libraryEntries.firstOrNull { it.fic.id==storage.getString("lastFic","") }?.let { openLibrary(it) }; if(checkSession) sessionJob = viewModelScope.launch { try { val confirmed=withContext(Dispatchers.IO) { archive.session() };if(username!=confirmed){clearAccountEditor();accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false};username=confirmed } catch (_: Exception) { /* Browsing remains usable offline. */ } } }
     private fun load(block: suspend () -> Unit) {
         loadJob?.cancel(); val revision = ++requestRevision; error = null; loading = true
         loadJob = viewModelScope.launch {
@@ -396,13 +406,40 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     internal var archiveId="";private set
     var archiveReturn="home";private set
     var archiveUncertain by mutableStateOf(false);private set
+    private fun clearAccountEditor(){++accountSaveRevision;accountSaveJob?.cancel();accountForm=null;accountDraft=emptyMap();accountSending=false;accountUncertain=false;pendingAccountForm=null}
+    internal fun showAccountEditor(kind:String,id:String="",reload:Boolean=false,discard:Boolean=false) {
+        val user=username ?: run{navigate("login");return}
+        if(accountSending){error="An account change is still being sent.";return}
+        val source=try{AccountForms.source(kind,user,id)}catch(e:Exception){error="Enter a valid AO3 username or choose an available item.";return}
+        val original=accountForm
+        val changed=original?.fields?.any{accountDraft[it.name]!=it.values}==true
+        if(!discard && changed && (reload || original?.source!=source)){pendingAccountForm=Triple(kind,id,reload);return}
+        if(screen!="accountForm")accountFormReturn=screen
+        navigate("accountForm")
+        if(!reload && original?.source==source){return}
+        accountFormKind=kind;accountFormId=id;accountForm=null;accountDraft=emptyMap();accountUncertain=false
+        load {val form=withContext(Dispatchers.IO){archive.accountForm(kind,id,user)};if(user==username){accountForm=form;accountDraft=form.fields.associate{it.name to it.values}}}
+    }
+    internal fun saveAccountEditor() {
+        val original=accountForm ?: return;if(accountSending || accountUncertain || original.user!=username)return
+        val draft=accountDraft;val revision=++accountSaveRevision;accountSending=true;error=null
+        accountSaveJob=viewModelScope.launch {
+            try {
+                val result=withContext(Dispatchers.IO){archive.saveAccountForm(original,draft)}
+                if(revision!=accountSaveRevision || username!=original.user || accountForm?.source!=original.source)return@launch
+                accountUncertain=result.uncertain
+                if(result.success){accountForm=null;accountDraft=emptyMap();notice=result.message;if(screen=="accountForm"){navigate(accountFormReturn);if(screen=="archiveList")showArchiveList(archiveKind,archiveId,archiveList?.page ?: 1) else if(screen=="profile")showProfile("/users/$profileUser")}}
+                else error=result.message
+            }catch(e:CancellationException){throw e}catch(e:Exception){if(username==original.user)error=e.message ?: "Could not save this form."}finally{if(revision==accountSaveRevision)accountSending=false}
+        }
+    }
     internal var discoveryDraft by mutableStateOf<Map<String,Map<String,String>>>(emptyMap())
     private var discoveryApplied=emptyMap<String,Map<String,String>>()
     internal var discoveryEditing by mutableStateOf(true)
     internal fun startDiscovery(kind:String){discoveryEditing=true;showArchiveList("search:$kind",page=0)}
     internal fun submitDiscovery(){val kind=archiveKind.removePrefix("search:");discoveryApplied=discoveryApplied+(kind to discoveryDraft[kind].orEmpty());discoveryEditing=false;archiveList=null;showArchiveList(archiveKind)}
     fun showArchiveList(kind:String,id:String="",page:Int=1) {
-        if(kind!="series" && !kind.startsWith("search:") && username==null){navigate("login");return}
+        if(kind !in listOf("series","media","fandoms") && !kind.startsWith("search:") && username==null){navigate("login");return}
         if(screen!="archiveList"){archiveReturn=screen;archiveList=null;archiveTrail.clear();archiveOrigin=selected?.let{SeriesOrigin(it,chapters,chapter,translation,if(detailsReturn=="archiveList") "home" else detailsReturn,readerReturn)}}
         if(screen=="reader")saveProgress()
         archiveKind=kind;archiveId=id;archiveUncertain=false;navigate("archiveList")
@@ -413,7 +450,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             val values=discoveryApplied[mode].orEmpty()
             load {archiveList=withContext(Dispatchers.IO){archive.discovery(mode,values,page)}};return
         }
-        load {val result=withContext(Dispatchers.IO){archive.archivePage(kind,user,id,page)};if(kind=="series" || username==user)archiveList=result}
+        load {val result=withContext(Dispatchers.IO){archive.archivePage(kind,user,id,page)};if(kind in listOf("series","media","fandoms") || username==user)archiveList=result}
         if(kind=="series")subscriptionState("Series",id)
     }
     internal fun actOnInboxSelection(ids:Set<String>,label:String) {
@@ -440,6 +477,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
             }
             target.matches(Regex("/works/[0-9]+"))->openListedWork(target.substringAfterLast('/'))
             target.matches(Regex("/series/[0-9]+"))->{archiveList?.let{archiveTrail+=Triple(archiveKind,archiveId,it.page)};showArchiveList("series",target.substringAfterLast('/'))}
+            target.matches(Regex("/media/[^/]+/fandoms"))->{archiveList?.let{archiveTrail+=Triple(archiveKind,archiveId,it.page)};showArchiveList("fandoms",target.removePrefix("/media/").removeSuffix("/fandoms"))}
             target.startsWith("/users/")->showProfile(target)
             target.matches(Regex("/comments/[0-9]+"))->showComments("comment:"+target.substringAfterLast('/'))
             target.isNotEmpty()->openWebsite(Archive.BASE+target)
@@ -550,10 +588,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun login(name: String, password: String) = load {
         ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
         sessionJob?.cancel()
-        val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false;username=confirmed
+        val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };clearAccountEditor();accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false;username=confirmed
         screen = "home"
     }
-    fun logout() { entitySubscriptions.clear();entitySubscriptionPending.clear();++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; archiveList=null;selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
+    fun logout() { clearAccountEditor(); entitySubscriptions.clear();entitySubscriptionPending.clear();++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; archiveList=null;selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }
     fun savePreferences(value: Preferences) {
         val code = value.language.trim().lowercase()

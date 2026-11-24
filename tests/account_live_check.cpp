@@ -1,3 +1,4 @@
+#include "accountform.h"
 #include <QApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,7 +18,7 @@
 #include "accountbutton.h"
 int main(int argc,char **argv) {
     QApplication app(argc,argv);QStandardPaths::setTestModeEnabled(true);
-    if(argc<2 || argc>5 || (argc>3 && QString::fromLocal8Bit(argv[3])!="--profile" && QString::fromLocal8Bit(argv[3])!="--prepare-bookmark")){QTextStream(stderr)<<"Pass the native cookie file, optional settings file, and optional --profile [render-path] or --prepare-bookmark.\n";return 2;}
+    if(argc<2 || argc>5 || (argc>3 && QString::fromLocal8Bit(argv[3])!="--profile" && QString::fromLocal8Bit(argv[3])!="--prepare-bookmark" && QString::fromLocal8Bit(argv[3])!="--forms")){QTextStream(stderr)<<"Pass the native cookie file, optional settings file, and optional --profile [render-path] or --prepare-bookmark or --forms.\n";return 2;}
     const auto agent=argc>=3?QSettings(QString::fromLocal8Bit(argv[2]),QSettings::IniFormat).value("network/userAgent","AO3Client/3.0 (Unofficial Desktop Reader)").toString():QString("AO3Client/3.0 (Unofficial Desktop Reader)");
     QTemporaryDir directory;const auto copy=directory.filePath("cookies.dat");
     if(!QFile::copy(QString::fromLocal8Bit(argv[1]),copy))return 2;
@@ -39,6 +40,23 @@ int main(int argc,char **argv) {
         if(greeting && match.hasMatch() && match.captured(1)!="login" && match.captured(1)!="logout")user=match.captured(1);
     }
     if(user.isEmpty() || !siteIdentityMatches(home,user)){QTextStream(stdout)<<"No confirmed native account session is available. No account writes performed.\n";return 77;}
+    if(argc>3 && QString::fromLocal8Bit(argv[3])=="--forms") {
+        for(const auto &kind:QStringList{"profile","preferences","pseud","externalBookmark"}) {
+            QEventLoop pause;QTimer::singleShot(1000,&pause,&QEventLoop::quit);pause.exec();
+            const auto html=get(AccountForms::source(kind,user));if(html.isEmpty())return 77;
+            const auto form=AccountForms::parse(html,kind,user);
+            if(!form.error.isEmpty()){QTextStream(stdout)<<kind<<": form unavailable: "<<form.error<<"\n";return 1;}
+            QTextStream(stdout)<<kind<<": parsed "<<form.fields.size()<<" editable fields; no changes submitted.\n";
+        }
+        for(const auto &kind:QStringList{"pseuds","blocked","muted","media"}) {
+            QEventLoop pause;QTimer::singleShot(1000,&pause,&QEventLoop::quit);pause.exec();
+            const auto html=get(ArchivePages::route(kind,user));if(html.isEmpty())return 77;
+            const auto page=ArchivePages::parse(html,kind,user,{},1);
+            if(!page.error.isEmpty()){QTextStream(stdout)<<kind<<": list unavailable: "<<page.error<<"\n";return 1;}
+            QTextStream(stdout)<<kind<<": list structure verified; no changes submitted.\n";
+        }
+        return 0;
+    }
     if(argc>3 && QString::fromLocal8Bit(argv[3])=="--profile") {
         const auto avatar=profileAvatar(get("/users/"+user+"/profile"));
         if(avatar.url.isEmpty()){QTextStream(stdout)<<"Profile returned no supported avatar URL. Live image check unavailable.\n";return 77;}

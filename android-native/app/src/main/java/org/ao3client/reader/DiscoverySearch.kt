@@ -33,7 +33,7 @@ internal object DiscoverySearch {
     }
     fun parse(html:String,kind:String,page:Int):ArchivePage {
         require(fields(kind).isNotEmpty() && html.length<=8*1024*1024)
-        val doc=Jsoup.parse(html)
+        val doc=visibleListingDocument(html)
         val main=doc.select("#main.$kind-search").firstOrNull{it.parents().none{p->p.hasClass("userstuff")}}
             ?: error("AO3 did not return search results. Try again when the site is available.")
         fun org.jsoup.nodes.Element.trusted()=(listOf(this)+parents()).none{it.hasClass("userstuff")}

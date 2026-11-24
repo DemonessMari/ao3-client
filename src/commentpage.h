@@ -36,8 +36,31 @@ inline QVector<Node> nodes(const QString &html) {
 }
 inline bool hasClass(const Node &node,const QString &name) { return node.attrs.value("class").split(QRegularExpression("\\s+"),Qt::SkipEmptyParts).contains(name); }
 inline bool beneath(const QVector<Node> &nodes,int child,int parent) { for(int p=nodes[child].parent;p>=0;p=nodes[p].parent) if(p==parent)return true; return false; }
+inline QString visibleListingHtml(const QString &source) {
+    const auto list=nodes(source);QStringList muted;
+    const QRegularExpression rule(R"rx(^\s*((?:\.user-[0-9]+\s*,\s*)*\.user-[0-9]+)\s*\{\s*display\s*:\s*none\s*!important\s*;\s*visibility\s*:\s*hidden\s*!important\s*;?\s*\}\s*$)rx",QRegularExpression::CaseInsensitiveOption);
+    auto trusted=[&](int i){for(int p=i;p>=0;p=list[p].parent)if(hasClass(list[p],"userstuff") || list[p].attrs.value("id")=="workskin" || list[p].tag=="textarea")return false;return true;};
+    for(int i=0;i<list.size();++i)if(list[i].tag=="style" && trusted(i)) {
+        bool head=false;for(int p=list[i].parent;p>=0;p=list[p].parent)if(list[p].tag=="head")head=true;
+        if(!head)continue;
+        const auto match=rule.match(source.mid(list[i].begin,list[i].end-list[i].begin));if(!match.hasMatch())continue;
+        for(auto name:match.captured(1).split(','))muted.append(name.trimmed().mid(1));
+    }
+    if(muted.isEmpty())return source;
+    QVector<QPair<int,int>> ranges;int covered=-1;
+    for(int i=0;i<list.size();++i) {
+        const auto &n=list[i];if(n.begin<=covered || (n.tag!="li" && n.tag!="div") || !trusted(i))continue;
+        bool hidden=false;for(const auto &name:muted)if(hasClass(n,name))hidden=true;if(!hidden)continue;
+        const int start=source.lastIndexOf('<',n.begin-1),end=source.indexOf('>',n.end);
+        if(start<0 || end<0)continue;
+        ranges.append({start,end+1-start});covered=end;
+    }
+    QString result=source;for(int i=ranges.size()-1;i>=0;--i)result.remove(ranges[i].first,ranges[i].second);return result;
 }
-inline CommentPage parseCommentPage(const QString &html,int page=1) {
+
+}
+inline CommentPage parseCommentPage(const QString &source,int page=1) {
+    const QString html=CommentHtml::visibleListingHtml(source);
     using namespace CommentHtml; CommentPage result; result.page=page; result.pages=page;
     if(html.size()>8*1024*1024) {result.error="Comments page is too large";return result;}
     const auto list=nodes(html); bool recognized=false; const QRegularExpression idRx("^comment_(\\d+)$");

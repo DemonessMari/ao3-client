@@ -99,6 +99,49 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void mutedListingsRespectOnlyAo3VisibilityRules() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/muted-listings.html"));
+        QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        const auto visible=CommentHtml::visibleListingHtml(html);
+        QVERIFY(!visible.contains("id=\"work_42\""));QVERIFY(visible.contains("id=\"work_7\""));
+        QVERIFY(visible.contains("Explicitly opened story"));
+        const auto comments=parseCommentPage(html);QCOMPARE(comments.comments.size(),1);QCOMPARE(comments.comments.first().id,QString("7"));
+        QVERIFY(CommentHtml::visibleListingHtml(QString(html).replace("display: none", "color: red; display: none")).contains("id=\"work_42\""));
+        const auto untrusted=html.mid(html.indexOf("<body>"));
+        QVERIFY(CommentHtml::visibleListingHtml(untrusted).contains("id=\"work_42\""));
+        QCOMPARE(AccountForms::source("unblock","Writer","9"),QString("/users/Writer/blocked/users/9/confirm_unblock"));
+        QCOMPARE(AccountForms::source("unmute","Writer","9"),QString("/users/Writer/muted/users/9/confirm_unmute"));
+    }
+
+    void accountFormsUseFreshTokensAndMergeOnlyUnchangedFields() {
+        auto fixture=[](const QString &name){QFile f(QString(AO3_FIXTURE_DIR)+"/account-form-"+name+".html");if(!f.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(f.readAll());};
+        const auto html=fixture("profile");const auto original=AccountForms::parse(html,"profile","Writer");QVERIFY(original.error.isEmpty());QCOMPARE(original.fields.size(),2);QCOMPARE(original.fields[0].values,QStringList{"Original title"});QCOMPARE(original.fields[1].values,QStringList{"<p>Biography & notes</p>\nSecond line"});
+        const auto raw=AccountForms::parse(QString(html).replace("Second line","Second line<input type='hidden' name='authenticity_token' value='forged'>"),"profile","Writer");QVERIFY(raw.error.isEmpty());QCOMPARE(raw.fixed.value("authenticity_token"),QStringList{"account+token"});
+        const auto fresh=AccountForms::parse(QString(html).replace("account+token","fresh+token").replace("Second line","Updated elsewhere"),"profile","Writer");QString error;const auto fields=AccountForms::submission(original,fresh,{{"profile[title]",{"New title"}}},error);QVERIFY(error.isEmpty());QCOMPARE(fields.value("authenticity_token"),QStringList{"fresh+token"});QVERIFY(fields.value("profile[about_me]").first().contains("Updated elsewhere"));QVERIFY(!fields.contains("profile[ticket_number]"));QVERIFY(!fields.contains("user[admin]"));
+        const auto conflict=AccountForms::parse(QString(html).replace("Original title","Changed elsewhere"),"profile","Writer");AccountForms::submission(original,conflict,{{"profile[title]",{"New title"}}},error);QVERIFY(!error.isEmpty());
+        QVERIFY(!AccountForms::parse(html,"profile","Other").error.isEmpty());QVERIFY(!AccountForms::parse(QString(html).replace("action='/users/Writer/profile'","action='https://evil.example/users/Writer/profile'"),"profile","Writer").error.isEmpty());
+        const auto prefs=AccountForms::parse(fixture("preferences"),"preferences","Writer");QVERIFY(prefs.error.isEmpty());QCOMPARE(prefs.fields.size(),4);QString invalid;AccountForms::submission(prefs,prefs,{{"preference[skin_id]",{"999"}}},invalid);QVERIFY(!invalid.isEmpty());
+        QVERIFY(AccountForms::parse(fixture("pseud"),"pseud","Writer","Pen Name").error.isEmpty());QVERIFY(AccountForms::parse(fixture("pseud-new"),"pseud","Writer").error.isEmpty());
+        const auto external=AccountForms::parse(fixture("external"),"externalBookmark","Writer");QVERIFY(external.error.isEmpty());QString multiError;const auto multi=AccountForms::submission(external,external,{{"external_work[category_strings][]",{"F/F","M/M"}}},multiError);QVERIFY(multiError.isEmpty());QCOMPARE(multi.value("external_work[category_strings][]"),QStringList({"F/F","M/M"}));
+        QVERIFY(AccountForms::parse(fixture("bookmark"),"bookmark","Writer","91").error.isEmpty());QVERIFY(AccountForms::parse(fixture("series"),"seriesBookmark","Writer","42").error.isEmpty());QVERIFY(AccountForms::parse(fixture("deleteBookmark"),"deleteBookmark","Writer","91").destructive);
+        for(const auto &kind:QStringList{"block","mute","unblock","unmute"}){const auto id=kind.startsWith("un")?QString("9"):QString("Target");const auto form=AccountForms::parse(fixture(kind),kind,"Writer",id);QVERIFY2(form.error.isEmpty(),qPrintable(form.error));QVERIFY(form.destructive);QVERIFY(!AccountForms::parse(fixture(kind),kind,"Other",id).error.isEmpty());}
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});network->page=html.toUtf8();window.showAccountEditor("profile");QTRY_VERIFY(!window.m_accountForm.path.isEmpty());if(qEnvironmentVariableIsSet("AO3_CAPTURE_ACCOUNT")){window.resize(1000,900);window.show();QTest::qWait(50);window.grab().save("/tmp/ao3-account-profile-editor.png");}auto *title=window.m_accountEditor->findChild<QLineEdit *>("account_profile[title]");QVERIFY(title);title->setText("New title");
+        const auto success=QByteArray("<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Out</a></nav><div class='flash notice'>Updated.</div>");network->requests.clear();network->operations.clear();network->bodies.clear();network->pages={QString(html).replace("account+token","fresh+token").toUtf8(),success};window.m_accountEditor->findChild<QPushButton *>("accountSave")->click();QTRY_VERIFY(!window.m_accountSending);QCOMPARE(network->operations,QList<QNetworkAccessManager::Operation>({QNetworkAccessManager::GetOperation,QNetworkAccessManager::PostOperation}));QVERIFY(network->bodies.last().contains("fresh%2Btoken"));QVERIFY(network->bodies.last().contains("New%20title"));QVERIFY(!network->bodies.last().contains("ticket_number"));
+        QList<ArchiveFormResult> results;connect(window.m_client,&AO3Client::accountFormSaved,&window,[&](const QString &,const ArchiveFormResult &r){results<<r;});
+        const int previous=network->requests.size();network->pages={html.toUtf8(),QByteArray("<h1>Response unavailable</h1>")};window.m_client->saveAccountForm(original,{{"profile[title]",{"Another title"}}});QTRY_COMPARE(results.size(),1);QVERIFY(results.last().uncertain);QCOMPARE(network->requests.size(),previous+2);
+        network->pages={QString(html).replace("Original title","Other title").toUtf8()};window.m_client->saveAccountForm(original,{{"profile[title]",{"Another title"}}});QTRY_COMPARE(results.size(),2);QVERIFY(!results.last().success);QVERIFY(!results.last().uncertain);QCOMPARE(network->requests.size(),previous+3);
+    }
+    void accountDirectoriesKeepPublicAndOwnedListsSeparate() {
+        auto fixture=[](const QString &name){QFile f(QString(AO3_FIXTURE_DIR)+"/archive-"+name+".html");if(!f.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(f.readAll());};
+        const auto media=ArchivePages::parse(fixture("media"),"media",{}, {},1);QVERIFY(media.error.isEmpty());QCOMPARE(media.entries.size(),1);QCOMPARE(media.entries.first().target,QString("/media/Anime Manga/fandoms"));
+        const auto fandoms=ArchivePages::parse(fixture("fandoms"),"fandoms",{},"Anime Manga",1);QVERIFY(fandoms.error.isEmpty());QCOMPARE(fandoms.entries.size(),1);QCOMPARE(QUrlQuery(QUrl(fandoms.entries.first().target)).queryItemValue("work_search[fandom_names]"),QString("A & B"));
+        for(const auto &kind:QStringList{"pseuds","blocked","muted"}){const auto page=ArchivePages::parse(fixture(kind),kind,"Writer",{},1);QVERIFY2(page.error.isEmpty(),qPrintable(page.error));QCOMPARE(page.entries.size(),1);QCOMPARE(page.entries.first().id,kind=="pseuds"?QString("Pen Name"):QString("9"));QVERIFY(!page.entries.first().actions.isEmpty());QVERIFY(!ArchivePages::parse(fixture(kind),kind,"Other",{},1).error.isEmpty());}
+
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({});network->page=fixture("media").toUtf8();window.showArchiveList("media");QTRY_COMPARE(window.m_listsData.entries.size(),1);window.setLoggedInState(false);QCOMPARE(window.m_listsKind,QString("media"));QCOMPARE(window.m_listsData.entries.size(),1);
+        network->page=fixture("fandoms").toUtf8();window.openArchiveTarget(media.entries.first().target);QTRY_COMPARE(window.m_listsKind,QString("fandoms"));QTRY_COMPARE(window.m_listsData.entries.size(),1);auto *list=window.m_listsPage->findChild<QListWidget *>();QVERIFY(list);QCOMPARE(list->count(),1);
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_ACCOUNT")){window.resize(1000,900);window.show();QTest::qWait(50);window.grab().save("/tmp/ao3-account-fandom-directory.png");}
+    }
+
     void historyMutationsValidateOwnedRecordIdsAndConfirmationForms() {
         auto fixture=[](const QString &name){QFile f(QString(AO3_FIXTURE_DIR)+"/"+name+".html");if(!f.open(QIODevice::ReadOnly))return QString();return QString::fromUtf8(f.readAll());};
         const auto html=fixture("archive-history");const auto list=ArchivePages::parse(html,"history","Writer",{},1);QVERIFY(list.error.isEmpty());QCOMPARE(list.entries.size(),2);QCOMPARE(list.entries[0].id,QString("81"));QCOMPARE(list.entries[1].id,QString("82"));QCOMPARE(list.entries[0].target,QString("/works/123"));QVERIFY(list.entries[1].target.isEmpty());

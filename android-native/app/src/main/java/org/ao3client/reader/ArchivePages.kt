@@ -12,17 +12,34 @@ private fun Element.trusted()=(listOf(this)+parents()).none{it.hasClass("userstu
 private fun entryTarget(root:Element):String=root.select("a[href]").firstOrNull {it.trusted() && ao3Path(it.attr("href"))?.matches(Regex("/(?:works/[0-9]+(?:/chapters/[0-9]+)?|series/[0-9]+|users/[A-Za-z0-9_]+(?:/pseuds/[^/]+)?)"))==true}?.let{ao3Path(it.attr("href"))}.orEmpty()
 internal fun archivePageRoute(kind:String,user:String,id:String=""):String {
     require(user.isEmpty() || user.matches(Regex("[A-Za-z0-9_]+")))
-    return when(kind){"history"->{require(user.isNotBlank());"/users/$user/readings"};"series"->{require(id.matches(Regex("[0-9]+")));"/series/$id"};"bookmarks","subscriptions","inbox"->{require(user.isNotBlank());"/users/$user/$kind"};else->error("Unknown AO3 list.")}
+    return when(kind){"media"->"/media";"fandoms"->{require(id.isNotBlank() && id !in listOf(".","..") && '/' !in id);"/media/${Archive.encode(id).replace("+","%20")}/fandoms"};"pseuds","blocked","muted"->{require(user.isNotBlank());"/users/$user/$kind"+if(kind=="pseuds")"" else "/users"};"history"->{require(user.isNotBlank());"/users/$user/readings"};"series"->{require(id.matches(Regex("[0-9]+")));"/series/$id"};"bookmarks","subscriptions","inbox"->{require(user.isNotBlank());"/users/$user/$kind"};else->error("Unknown AO3 list.")}
 }
 internal fun parseArchivePage(html:String,kind:String,user:String,id:String,page:Int):ArchivePage {
     require(html.length<=8*1024*1024){"AO3 page is too large."}
-    if(kind!="series")require(ArchiveParser.sessionIdentity(html)==user){"AO3 could not verify this account. Check native sign-in."}
-    val doc=Jsoup.parse(html)
-    val marker=when(kind){"series"->"series-show";"bookmarks"->"bookmarks-index";"subscriptions"->"subscriptions-index";"inbox"->"inbox-show";"history"->"readings-index";else->error("Unknown AO3 list.")}
-    val main=doc.select("#main.$marker").firstOrNull{it.trusted()} ?: error("AO3 did not return this list. Open it on AO3 to check availability.")
+    if(kind !in listOf("series","media","fandoms"))require(ArchiveParser.sessionIdentity(html)==user){"AO3 could not verify this account. Check native sign-in."}
+    val doc=visibleListingDocument(html)
+    val marker=when(kind){"series"->"series-show";"bookmarks"->"bookmarks-index";"subscriptions"->"subscriptions-index";"inbox"->"inbox-show";"history"->"readings-index";"media"->"media-index";"fandoms"->"fandoms-index";"pseuds"->"pseuds-index";"blocked","muted"->"";else->error("Unknown AO3 list.")}
+    val main=doc.select(if(marker.isEmpty())"#main" else "#main.$marker").firstOrNull{it.trusted()} ?: error("AO3 did not return this list. Open it on AO3 to check availability.")
     if(kind=="history")require(doc.select(".error").none{it.trusted()}){"AO3 reported an error while updating reading history."}
     val title=main.selectFirst("h2.heading")?.text().orEmpty().ifBlank{kind.replaceFirstChar{it.uppercase()}}
+    if(kind in listOf("blocked","muted"))require(main.select("form[method=get]").any{it.trusted() && ao3Path(it.attr("action"))=="/users/$user/$kind/users/confirm_${if(kind=="blocked")"block" else "mute"}"}){"AO3 did not return this account list."}
     val entries=when(kind){
+        "media"->main.select("h3.heading a[href]").filter{it.trusted() && ao3Path(it.attr("href"))?.matches(Regex("/media/[^/]+/fandoms"))==true}.map{ArchiveEntry(it.attr("href"),it.text(),"",ao3Path(it.attr("href")).orEmpty())}
+        "fandoms"->main.select("ol.alphabet.fandom.index a[href]").filter{it.trusted() && ao3Path(it.attr("href"))?.matches(Regex("/tags/[^/]+/works"))==true}.mapIndexed{index,link->ArchiveEntry("fandom-$index",link.text(),"","/works/search?"+Archive.encode("work_search[fandom_names]")+"="+Archive.encode(link.text()))}
+        "pseuds","blocked","muted"->main.select("ul.pseud.index > li").filter{it.trusted()}.mapIndexed{index,item->
+            val heading=item.select("h4.heading").firstOrNull{it.trusted()}
+            var key="entry-$index";var action=""
+            for(link in item.select("a[href]").filter{it.trusted()}) {
+                val path=ao3Path(link.attr("href")) ?: continue
+                if(kind=="pseuds"){val id=Regex("/users/"+Regex.escape(user)+"/pseuds/([^/]+)/edit").matchEntire(path)?.groupValues?.get(1);if(id!=null){key=id;action="Edit pseud"}}
+                else {
+                    val id=Regex("/users/"+Regex.escape(user)+"/$kind/users/([0-9]+)/confirm_${if(kind=="blocked")"unblock" else "unmute"}").matchEntire(path)?.groupValues?.get(1)
+                    if(id!=null){key=id;action=if(kind=="blocked")"Unblock" else "Unmute"}
+                }
+            }
+            ArchiveEntry(key,heading?.text().orEmpty(),item.selectFirst("blockquote.userstuff")?.text().orEmpty(),heading?.let(::entryTarget).orEmpty(),if(action.isEmpty())emptyList() else listOf(action))
+        }
+
         "history"->main.select("ol.reading.work > li.reading.work").filter{it.trusted()}.mapIndexed{index,item->
             val heading=item.select("h4.heading").firstOrNull{it.trusted()}
             val form=item.select("form").firstOrNull{f->
@@ -36,7 +53,9 @@ internal fun parseArchivePage(html:String,kind:String,user:String,id:String,page
         "series","bookmarks"->main.select(if(kind=="series")"ul.series.work > li.work" else "ol.bookmark > li.bookmark").filter{it.trusted()}.mapIndexed{index,item->
             val heading=item.selectFirst("h4.heading")
             val clean=item.clone();clean.select("form, ul.actions").remove()
-            ArchiveEntry(item.id().ifBlank{"entry-$index"},heading?.text().orEmpty().ifBlank{"Unavailable work"},clean.select("blockquote, .user.tags, dl.stats, .user .meta").joinToString("\n\n"){it.text()},heading?.let(::entryTarget).orEmpty().ifBlank{if(kind=="bookmarks")Regex("bookmark_([0-9]+)").matchEntire(item.id())?.groupValues?.get(1)?.let{"/bookmarks/$it"}.orEmpty() else ""})
+            val key=Regex("bookmark_([0-9]+)").matchEntire(item.id())?.groupValues?.get(1)
+            val editable=kind=="bookmarks" && key!=null && item.select("a[href]").any{it.trusted() && ao3Path(it.attr("href"))=="/bookmarks/$key/edit"}
+            ArchiveEntry(item.id().ifBlank{"entry-$index"},heading?.text().orEmpty().ifBlank{"Unavailable work"},clean.select("blockquote, .user.tags, dl.stats, .user .meta").joinToString("\n\n"){it.text()},heading?.let(::entryTarget).orEmpty().ifBlank{if(kind=="bookmarks" && key!=null)"/bookmarks/$key" else ""},if(editable)listOf("Edit bookmark") else emptyList())
         }
         "subscriptions"->main.select("dl.subscription > dt").filter{it.trusted()}.mapIndexed{index,item->
             val form=item.nextElementSibling()?.selectFirst("form")

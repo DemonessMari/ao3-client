@@ -158,6 +158,7 @@ void AO3Client::checkSession()
 
 void AO3Client::logout()
 {
+    m_accountFormSending=false;
     m_kudosStatus.clear();
     m_workAccountPending.clear();
     ++m_commentsGeneration;
@@ -268,6 +269,37 @@ void AO3Client::search(const QString &query, int page, const SearchFilters &filt
         QString html = QString::fromUtf8(reply->readAll());
         SearchResult result = parseSearchResults(html, query, page);
         emit searchCompleted(result);
+    });
+}
+
+void AO3Client::fetchAccountForm(const QString &kind,const QString &id)
+{
+    const auto user=m_loginManager->username();const auto source=AccountForms::source(kind,user,id);
+    if(!m_loginManager->isLoggedIn() || source.isEmpty()){emit errorOccurred("Sign in to open this account form.");return;}
+    const auto auth=m_authGeneration;const auto revision=++m_accountFormRevision;
+    auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+source)));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,kind,id,user,auth,revision]{reply->deleteLater();if(auth!=m_authGeneration || revision!=m_accountFormRevision)return;
+        AccountForm form;if(ao3RequestFailed(reply)){form.kind=kind;form.id=id;form.error=ao3NetworkError(reply);}else form=AccountForms::parse(QString::fromUtf8(reply->readAll()),kind,user,id);emit accountFormFetched(form);
+    });
+}
+void AO3Client::saveAccountForm(const AccountForm &original,const QMap<QString,QStringList> &draft)
+{
+    if(m_accountFormSending){emit accountFormSaved(original.source,{"Another account change is still being sent.",false,false});return;}
+    if(!m_loginManager->isLoggedIn() || original.user!=m_loginManager->username() || original.source!=AccountForms::source(original.kind,original.user,original.id)){emit accountFormSaved(original.source,{"Sign-in changed. Reload this form before saving.",false,false});return;}
+    m_accountFormSending=true;const auto auth=m_authGeneration;auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+original.source)));
+    connect(reply,&QNetworkReply::finished,this,[this,reply,original,draft,auth]{reply->deleteLater();if(auth!=m_authGeneration)return;
+        if(!m_loginManager->isLoggedIn() || m_loginManager->username()!=original.user){m_accountFormSending=false;emit accountFormSaved(original.source,{"Sign-in changed. Reload this form before saving.",false,false});return;}
+        AccountForm fresh;if(ao3RequestFailed(reply))fresh.error=ao3NetworkError(reply);else fresh=AccountForms::parse(QString::fromUtf8(reply->readAll()),original.kind,original.user,original.id);
+        QString error;const auto fields=AccountForms::submission(original,fresh,draft,error);
+        if(!error.isEmpty()){m_accountFormSending=false;emit accountFormSaved(original.source,{fresh.error.isEmpty()?error:fresh.error,false,false});return;}
+        QByteArray data;for(auto i=fields.cbegin();i!=fields.cend();++i)for(const auto &value:i.value()){if(!data.isEmpty())data+='&';data+=QUrl::toPercentEncoding(i.key())+'='+QUrl::toPercentEncoding(value);}
+        auto request=makeRequest(QUrl("https://archiveofourown.org"+fresh.path));request.setRawHeader("Content-Type","application/x-www-form-urlencoded");request.setRawHeader("Referer",QUrl("https://archiveofourown.org"+fresh.source).toEncoded());
+        auto *posted=m_manager->post(request,data);
+        connect(posted,&QNetworkReply::finished,this,[this,posted,original,auth]{posted->deleteLater();if(auth!=m_authGeneration)return;m_accountFormSending=false;
+            ArchiveFormResult result;if(ao3RequestFailed(posted))result={"Could not confirm the change. Reload the account page before trying again.",false,true};
+            else {const auto html=QString::fromUtf8(posted->readAll());result=siteIdentityMatches(html,original.user)?archiveFormResult(html):ArchiveFormResult{"Could not confirm this account after saving. Check sign-in before trying again.",false,true};if(result.uncertain)result.message="Could not confirm the change. Reload the account page before trying again.";}
+            emit accountFormSaved(original.source,result);
+        });
     });
 }
 
@@ -388,10 +420,10 @@ void AO3Client::fetchDashboard()
 void AO3Client::fetchArchivePage(const QString &kind,const QString &id,int page)
 {
     const auto user=m_loginManager->username();const auto route=ArchivePages::route(kind,user,id);
-    if(route.isEmpty() || (kind!="series" && !m_loginManager->isLoggedIn())){emit errorOccurred("Sign in to open this AO3 list.");return;}
+    if(route.isEmpty() || (!QStringList{"series","media","fandoms"}.contains(kind) && !m_loginManager->isLoggedIn())){emit errorOccurred("Sign in to open this AO3 list.");return;}
     page=qBound(1,page,1000000);const auto generation=++m_listingGeneration;const auto auth=m_authGeneration;
     auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+route+"?page="+QString::number(page))));
-    connect(reply,&QNetworkReply::finished,this,[this,reply,kind,id,page,user,generation,auth]{reply->deleteLater();if(auth!=m_authGeneration || generation!=m_listingGeneration || (kind!="series" && (!m_loginManager->isLoggedIn() || user!=m_loginManager->username())))return;
+    connect(reply,&QNetworkReply::finished,this,[this,reply,kind,id,page,user,generation,auth]{reply->deleteLater();if(auth!=m_authGeneration || generation!=m_listingGeneration || (!QStringList{"series","media","fandoms"}.contains(kind) && (!m_loginManager->isLoggedIn() || user!=m_loginManager->username())))return;
         ArchivePage out;if(ao3RequestFailed(reply))out.error=ao3NetworkError(reply);else out=ArchivePages::parse(QString::fromUtf8(reply->readAll()),kind,user,id,page);emit archivePageFetched(kind,id,out);
     });
 }
@@ -517,8 +549,9 @@ int statistic(const QString &html, const QString &name)
 }
 }
 
-SearchResult AO3Client::parseSearchResults(const QString &html, const QString &, int page)
+SearchResult AO3Client::parseSearchResults(const QString &source, const QString &, int page)
 {
+    const QString html=CommentHtml::visibleListingHtml(source);
     SearchResult result;
     result.currentPage = qMax(page, 1);
     result.totalPages = result.currentPage;

@@ -4,11 +4,11 @@ Unofficial AO3 reader for Linux (Qt 6) and Android (Kotlin/Compose). Not affilia
 
 Both editions support work, people, tag and bookmark searches with filters, tag suggestions, sign-in, profiles, offline reading, favorites, bookmarks, progress, appearance settings, fullscreen, paged reading, translation and library backups.
 
-Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/author/series subscriptions, account lists, confirmed history deletion/clearing and ordered series lists. Comments support reading, posting, replies, editing, deletion and the moderation controls offered by AO3. Work bookmarks support notes, tags, collections, pseuds, privacy and recommendations.
+Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/author/series subscriptions, account lists, confirmed history deletion/clearing and ordered series lists. Comments support reading, posting, replies, editing, deletion and the moderation controls offered by AO3. Bookmarks support notes, tags, collections, pseuds, privacy and recommendations, including series and external items. Native account forms cover preferences, profile and pseud editing, and block/mute management. Media and fandom directories are also available.
 
-The embedded AO3 website provides creator/account-management tools, bulk list management, external/series bookmark editing and original work formatting. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
+The embedded AO3 website provides publishing, collections/challenges, bulk bookmark management, icon uploads and account security tools. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
 
-3.2.0-rc.23 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
+3.2.0-rc.24 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 Native skins support component styling and embedded image layers without CSS. Import an image in the skin editor or try the bundled **Neos Nebula** preset. Image credits and licenses travel with exported skins. See [skin format](SKINS.md).
 

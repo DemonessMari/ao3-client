@@ -20,6 +20,27 @@ class ArchiveNetworkTest {
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
     }
+    @Test fun accountFormsRefetchTokensRejectConflictsAndNeverRetryUnknownWrites() {
+        val html=javaClass.classLoader!!.getResource("account-form-profile.html")!!.readText()
+        val original=AccountForms.parse(html,"profile","Writer")
+        val success="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Out</a></nav><div class='flash notice'>Updated.</div>"
+        val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())html.replace("account+token","new+token") else success).also{calls+=it}})
+        assertTrue(client.saveAccountForm(original,mapOf("profile[title]" to listOf("New title"))).success)
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod});assertEquals("/users/Writer/profile",calls.last().url.path)
+        val body=calls.last().written.toString("UTF-8");assertTrue(body.contains("new%2Btoken"));assertTrue(body.contains("New+title"));assertFalse(body.contains("ticket_number"));assertFalse(body.contains("user%5Badmin%5D"))
+        val conflictCalls=mutableListOf<Reply>()
+        val conflict=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,html.replace("Original title","Updated elsewhere")).also{conflictCalls+=it}})
+        assertTrue(runCatching{conflict.saveAccountForm(original,mapOf("profile[title]" to listOf("New title")))}.isFailure);assertEquals(1,conflictCalls.size)
+        val failedCalls=mutableListOf<Reply>()
+        val failed=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(failedCalls.isEmpty())200 else 503,html).also{failedCalls+=it}})
+        assertTrue(failed.saveAccountForm(original,mapOf("profile[title]" to listOf("New title"))).uncertain);assertEquals(2,failedCalls.size)
+        val externalHtml=javaClass.classLoader!!.getResource("account-form-external.html")!!.readText();val external=AccountForms.parse(externalHtml,"externalBookmark","Writer")
+        val multiCalls=mutableListOf<Reply>();val multi=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(multiCalls.isEmpty())externalHtml else success).also{multiCalls+=it}})
+        assertTrue(multi.saveAccountForm(external,mapOf("external_work[category_strings][]" to listOf("F/F","M/M"))).success)
+        val args=java.net.URLDecoder.decode(multiCalls.last().written.toString("UTF-8"),"UTF-8")
+        assertTrue(args.contains("external_work[category_strings][]=F/F"));assertTrue(args.contains("external_work[category_strings][]=M/M"))
+    }
     @Test fun historyDeleteAndClearRefetchFormsAndDoNotRetryUncertainWrites() {
         val history=javaClass.classLoader!!.getResource("archive-history.html")!!.readText()
         val confirmation=javaClass.classLoader!!.getResource("history-clear.html")!!.readText()

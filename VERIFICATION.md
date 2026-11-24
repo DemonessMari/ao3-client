@@ -1,5 +1,21 @@
 # Verification
 
+## 3.2.0-rc.24
+
+2026-11-24: both editions add native AO3 preferences, profile title/biography editing, pseud creation/editing, block/mute management, media/fandom directories, series/external bookmark creation, and bookmark editing/deletion by bookmark record ID. Routes and fields were checked against official otwarchive forms, helpers and controllers. Unblock/unmute use member confirmation routes. Online native lists and comments honor AO3’s numeric-user mute visibility rule; story content cannot supply that rule.
+
+Account forms use server-supplied options and fresh CSRF tokens, preserve untouched concurrent changes, reject conflicting edits, keep unsubmitted drafts in memory, and clear private form state on sign-out. Unknown/staff controls and actions in user content are excluded. Uncertain writes are not retried automatically. Large Android option lists are searchable.
+
+All six desktop suites pass, including 71 functional checks. The desktop profile editor and fandom directory were rendered and inspected. The installed binary matches the build and starts from `/tmp` with isolated application data; existing reading data is preserved.
+
+A read-only check with the saved native session parsed the live profile (2 fields), preferences (25), new pseud (3) and external bookmark (14) forms, and verified pseud, blocked-user, muted-user and media lists. No account writes were submitted during this check, and private form values/list entries were not recorded.
+
+Android passes 150 offline tests; the optional live test is skipped. Fixtures and controlled network tests cover fresh forms, repeated fields, conflicting edits, drafts, sign-out, uncertain writes and trusted mute rules. A Compose UI test verifies searching a large option list and submitting its underlying server value. Release lint reports zero errors, 40 warnings and two hints. APK/AAB signatures verify; the APK retains the previous signer, passes 16 KB alignment and excludes test classes.
+
+Physical-phone installation and visual/accessibility/rotation/Back checks remain pending because no device is connected. New production account writes and role-specific workflows remain unverified. Publishing, collections/challenges, account security, icon uploads, pseud deletion/merging and bulk bookmark management remain website workflows. See FEATURES.md for the remaining coverage gaps.
+
+## Previous releases
+
 2026-11-23: desktop and Android 3.2.0-rc.14 (Android code 29).
 
 - Desktop: Arch Linux, Qt 6.12.0, glibc 2.44. All five CTest suites pass: content, functional, launcher, WebEngine rendering and installer. The native skin preview was rendered and inspected. Builds use one compilation job.
@@ -14,7 +30,7 @@ Still pending: physical-phone rendering and installation, accessibility, large f
 
 The earlier phone-wide 404 report has not been reproduced or established as resolved. Current desktop authenticated requests and Android-backend public searches/reading succeed; that does not establish the cause or status on the phone.
 
-Full native website parity remains incomplete. Creator/account-management tools, bulk list management, external/series bookmark editing and faithful HTML/media/work skins use the embedded AO3 website. Offline copies preserve text, notes and basic inline formatting. See [feature coverage](FEATURES.md). Keep releases marked prerelease until device acceptance passes.
+Full native website parity remains incomplete. Publishing, collections/challenges, account security tools, icon uploads, pseud merging/deletion and bulk bookmark management use the embedded AO3 website. Original formatting supports sanitized chapter HTML and available inline work skins; embedded audio/video and external style resources remain unsupported. See [feature coverage](FEATURES.md). Keep releases marked prerelease until device acceptance passes.
 
 ## Unreleased source after rc.14
 

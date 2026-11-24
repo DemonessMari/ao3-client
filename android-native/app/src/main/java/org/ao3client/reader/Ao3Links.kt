@@ -19,3 +19,9 @@ import androidx.compose.ui.Modifier
     SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id")},modifier=Modifier.fillMaxWidth()) {Text("Original formatting and work skin")}
     SkinOutlinedButton(onClick={vm.openWebsite(Archive.BASE+"/works/$id?show_comments=true#comments")},modifier=Modifier.fillMaxWidth()) {Text("Comment management")}
 }
+
+@Composable internal fun NativeAccountLinks(vm:ClientState) {
+    SkinTextButton(onClick={vm.showAccountEditor("profile")}){Text("Edit profile")}
+    SkinTextButton(onClick={vm.showAccountEditor("preferences")}){Text("AO3 preferences")}
+    listOf("pseuds" to "Pseuds","blocked" to "Blocked users","muted" to "Muted users").forEach{(kind,title)->SkinTextButton(onClick={vm.showArchiveList(kind)}){Text(title)}}
+}

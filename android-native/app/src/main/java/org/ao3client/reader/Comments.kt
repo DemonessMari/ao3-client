@@ -13,7 +13,7 @@ data class CommentPage(val comments:List<ArchiveComment>,val page:Int,val pages:
 object CommentParser {
     fun parse(html:String,page:Int=1):CommentPage {
         require(html.length<=8*1024*1024) { "Comments page is too large" }
-        val doc=Jsoup.parse(html)
+        val doc=visibleListingDocument(html)
         check(doc.select("#comments_placeholder, #feedback, ol.thread, li[id^=comment_]").isNotEmpty()) { "AO3 did not return a comments page. Sign in if the work is restricted." }
         val comments=doc.select("li.comment[id^=comment_]").filter { it.id().matches(Regex("comment_\\d+")) && it.parents().none { p->p.id()=="workskin" || p.hasClass("userstuff") } }.map { element ->
             val copy=element.clone();copy.select("ol.thread").remove()

@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable fun ClientApp(vm: ClientState) {
+    vm.pendingAccountForm?.let{pending->AlertDialog(onDismissRequest={vm.pendingAccountForm=null},title={Text("Discard changes?")},text={Text("Discard your unsaved changes and load this form from AO3?")},confirmButton={SkinTextButton(onClick={vm.pendingAccountForm=null;vm.showAccountEditor(pending.first,pending.second,pending.third,true)}){Text("Discard")}},dismissButton={SkinTextButton(onClick={vm.pendingAccountForm=null}){Text("Cancel")}})}
     if(vm.notice!=null) AlertDialog(onDismissRequest={vm.notice=null},title={Text("AO3 Client")},text={Text(vm.notice.orEmpty())},confirmButton={SkinTextButton(onClick={vm.notice=null}) { Text("OK") }})
     if(vm.settingsConfirmation) AlertDialog(
         onDismissRequest = { vm.settingsConfirmation = false },
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        vm.navigate(when (vm.screen) { "accountForm"->vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
                 "archiveBookmark" -> ArchiveBookmarkScreen(vm)
                 "comments" -> CommentsScreen(vm)
                 "archiveList" -> ArchiveListScreen(vm)
+                "accountForm" -> AccountFormScreen(vm)
                 "series" -> SeriesScreen(vm)
                 "profile" -> ProfileScreen(vm)
                 "filters" -> FilterScreen(vm)
@@ -125,17 +127,17 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showArchiveList("history")}){Text("AO3 reading history")}; Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showArchiveList("history")}){Text("AO3 reading history")}; NativeAccountLinks(vm); Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
 }
 }
 @Composable private fun ClientTopBar(vm: ClientState) {
-    val showBack=vm.screen in listOf("skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
+    val showBack=vm.screen in listOf("accountForm","skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
     val navigation: @Composable () -> Unit = {
         if(showBack)IconButton(onClick={vm.navigate(when(vm.screen) {
-            "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
+            "accountForm" -> vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
             "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
         })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
     }
@@ -173,7 +175,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     } else TopAppBar(title={Text(when(vm.screen) {
-        "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
+        "accountForm" -> vm.accountForm?.title ?: "AO3 account"; "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
         "archiveList" -> vm.archiveList?.title.orEmpty(); "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
     },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent,scrolledContainerColor=Color.Transparent))
     }
@@ -205,6 +207,7 @@ class MainActivity : ComponentActivity() {
         if (!vm.ownWorks) {
             FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 listOf("people" to "People","tags" to "Tags","bookmarks" to "Bookmarks").forEach{(kind,title)->SkinTextButton(onClick={vm.startDiscovery(kind)}){Text(title)}}
+                SkinTextButton(onClick={vm.showArchiveList("media")}){Text("Fandoms")}
             }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SkinOutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
@@ -458,6 +461,7 @@ class MainActivity : ComponentActivity() {
             LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item { Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){ProfilePicture(vm,vm.profileUser,profile?.avatarUrl.orEmpty(),profile?.avatarAlt.orEmpty());Text(vm.profileUser,Modifier.weight(1f),style=MaterialTheme.typography.headlineMedium)} }
                 item{EntitySubscriptionButton(vm,"User",vm.profileUser)}
+                if(vm.username!=null)item{FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){if(vm.username==vm.profileUser){SkinTextButton(onClick={vm.showAccountEditor("profile")}){Text("Edit profile")};SkinTextButton(onClick={vm.showArchiveList("pseuds")}){Text("Pseuds")}}else{SkinOutlinedButton(onClick={vm.showAccountEditor("mute",vm.profileUser)}){Text("Mute")};SkinOutlinedButton(onClick={vm.showAccountEditor("block",vm.profileUser)}){Text("Block")}}}}
                 if(profile != null) {
                     if(profile.title.isNotBlank()) item { Text(profile.title, style = MaterialTheme.typography.titleLarge) }
                     if(profile.details.isNotBlank()) item { Text(profile.details) }

@@ -21,6 +21,21 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun accountEditorsPreserveDraftsAndClearPrivateDataOnLogout() {
+        val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
+        val app=TestApp(directory.newFolder(),MemoryPreferences())
+        val vm=ClientState(app,false,{prefs->Archive(prefs,connectionFactory={url->
+            calls+=url.file
+            val kind=if(url.path.endsWith("preferences"))"preferences" else "profile"
+            val html=javaClass.classLoader!!.getResource("account-form-$kind.html")!!.readText()
+            object:java.net.HttpURLConnection(url){override fun connect(){};override fun disconnect(){};override fun usingProxy()=false;override fun getResponseCode()=200;override fun getInputStream()=java.io.ByteArrayInputStream(html.toByteArray());override fun getHeaderFields():Map<String,List<String>> = emptyMap()}
+        })}).also{models+=it}
+        vm.username="Writer";vm.showAccountEditor("profile");awaitLoaded(vm);assertNotNull(vm.accountForm)
+        vm.accountDraft=vm.accountDraft+("profile[title]" to listOf("Unsaved title"));vm.navigate("home");vm.showAccountEditor("profile");assertEquals(1,calls.size);assertEquals(listOf("Unsaved title"),vm.accountDraft["profile[title]"])
+        vm.showAccountEditor("preferences");assertNotNull(vm.pendingAccountForm);assertEquals(1,calls.size)
+        vm.pendingAccountForm=null;vm.showAccountEditor("preferences",discard=true);awaitLoaded(vm);assertEquals("preferences",vm.accountForm!!.kind)
+        vm.logout();assertNull(vm.accountForm);assertTrue(vm.accountDraft.isEmpty());assertFalse(vm.accountSending)
+    }
     @Test fun publicDiscoveryKeepsAppliedOptionsWhenPagingAndDraftsWhenSwitching() {
         val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
         val app=TestApp(directory.newFolder(),MemoryPreferences())

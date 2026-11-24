@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable internal fun ArchiveListScreen(vm:ClientState) {
+    var accountTarget by remember(vm.archiveKind){mutableStateOf("")}
     var clearHistory by remember{mutableStateOf(false)}
     var confirm by remember{mutableStateOf<Pair<ArchiveEntry,String>?>(null)}
     val page=vm.archiveList
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
         if(page!=null){
             if(!vm.archiveKind.startsWith("search:"))item{Text(page.title,style=MaterialTheme.typography.headlineSmall)}
             item{SkinOutlinedTextField(filter,{filter=it},label={Text("Filter this page")},singleLine=true,modifier=Modifier.fillMaxWidth())}
+            if(vm.archiveKind in listOf("pseuds","bookmarks","series"))item{SkinOutlinedButton(onClick={vm.showAccountEditor(if(vm.archiveKind=="pseuds")"pseud" else if(vm.archiveKind=="bookmarks")"externalBookmark" else "seriesBookmark",if(vm.archiveKind=="series")vm.archiveId else "")}){Text(if(vm.archiveKind=="pseuds")"New pseud" else if(vm.archiveKind=="bookmarks")"New external bookmark" else "New series bookmark")}}
+            if(vm.archiveKind in listOf("blocked","muted"))item{Column(verticalArrangement=Arrangement.spacedBy(8.dp)){SkinOutlinedTextField(accountTarget,{accountTarget=it},label={Text("AO3 username")},singleLine=true,modifier=Modifier.fillMaxWidth());SkinOutlinedButton(onClick={vm.showAccountEditor(if(vm.archiveKind=="blocked")"block" else "mute",accountTarget.trim())}){Text(if(vm.archiveKind=="blocked")"Block user" else "Mute user")}}}
             if(vm.archiveKind=="history")item{SkinOutlinedButton(onClick={clearHistory=true},enabled=page.entries.isNotEmpty() && !vm.loading && !vm.archiveUncertain){Text("Clear entire AO3 history")}}
             if(vm.archiveKind=="inbox")item {
                 Column {
@@ -58,7 +61,7 @@ import androidx.compose.ui.unit.dp
                     if(entry.unread)Text("Unread",style=MaterialTheme.typography.labelMedium)
                     if(entry.body.isNotBlank() && entry.body!=entry.title)SelectionContainer{Text(entry.body)}
                     if(entry.target.isNotEmpty())SkinOutlinedButton(onClick={vm.openArchiveEntry(entry.target)},enabled=!vm.loading){Text(if(entry.target.startsWith("/comments/"))"Open thread" else if(entry.target.startsWith("/bookmarks/"))"Open on AO3" else "Open")}
-                    entry.actions.forEach{action->SkinTextButton(onClick={if(action in listOf("Unsubscribe","Delete from inbox","Delete from history"))confirm=entry to action else vm.actOnArchiveEntry(entry,action)},enabled=!vm.loading && !vm.archiveUncertain){Text(action)}}
+                    entry.actions.forEach{action->SkinTextButton(onClick={when(action){"Edit pseud"->vm.showAccountEditor("pseud",entry.id);"Edit bookmark"->vm.showAccountEditor("bookmark",entry.id.removePrefix("bookmark_"));"Unblock","Unmute"->vm.showAccountEditor(action.lowercase(),entry.id);else->if(action in listOf("Unsubscribe","Delete from inbox","Delete from history"))confirm=entry to action else vm.actOnArchiveEntry(entry,action)}},enabled=!vm.loading && !vm.archiveUncertain){Text(action)}}
                     HorizontalDivider()
                 }
             }

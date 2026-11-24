@@ -7,6 +7,9 @@ namespace ArchivePages {
 using namespace CommentHtml;
 inline QString path(const QString &value){const auto u=QUrl("https://archiveofourown.org").resolved(QUrl(value));return u.scheme()=="https" && u.host()=="archiveofourown.org" && u.port(443)==443 && u.userInfo().isEmpty() && !u.hasFragment()?u.path():QString();}
 inline QString route(const QString &kind,const QString &user,const QString &id={}) {
+    if(kind=="media")return "/media";
+    if(kind=="fandoms")return !id.isEmpty() && id!="." && id!=".." && !id.contains('/')?"/media/"+QString::fromLatin1(QUrl::toPercentEncoding(id))+"/fandoms":QString();
+    if(QStringList{"pseuds","blocked","muted"}.contains(kind) && QRegularExpression("^[A-Za-z0-9_]+$").match(user).hasMatch())return "/users/"+user+"/"+kind+(kind=="pseuds"?"":"/users");
     if(kind=="series")return QRegularExpression("^[0-9]+$").match(id).hasMatch()?"/series/"+id:QString();
     if(kind=="history" && QRegularExpression("^[A-Za-z0-9_]+$").match(user).hasMatch())return "/users/"+user+"/readings";
     return QStringList{"bookmarks","subscriptions","inbox"}.contains(kind) && QRegularExpression("^[A-Za-z0-9_]+$").match(user).hasMatch()?"/users/"+user+"/"+kind:QString();
@@ -14,7 +17,7 @@ inline QString route(const QString &kind,const QString &user,const QString &id={
 struct Document {
     QString html;QVector<Node> list;
     explicit Document(const QString &h):html(h),list(nodes(h)){}
-    bool trusted(int i) const {for(int p=i;p>=0;p=list[p].parent)if(hasClass(list[p],"userstuff"))return false;return true;}
+    bool trusted(int i) const {for(int p=i;p>=0;p=list[p].parent)if(hasClass(list[p],"userstuff") || list[p].attrs.value("id")=="workskin" || (p!=i && list[p].tag=="textarea"))return false;return true;}
     bool inside(int i,int root) const{return root<0 || beneath(list,i,root);}
     QVector<int> select(const QString &tag,const QStringList &classes,int root=-1,bool trust=true) const {
         QVector<int> out;for(int i=0;i<list.size();++i){if((!tag.isEmpty() && list[i].tag!=tag) || !inside(i,root) || (trust && !trusted(i)))continue;bool matches=true;for(const auto &c:classes)matches &= hasClass(list[i],c);if(matches)out.append(i);}return out;
@@ -23,17 +26,46 @@ struct Document {
     QString textAt(int i) const{return i<0?QString():text(html.mid(list[i].begin,list[i].end-list[i].begin));}
     QString target(int root) const {if(root<0)return {};for(int i:select("a",{},root)){const auto p=path(list[i].attrs.value("href"));if(QRegularExpression("^/(?:works/[0-9]+(?:/chapters/[0-9]+)?|series/[0-9]+|users/[A-Za-z0-9_]+(?:/pseuds/[^/]+)?)$").match(p).hasMatch())return p;}return {};}
 };
-inline ArchivePage parse(const QString &html,const QString &kind,const QString &user,const QString &id,int page) {
+inline ArchivePage parse(const QString &source,const QString &kind,const QString &user,const QString &id,int page) {
+    const QString html=visibleListingHtml(source);
     ArchivePage out;out.page=out.pages=page;
     if(html.size()>8*1024*1024){out.error="AO3 page is too large.";return out;}
-    if(kind!="series" && !siteIdentityMatches(html,user)){out.error="AO3 could not verify this account. Check native sign-in.";return out;}
-    const QMap<QString,QString> markers={{"series","series-show"},{"bookmarks","bookmarks-index"},{"subscriptions","subscriptions-index"},{"inbox","inbox-show"},{"history","readings-index"}};
+    if(!QStringList{"series","media","fandoms"}.contains(kind) && !siteIdentityMatches(html,user)){out.error="AO3 could not verify this account. Check native sign-in.";return out;}
+    const QMap<QString,QString> markers={{"series","series-show"},{"bookmarks","bookmarks-index"},{"subscriptions","subscriptions-index"},{"inbox","inbox-show"},{"history","readings-index"},{"media","media-index"},{"fandoms","fandoms-index"},{"pseuds","pseuds-index"},{"blocked",""},{"muted",""}};
     if(!markers.contains(kind)){out.error="Unknown AO3 list.";return out;}
-    Document d(html);int main=-1;for(int i=0;i<d.list.size();++i)if(d.list[i].attrs.value("id")=="main" && hasClass(d.list[i],markers.value(kind)) && d.trusted(i)){main=i;break;}
+    Document d(html);int main=-1;for(int i=0;i<d.list.size();++i)if(d.list[i].attrs.value("id")=="main" && (markers.value(kind).isEmpty() || hasClass(d.list[i],markers.value(kind))) && d.trusted(i)){main=i;break;}
     if(main<0){out.error="AO3 did not return this list. Open it on AO3 to check availability.";return out;}
     out.title=d.textAt(d.first("h2",{"heading"},main));
     if(kind=="history" && !d.select({}, {"error"}).isEmpty()){out.error="AO3 reported an error while updating reading history.";return out;}
-    if(kind=="history") {
+    if(kind=="blocked" || kind=="muted") {
+        const auto confirm="/users/"+user+"/"+kind+"/users/confirm_"+(kind=="blocked"?"block":"mute");bool recognized=false;
+        for(int f:d.select("form",{},main))if(path(d.list[f].attrs.value("action"))==confirm && d.list[f].attrs.value("method").toLower()=="get")recognized=true;
+        if(!recognized){out.error="AO3 did not return this account list.";return out;}
+    }
+    if(kind=="media") {
+        for(int h:d.select("h3",{"heading"},main))for(int a:d.select("a",{},h)) {
+            const auto target=path(d.list[a].attrs.value("href"));if(!QRegularExpression("^/media/[^/]+/fandoms$").match(target).hasMatch())continue;
+            ArchiveEntry e;e.id=target;e.title=d.textAt(a);e.target=target;out.entries<<e;break;
+        }
+    } else if(kind=="fandoms") {
+        const int root=d.first("ol",{"alphabet","fandom","index"},main);
+        if(root>=0)for(int a:d.select("a",{},root)) {
+            if(!QRegularExpression("^/tags/[^/]+/works$").match(path(d.list[a].attrs.value("href"))).hasMatch())continue;
+            ArchiveEntry e;e.id=QString::number(a);e.title=d.textAt(a);QUrl u("/works/search");QUrlQuery q;q.addQueryItem("work_search[fandom_names]",e.title);u.setQuery(q);e.target=u.toString(QUrl::FullyEncoded);out.entries<<e;
+        }
+    } else if(QStringList{"pseuds","blocked","muted"}.contains(kind)) {
+        const int root=d.first("ul",{"pseud","index"},main);
+        if(root>=0)for(int item:d.select("li",{},root)) {
+            if(d.list[item].parent!=root)continue;
+            ArchiveEntry e;const int heading=d.first("h4",{"heading"},item);e.title=d.textAt(heading);e.target=d.target(heading);e.id=QString::number(item);e.body=d.textAt(d.first("blockquote",{"userstuff"},item,false));
+            for(int a:d.select("a",{},item)) {
+                const QUrl u=QUrl("https://archiveofourown.org").resolved(QUrl(d.list[a].attrs.value("href")));const auto p=path(u.toString());
+                if(kind=="pseuds"){const auto m=QRegularExpression("^/users/"+QRegularExpression::escape(user)+"/pseuds/([^/]+)/edit$").match(p);if(m.hasMatch()){e.id=m.captured(1);e.actions={"Edit pseud"};}}
+                else {const auto match=QRegularExpression("^/users/"+QRegularExpression::escape(user)+"/"+kind+"/users/([0-9]+)/confirm_"+(kind=="blocked"?"unblock":"unmute")+"$").match(p);if(match.hasMatch()){e.id=match.captured(1);e.actions={kind=="blocked"?QString("Unblock"):QString("Unmute")};}}
+            }
+            out.entries<<e;
+        }
+    } else if(kind=="history") {
         const int root=d.first("ol",{"reading","work"},main);
         if(root>=0)for(int i:d.select("li",{"reading","work"},root)) {
             if(d.list[i].parent!=root)continue;
@@ -53,6 +85,7 @@ inline ArchivePage parse(const QString &html,const QString &kind,const QString &
         if(root>=0)for(int i:d.select("li",{kind=="series"?"work":"bookmark"},root)) {
             if(d.list[i].parent!=root)continue;
             ArchiveEntry e;e.id=d.list[i].attrs.value("id");if(e.id.isEmpty())e.id="entry-"+QString::number(i);const int heading=d.first("h4",{"heading"},i);e.title=d.textAt(heading);if(e.title.isEmpty())e.title="Unavailable work";e.target=d.target(heading);if(e.target.isEmpty() && kind=="bookmarks"){const auto key=QRegularExpression("^bookmark_([0-9]+)$").match(e.id).captured(1);if(!key.isEmpty())e.target="/bookmarks/"+key;}
+            if(kind=="bookmarks")for(int a:d.select("a",{},i)){const auto key=QRegularExpression("^bookmark_([0-9]+)$").match(e.id).captured(1);if(!key.isEmpty() && path(d.list[a].attrs.value("href"))=="/bookmarks/"+key+"/edit")e.actions={"Edit bookmark"};}
             QStringList body;for(int j:d.select({}, {},i,false))if(d.list[j].tag=="blockquote" || (d.list[j].tag=="dl" && hasClass(d.list[j],"stats")))body<<d.textAt(j);e.body=body.join("\n\n");out.entries.append(e);
         }
     } else if(kind=="subscriptions") {
