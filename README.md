@@ -8,7 +8,7 @@ Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/a
 
 The embedded AO3 website provides creator/account-management tools, bulk list management, external/series bookmark editing and original work formatting. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
 
-3.2.0-rc.21 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
+Android 3.2.0-rc.22 and Linux 3.2.0-rc.21 are prereleases. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 Native skins support component styling and embedded image layers without CSS. Import an image in the skin editor or try the bundled **Neos Nebula** preset. Image credits and licenses travel with exported skins. See [skin format](SKINS.md).
 

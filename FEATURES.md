@@ -1,6 +1,6 @@
 # Feature coverage
 
-3.2.0-rc.21 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
+Android 3.2.0-rc.22 and Linux 3.2.0-rc.21 prereleases. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |

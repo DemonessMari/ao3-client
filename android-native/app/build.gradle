@@ -14,8 +14,8 @@ android {
         testInstrumentationRunner 'org.ao3client.reader.DeviceNetworkInstrumentation'
         minSdk 28
         targetSdk 36
-        versionCode 36
-        versionName '3.2.0-rc.21'
+        versionCode 37
+        versionName '3.2.0-rc.22'
     }
     sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures"); main.assets.srcDir file("../../skins"); test.resources.srcDir file("../../skins") }
     signingConfigs {
@@ -32,7 +32,7 @@ android {
     buildFeatures { compose true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
-    testOptions { unitTests.returnDefaultValues = true; unitTests.all { maxHeapSize = "256m"; inputs.property("ao3LiveTest", System.getenv("AO3_LIVE_TEST") ?: "0") } }
+    testOptions { unitTests.includeAndroidResources = true; unitTests.returnDefaultValues = true; unitTests.all { maxHeapSize = "512m"; inputs.property("ao3LiveTest", System.getenv("AO3_LIVE_TEST") ?: "0") } }
 }
 dependencies {
     implementation platform('androidx.compose:compose-bom:2024.10.00')
@@ -43,6 +43,8 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6'
     implementation 'org.jsoup:jsoup:1.24.1'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.18'
+    testImplementation 'androidx.compose.ui:ui-test-junit4'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
     testImplementation 'org.json:json:20240303'
 }

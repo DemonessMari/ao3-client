@@ -84,3 +84,11 @@ Read-only live desktop checks confirmed the saved native session, account lists 
 Android: 127 tests pass and one live-network test is skipped in the standard release suite; lint reports zero errors and 39 warnings. The separate live test passed two distinct 20-work searches and opened a readable chapter. New tests cover backup providers opening away from the UI thread, stream closure, round-trip data and recovery after provider errors. Import confirmation survives recreation; reader export propagates cancellation without an error message.
 
 Physical-phone visual, rotation, Back, accessibility and extended-session checks remain pending. Full native website parity remains incomplete; website-only tools remain in the embedded site.
+
+## Android 3.2.0-rc.22
+
+2026-11-24: rendered Android regression tests reproduced the dark strip above skinned input backgrounds. Input fill, outline and floating-label cutout now use the same Material container rather than a border around the whole field. Supporting text stays outside the outline.
+
+All 131 offline Android tests pass; one live-network test is skipped. The four new rendered tests cover blue and rose skins, both text-value APIs, empty and filled focus states, custom/default/zero border widths, square/rounded corners, floating labels and supporting text. Editing checks verify typing, replacing a selection and caret placement. Robolectric renders on Android API 34; these checks do not establish physical-device visual acceptance.
+
+This update changes Android only. Linux remains on 3.2.0-rc.21. Existing physical-phone and website-parity limitations still apply.
