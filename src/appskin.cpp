@@ -83,8 +83,8 @@ public:
         if(button->features & QStyleOptionButton::Flat){
             painter->save();
             if(button->state & (State_MouseOver|State_Sunken|State_On|State_HasFocus)){
-                QColor tint=button->palette.color(QPalette::Highlight);tint.setAlpha(35);
-                painter->setRenderHint(QPainter::Antialiasing);painter->setPen(Qt::NoPen);painter->setBrush(tint);painter->drawRoundedRect(button->rect.adjusted(1,1,-1,-1),4,4);
+                painter->setPen(QPen(button->palette.color(QPalette::WindowText),2));
+                painter->drawLine(button->rect.bottomLeft()+QPoint(8,-2),button->rect.bottomRight()+QPoint(-8,-2));
             }
             painter->restore();
             auto label=*button;label.palette.setColor(QPalette::ButtonText,button->palette.color(QPalette::WindowText));

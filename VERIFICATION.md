@@ -68,6 +68,6 @@ Physical-phone installation and visual acceptance remain pending: no device was 
 
 A synthetic wide avatar verifies center cropping across the circular account button, corner clipping and click handling. A solid image verifies background-cover rendering reaches all four corners of a larger target. Existing checks cover skin import/export, old versions, banner spacing, repeated application and reset. These checks use local test images, not server profile-picture availability.
 
-Removed redundant image/inheritance explanations and decorative source headings, and shortened bundled skin names. Credits, licenses, controls and validation errors remain. Home no longer has an extra outer frame, flat navigation remains flat under custom skins, and fill-area image controls no longer offer ignored sizes/offsets.
+Removed redundant image/inheritance explanations and decorative source headings, and shortened bundled skin names. Credits, licenses, controls and validation errors remain. Home no longer has an extra outer frame, flat navigation remains flat under custom skins and uses an underline on hover/focus without changing text contrast, and fill-area image controls no longer offer ignored sizes/offsets.
 
 Physical-phone visual acceptance remains pending. Android also uses background-cover fill and edge-to-edge profile-picture cropping. Full website parity and authenticated-write acceptance remain incomplete.
