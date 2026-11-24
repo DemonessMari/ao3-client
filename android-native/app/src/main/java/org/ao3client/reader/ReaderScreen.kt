@@ -107,7 +107,7 @@ import androidx.lifecycle.LifecycleEventObserver
         uri?.let { ioScope.launch { try {
             val content = fic.title + "\nby " + fic.author + "\n\n" + vm.chapters.joinToString("\n\n") { it.exportText() }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { context.contentResolver.openOutputStream(it)?.bufferedWriter()?.use { writer -> writer.write(content) } ?: error("Unable to open file") }
-        } catch (e: Exception) { vm.error = e.message } } }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { vm.error = e.message } } }
     }
     val hideChrome = vm.fullScreen || vm.textOnly
     DisposableEffect(hideChrome) {

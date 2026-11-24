@@ -176,6 +176,11 @@ private slots:
         for(int width:{1440,1100,900}){window.resize(width,850);QTest::qWait(30);QCOMPARE(window.width(),width);const auto center=search->mapTo(window.m_headerBar,search->rect().center());QVERIFY(qAbs(center.x()-window.m_headerBar->rect().center().x())<=12);QVERIFY(name->isVisible());QVERIFY(!name->wordWrap());QVERIFY(name->width()>=name->fontMetrics().horizontalAdvance(name->text()));QCOMPARE(window.m_navBar->parentWidget(),window.m_headerBar);}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_HEADER")){window.resize(1440,850);QTest::qWait(40);window.grab().save("/tmp/ao3-header-rc3.png");}
     }
+    void accountAvatarStaysSquareWhenAppearanceChanges() {
+        const auto previous=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(previous.isValid())QSettings().setValue("appearance/skin",previous);else QSettings().remove("appearance/skin");applyAppSkin();});
+        MainWindow window;installNetwork(window);window.show();window.m_loginButton->setProperty("accountAvatar",true);window.m_loginButton->setFixedSize(44,44);
+        for(double scale:{1.0,1.5}){AppSkin skin=AppSkin::preset(1);skin.version=3;skin.uiScale=scale;skin.components["buttons"]=QJsonObject{{"padding",24},{"textScale",1.5}};QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(30);QCOMPARE(window.m_loginButton->width(),window.m_loginButton->height());QVERIFY(window.m_loginButton->width()>=44);const auto point=window.m_loginButton->mapTo(window.m_headerBar,QPoint(0,0));QVERIFY(window.m_headerBar->width()-point.x()-window.m_loginButton->width()>=qRound(16*scale));}
+    }
     void avatarCropsToCircleAndBackgroundCoversWindow() {
         QImage image(300,100,QImage::Format_ARGB32);image.fill(Qt::red);
         {QPainter p(&image);p.fillRect(QRect(100,0,100,100),Qt::green);p.fillRect(QRect(200,0,100,100),Qt::blue);}
@@ -194,14 +199,16 @@ private slots:
         for(const auto &change:QList<QPair<QString,QJsonValue>>{{"image","missing"},{"target","reader"},{"fit","script"},{"opacity",1.1},{"width",9000},{"offsetX",-999}}){auto bad=root;auto layers=bad["layers"].toArray();auto layer=layers[0].toObject();layer[change.first]=change.second;layers[0]=layer;bad["layers"]=layers;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));}
         auto bad=root;auto assets=bad["images"].toObject();auto a=assets["nebula"].toObject();a["data"]="https://example.com/image.jpg";assets["nebula"]=a;bad["images"]=assets;QVERIFY(!AppSkin::parse(QJsonDocument(bad).toJson(),round,error));
         const auto before=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(before.isValid())QSettings().setValue("appearance/skin",before);else QSettings().remove("appearance/skin");applyAppSkin();});
-        MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();QTest::qWait(30);const int base=window.m_headerBar->height();QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(60);QVERIFY(window.m_headerBar->layout()->contentsMargins().bottom()>=96);QVERIFY(window.m_navBar->geometry().bottom()<window.m_headerBar->height()-96);const int height=window.m_headerBar->height();applyAppSkin();QTest::qWait(20);QCOMPARE(window.m_headerBar->height(),height);
+        MainWindow window;auto *network=installNetwork(window);Q_UNUSED(network);window.show();QTest::qWait(30);QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::qWait(60);QVERIFY(window.m_headerBar->layout()->contentsMargins().bottom()>=96);QVERIFY(window.m_navBar->geometry().bottom()<window.m_headerBar->height()-96);const int height=window.m_headerBar->height();applyAppSkin();QTest::qWait(20);QCOMPARE(window.m_headerBar->height(),height);
         window.m_searchInput->setText("layer click check");window.m_searchButton->disconnect(&window);QSignalSpy clicks(window.m_searchButton,&QPushButton::clicked);QTest::mouseClick(window.m_searchButton,Qt::LeftButton);QCOMPARE(clicks.count(),1);
         SearchResult result;Work work;work.id="987654";work.title="Image-layer sample";work.author="Test author";work.summary="Text remains readable over decorative images.";result.works.append(work);result.totalResults=1;window.onSearchCompleted(result);QTest::qWait(50);
+        QImage photo(128,64,QImage::Format_RGB32);photo.fill(QColor("#227788"));window.m_loginButton->setProperty("accountAvatar",true);window.m_loginButton->setProperty("accountImage",photo);window.m_loginButton->setFixedSize(44,44);
+        for(int width:{900,1100,1440}){window.resize(width,850);QTest::qWait(30);const auto account=window.m_loginButton->mapTo(window.m_headerBar,QPoint(0,0));const auto logo=window.m_logoLabel->mapTo(window.m_headerBar,QPoint(0,0));QVERIFY(account.y()>=12);QVERIFY(window.m_headerBar->width()-account.x()-window.m_loginButton->width()>=16);QVERIFY(logo.x()>=16);QVERIFY(logo.y()>=12);}
         if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS")){window.grab().save("/tmp/ao3-image-skin-main.png");window.resize(900,850);QTest::qWait(30);window.grab().save("/tmp/ao3-image-skin-narrow.png");window.resize(1440,900);QTest::qWait(30);}
         QImage canvas(360,180,QImage::Format_ARGB32_Premultiplied);canvas.fill(QColor("#263b53"));{QPainter painter(&canvas);drawSkinLayers(painter,skin,"cards",canvas.rect(),"#263b53","#e7edf5");}QVERIFY(canvas.pixelColor(300,130)!=QColor("#263b53"));if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))canvas.save("/tmp/ao3-image-skin-card.png");
         const double alpha=safeSkinOpacity("#263b53","#e7edf5",1);QVERIFY(alpha>0 && alpha<1);
         bool saved=false;QTimer::singleShot(80,[&]{auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());if(!dialog)return;auto close=qScopeGuard([&]{dialog->reject();});auto *tabs=dialog->findChild<QTabWidget *>();QVERIFY(tabs);QCOMPARE(tabs->count(),6);tabs->setCurrentIndex(5);auto *list=dialog->findChild<QComboBox *>("skinImageLayers");QVERIFY(list);QCOMPARE(list->count(),3);if(qEnvironmentVariableIsSet("AO3_CAPTURE_SKINS"))dialog->grab().save("/tmp/ao3-image-skin-editor.png");auto *box=dialog->findChild<QDialogButtonBox *>();QVERIFY(box);QVERIFY(box->button(QDialogButtonBox::Save)->isEnabled());box->button(QDialogButtonBox::Save)->click();saved=true;});editAppSkin(&window);QVERIFY(saved);AppSkin exported;QVERIFY(customAppSkin(exported));QCOMPARE(exported.images,skin.images);QCOMPARE(exported.layers,skin.layers);
-        QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(30);QVERIFY(window.m_headerBar->height()<=base+5);
+        QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QTest::qWait(30);QCOMPARE(window.m_headerBar->layout()->contentsMargins().bottom(),12);QVERIFY(window.m_headerBar->height()-window.m_navBar->geometry().bottom()<=24);
     }
     void bundledCommunitySkinsLoadAndRender() {
         const auto previous=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{if(previous.isValid())QSettings().setValue("appearance/skin",previous);else QSettings().remove("appearance/skin");applyAppSkin();});
@@ -1469,6 +1476,18 @@ private slots:
         reader.showNotes();
         QCOMPARE(reader.m_browser->toPlainText(),body);
         reader.showChapter(1); QCOMPARE(reader.m_browser->toPlainText(),chapters[1].text);
+    }
+    void readerRestartAndNavigationSoak() {
+        Work work;work.id="99887766";work.title="Reader stability check";work.author="Test";QVector<WorkChapter> chapters;
+        for(int i=0;i<6;++i){QString text="Chapter marker "+QString::number(i)+"\n\n";for(int j=0;j<150;++j)text+="Paragraph "+QString::number(j)+" — reading text 世界 with enough words to paginate and scroll.\n\n";chapters.append({QString::number(i),text});}
+        QVERIFY(ReadingLibrary().saveOffline(work,chapters));const int seconds=qBound(0,qEnvironmentVariableIntValue("AO3_SOAK_SECONDS"),600);int operations=0;QElapsedTimer elapsed;elapsed.start();
+        {
+            ReaderWidget reader;reader.resize(900,700);reader.show();reader.openWork(work,chapters);QTest::qWait(30);
+            do {const int chapter=operations%chapters.size();reader.setBookMode(operations%2==0);reader.showChapter(chapter);QTest::qWait(20);QCOMPARE(reader.m_index,chapter);QVERIFY(reader.m_browser->toPlainText().startsWith("Chapter marker "+QString::number(chapter)));if(reader.m_bookMode){reader.m_book->animated=false;reader.m_book->turn(1);QVERIFY(reader.m_book->pages()>1);}else{auto *bar=reader.m_browser->verticalScrollBar();bar->setValue(bar->maximum()/2);}reader.saveProgress();++operations;QTest::qWait(seconds?80:5);}while(operations<12 || elapsed.elapsed()<seconds*1000);
+            reader.setBookMode(false);reader.showChapter(3);QTest::qWait(30);reader.m_browser->verticalScrollBar()->setValue(reader.m_browser->verticalScrollBar()->maximum()/2);reader.saveProgress();QSettings().sync();
+        }
+        ReadingLibrary reopened;const auto saved=reopened.load(work.id);QCOMPARE(saved.size(),chapters.size());ReaderWidget restored;restored.resize(900,700);restored.show();restored.openWork(work,saved);QTest::qWait(50);QCOMPARE(restored.m_index,3);QVERIFY(restored.m_browser->toPlainText().startsWith("Chapter marker 3"));QVERIFY(restored.m_browser->verticalScrollBar()->value()>0);
+        qInfo()<<"Reader navigation operations:"<<operations<<"elapsed ms:"<<elapsed.elapsed();
     }
     void offlineLibraryAndBookmarks() {
         QTemporaryDir directory;

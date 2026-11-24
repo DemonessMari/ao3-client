@@ -459,13 +459,13 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
         }
     }
 
-    fun exportLibrary(stream: java.io.OutputStream, includeDownloads:Boolean = true) = load {
+    fun exportLibrary(openStream: () -> java.io.OutputStream, includeDownloads:Boolean = true) = load {
         saveProgress()
-        withContext(Dispatchers.IO) { stream.bufferedWriter().use { val data=LibraryBackup.snapshot(library,storage,includeDownloads).toString(); require(data.toByteArray(Charsets.UTF_8).size<=LibraryBackup.MAX_BYTES) { "Backup exceeds 100 MB. Export reading data without downloads, and save large fics separately as text." }; it.write(data) } }
+        withContext(Dispatchers.IO) { openStream().bufferedWriter().use { val data=LibraryBackup.snapshot(library,storage,includeDownloads).toString(); require(data.toByteArray(Charsets.UTF_8).size<=LibraryBackup.MAX_BYTES) { "Backup exceeds 100 MB. Export reading data without downloads, and save large fics separately as text." }; it.write(data) } }
         notice="Library backup exported. Keep it private: it contains reading history and downloaded text."
     }
-    fun importLibrary(stream: java.io.InputStream) = load {
-        withContext(Dispatchers.IO) { stream.use {
+    fun importLibrary(openStream: () -> java.io.InputStream) = load {
+        withContext(Dispatchers.IO) { openStream().use {
             val bytes=readBackupBytes(it); require(bytes.size<=LibraryBackup.MAX_BYTES) { "Backup exceeds 100 MB" }
             LibraryBackup.merge(JSONObject(String(bytes,Charsets.UTF_8)),library,storage)
         } }

@@ -402,10 +402,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable fun LibraryBackupControls(vm: ClientState) {
-    val context=LocalContext.current
+    val resolver=LocalContext.current.applicationContext.contentResolver
     var includeDownloads by rememberSaveable { mutableStateOf(true) }
-    var confirm by remember { mutableStateOf<android.net.Uri?>(null) }
-    val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { try { vm.exportLibrary(context.contentResolver.openOutputStream(it) ?: error("Cannot create backup"),includeDownloads) } catch(e:Exception) { vm.error=e.message } } }
+    var confirm by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+    val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { vm.exportLibrary({ resolver.openOutputStream(it) ?: error("Cannot create backup") },includeDownloads) } }
     val restore=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { confirm=it }
     Text("Library backup",style=MaterialTheme.typography.titleLarge)
     Text("Backups contain reading data, not credentials. Files are not encrypted.",style=MaterialTheme.typography.bodySmall)
@@ -413,7 +413,7 @@ class MainActivity : ComponentActivity() {
     Text("Maximum size: 100 MB.",style=MaterialTheme.typography.bodySmall)
     SkinOutlinedButton(onClick={export.launch("ao3-library-backup.json")},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Export library backup") }
     SkinOutlinedButton(onClick={restore.launch(arrayOf("application/json","text/plain","application/octet-stream"))},enabled=!vm.loading,modifier=Modifier.fillMaxWidth()) { Text("Import library backup") }
-    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept.")},confirmButton={SkinTextButton(onClick={ val uri=confirm; confirm=null; try { vm.importLibrary(context.contentResolver.openInputStream(uri!!) ?: error("Cannot read backup")) } catch(e:Exception) { vm.error=e.message } }) { Text("Import") }},dismissButton={SkinTextButton(onClick={confirm=null}) { Text("Cancel") }})
+    if(confirm!=null) AlertDialog(onDismissRequest={confirm=null},title={Text("Import library backup?")},text={Text("This adds the backup's fics and bookmarks. Existing downloads and progress are kept.")},confirmButton={SkinTextButton(onClick={ val uri=confirm; confirm=null; if(uri!=null)vm.importLibrary { resolver.openInputStream(uri) ?: error("Cannot read backup") } }) { Text("Import") }},dismissButton={SkinTextButton(onClick={confirm=null}) { Text("Cancel") }})
 }
 
 @Composable fun LibraryScreen(vm: ClientState) {

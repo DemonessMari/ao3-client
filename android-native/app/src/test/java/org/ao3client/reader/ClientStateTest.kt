@@ -21,6 +21,21 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun backupProvidersOpenOffTheUiThreadAndCloseAfterRoundTrip() {
+        val root=directory.newFolder();val prefs=MemoryPreferences();val fic=Fic("654321","Backup round trip","Writer");val chapters=listOf(Chapter("One","Saved offline text 世界"))
+        ReadingLibrary(File(root,"reading-library")).saveOffline(fic,chapters)
+        val vm=state(TestApp(root,prefs));val caller=Thread.currentThread();val outputClosed=java.util.concurrent.atomic.AtomicBoolean(false)
+        val output=object:java.io.ByteArrayOutputStream(){override fun close(){outputClosed.set(true);super.close()}}
+        vm.exportLibrary({assertNotSame(caller,Thread.currentThread());output},true);awaitLoaded(vm);assertNull(vm.error);assertTrue(outputClosed.get())
+        val target=directory.newFolder();val restored=state(TestApp(target,MemoryPreferences()));val inputClosed=java.util.concurrent.atomic.AtomicBoolean(false)
+        val input=object:java.io.ByteArrayInputStream(output.toByteArray()){override fun close(){inputClosed.set(true);super.close()}}
+        restored.importLibrary{assertNotSame(caller,Thread.currentThread());input};awaitLoaded(restored);assertNull(restored.error);assertTrue(inputClosed.get());assertEquals(chapters,ReadingLibrary(File(target,"reading-library")).load(fic.id))
+    }
+    @Test fun backupProviderFailureDoesNotLeaveTheInterfaceBusy() {
+        val vm=state(TestApp(directory.newFolder(),MemoryPreferences()))
+        vm.exportLibrary({throw java.io.IOException("Provider unavailable")});awaitLoaded(vm);assertEquals("Provider unavailable",vm.error);assertFalse(vm.loading)
+        vm.importLibrary{throw java.io.IOException("Backup unavailable")};awaitLoaded(vm);assertEquals("Backup unavailable",vm.error);assertFalse(vm.loading)
+    }
     @Test fun accountListsPageInTheirOwnModeAndClearOnLogout() {
         val app=TestApp(directory.newFolder(),MemoryPreferences());val html=javaClass.classLoader!!.getResource("account-readings.html")!!.readText()
         val calls=java.util.Collections.synchronizedList(mutableListOf<String>())

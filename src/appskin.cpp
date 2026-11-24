@@ -126,7 +126,10 @@ void configureSkinBanner(QWidget *widget) {
     if(!widget->property("ao3BaseMargins").isValid()){const auto m=widget->layout()->contentsMargins();widget->setProperty("ao3BaseMargins",QVariantList{m.left(),m.top(),m.right(),m.bottom()});}
     if(!widget->property("ao3BannerMinimum").isValid())widget->setProperty("ao3BannerMinimum",widget->minimumHeight());
     const auto margins=widget->property("ao3BaseMargins").toList();const auto rule=nativeStyle->skin.component("header");const int banner=skinBannerHeight(nativeStyle->skin,nativeStyle->scale);
-    const int padding=rule.value("padding").toInt(-1);widget->layout()->setContentsMargins(padding<0?margins[0].toInt():padding,padding<0?margins[1].toInt():padding,padding<0?margins[2].toInt():padding,(padding<0?margins[3].toInt():padding)+banner);
+    const int padding=rule.value("padding").toInt(-1);
+    const auto insets=widget->property("skinEdgeInsets").toList();
+    auto edge=[&](int side){return qMax(padding<0?margins[side].toInt():padding,insets.size()==4?qRound(insets[side].toInt()*nativeStyle->scale):0);};
+    widget->layout()->setContentsMargins(edge(0),edge(1),edge(2),edge(3)+banner);
     widget->setMinimumHeight(widget->property("ao3BannerMinimum").toInt()+banner);
 }
 void componentWidget(QWidget *widget) {
@@ -145,6 +148,7 @@ void componentWidget(QWidget *widget) {
     if(widget->property("ao3OriginalMinimumHeight").isValid()){
         widget->setMinimumHeight(widget->property("ao3OriginalMinimumHeight").toInt());widget->setMaximumHeight(widget->property("ao3OriginalMaximumHeight").toInt());
     }
+    if(widget->property("accountAvatar").toBool()){const int side=qRound(44*nativeStyle->scale);widget->setFixedSize(side,side);}
     if(!overrideStyle){configureSkinBanner(widget);return;}
     const auto role=skinRole(widget);const auto &skin=nativeStyle->skin;
     const QColor bg(rule.value("background").toString(role=="buttons"?skin.accent:role=="header"?skin.background:skin.surface)),fg(rule.value("text").toString(role=="buttons"?skin.onAccent:skin.text));
@@ -165,7 +169,7 @@ void componentWidget(QWidget *widget) {
         if(!widget->property("ao3BaseMargins").isValid()){const auto m=widget->layout()->contentsMargins();widget->setProperty("ao3BaseMargins",QVariantList{m.left(),m.top(),m.right(),m.bottom()});}
         if(rule.contains("padding")){const int n=rule.value("padding").toInt();widget->layout()->setContentsMargins(n,n,n,n);}
     }
-    if((role=="buttons" || role=="inputs") && (rule.contains("padding") || rule.contains("textScale"))){
+    if(!widget->property("accountAvatar").toBool() && (role=="buttons" || role=="inputs") && (rule.contains("padding") || rule.contains("textScale"))){
         if(!widget->property("ao3OriginalMinimumHeight").isValid()){widget->setProperty("ao3OriginalMinimumHeight",widget->minimumHeight());widget->setProperty("ao3OriginalMaximumHeight",widget->maximumHeight());}
         const int height=widget->fontMetrics().height()+2*rule.value("padding").toInt(6)+8;
         widget->setMaximumHeight(qMax(widget->maximumHeight(),height));widget->setMinimumHeight(qMax(widget->minimumHeight(),height));

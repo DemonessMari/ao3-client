@@ -346,7 +346,8 @@ void MainWindow::setupUI()
     }
 
     if(!mobileUi()) {
-        delete headerLayout;delete headerSpacer;headerLayout=new QGridLayout(m_headerBar);headerLayout->setContentsMargins(16,8,16,8);headerLayout->setHorizontalSpacing(12);
+        m_headerBar->setProperty("skinEdgeInsets",QVariantList{16,12,16,12});
+        delete headerLayout;delete headerSpacer;headerLayout=new QGridLayout(m_headerBar);headerLayout->setContentsMargins(16,12,16,12);headerLayout->setHorizontalSpacing(12);
         auto *identity=new QWidget(m_headerBar);identity->setObjectName("headerIdentity");auto *identityLayout=new QHBoxLayout(identity);identityLayout->setContentsMargins(0,0,0,0);identityLayout->setSpacing(8);identityLayout->addWidget(m_logoLabel);
         auto *name=new QLabel("Archive of Our Own",identity);name->setObjectName("appName");auto font=name->font();font.setPointSize(13);font.setBold(true);name->setFont(font);name->setWordWrap(false);identityLayout->addWidget(name);
         auto *searchGroup=new QWidget(m_headerBar);searchGroup->setObjectName("headerSearch");auto *searchLayout=new QHBoxLayout(searchGroup);searchLayout->setContentsMargins(0,0,0,0);searchLayout->setSpacing(8);m_searchInput->setMinimumWidth(180);searchLayout->addWidget(m_searchInput,1);searchLayout->addWidget(m_searchButton);searchLayout->addWidget(m_filterButton);searchGroup->setMaximumWidth(640);
@@ -994,7 +995,7 @@ void MainWindow::setLoggedInState(bool loggedIn)
     if (loggedIn) {
         QString name = m_loginManager->userInfo().username;
         m_loginButton->setAccessibleName("Account: "+name);
-        m_loginButton->setProperty("accountAvatar",true);m_loginButton->setFixedSize(44,44);
+        m_loginButton->setProperty("accountAvatar",true);const int avatarSide=qRound(44*resolvedAppSkin(false).uiScale);m_loginButton->setFixedSize(avatarSide,avatarSide);
         if(m_accountPictureUser!=name){m_loginButton->setIcon({});m_loginButton->setProperty("accountImage",QVariant());m_loginButton->setText(name.left(1).toUpper());m_accountPictureUser=name;m_client->fetchAuthorProfile(name);}
         m_loginButton->setToolTip(name);
         m_loginButton->setEnabled(true);

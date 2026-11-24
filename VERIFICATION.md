@@ -71,3 +71,16 @@ A synthetic wide avatar verifies center cropping across the circular account but
 Removed redundant image/inheritance explanations and decorative source headings, and shortened bundled skin names. Credits, licenses, controls and validation errors remain. Home no longer has an extra outer frame, flat navigation remains flat under custom skins and uses an underline on hover/focus without changing text contrast, and fill-area image controls no longer offer ignored sizes/offsets.
 
 Physical-phone visual acceptance remains pending. Android also uses background-cover fill and edge-to-edge profile-picture cropping. Full website parity and authenticated-write acceptance remain incomplete.
+
+
+## 3.2.0-rc.21
+
+2026-11-24: all six desktop suites pass, including minimum window-edge spacing and a regression for account avatars becoming oval under large button padding. Header controls retain their outer insets with zero-padding skins; account avatars keep a square, scaled size independently of ordinary button padding.
+
+A three-minute automated reader run completed 890 navigation operations across scrolling/book modes and six chapters. Peak resident memory was 103,304 KiB; median memory after warm-up grew by 60 KiB. Saved offline text and reading position were restored after recreating the reader. This short automated run does not establish hours-long reading, battery behavior or physical-device acceptance.
+
+Read-only live desktop checks confirmed the saved native session, account lists and a bookmark form. The actual account image was fetched and rendered. A specifically authorized temporary private bookmark was created, verified, deleted and confirmed absent, using production account methods with fresh forms. No public comments or kudos were submitted. Account details, images and cookie copies are excluded from the repository and release artifacts.
+
+Android: 127 tests pass and one live-network test is skipped in the standard release suite; lint reports zero errors and 39 warnings. The separate live test passed two distinct 20-work searches and opened a readable chapter. New tests cover backup providers opening away from the UI thread, stream closure, round-trip data and recovery after provider errors. Import confirmation survives recreation; reader export propagates cancellation without an error message.
+
+Physical-phone visual, rotation, Back, accessibility and extended-session checks remain pending. Full native website parity remains incomplete; website-only tools remain in the embedded site.
