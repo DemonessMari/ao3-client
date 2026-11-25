@@ -1,5 +1,15 @@
 # Verification
 
+## 3.2.0-rc.26
+
+2026-11-25: work text, summaries and notes have native visual editors on both editions. They support inline formatting, headings, links, flat lists, undo/redo and HTML mode. Formatting exports semantic HTML. Unedited source stays unchanged, and unsupported tables, images, nested lists and custom styles remain in HTML mode. Editing does not run site scripts or fetch images.
+
+Desktop: all seven suites pass, including 72 functional and 11 native-tool/editor checks. Visual formatting, mode switching, source preservation and keyboard shortcuts are tested; the rendered editor was inspected. The installed binary matches the build and passes isolated startup from `/tmp`.
+
+Android: 176 offline tests pass, with one optional live test skipped. Five editor-model tests and a native-selection/toolbar rendering test cover partial formatting/link changes, paragraph/list output, blank lines, undo/redo, HTML mode, font binding and unsupported HTML. The phone-width render was inspected. Release lint has zero errors, 43 warnings and 2 hints. APK/AAB signatures, signer continuity, version code 41 and 16 KB alignment verify.
+
+No production work was posted or edited during testing. Physical-phone acceptance remains pending because no device is connected. Advanced HTML stays available through source editing; the visual editor does not reproduce every feature of AO3’s website editor.
+
 ## 3.2.0-rc.25
 
 2026-11-25: both editions add native server-form tools for publishing and chapters, collections/challenges, invitations, related works/gifts, account security, pseud images/deletion/transfer, official skins and supported bulk actions. Authoring uses plain text/HTML with a sanitized formatted preview. Supported nested sections are decoded as data without executing site scripts. Tag feeds are native. Original formatting optionally loads external styles and audio/video; embedded players are separate anonymous views.

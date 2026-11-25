@@ -1,4 +1,5 @@
 #include "nativetools.h"
+#include "authoringeditor.h"
 #include "formattedwork.h"
 #include <QtTest>
 #include <QFile>
@@ -6,6 +7,15 @@ class NativeToolsTest : public QObject {
  Q_OBJECT
  QString fixture(const QString &name){QFile f(QString(AO3_FIXTURE_DIR)+"/native-tools-"+name+".html");if(!f.open(QIODevice::ReadOnly))return {};return QString::fromUtf8(f.readAll());}
 private slots:
+ void visualAuthoringPreservesDraftsAndExportsSemanticHtml(){
+  const QString original="<p>A <strong>bold &amp; safe</strong> word</p><ol><li>First</li><li>Second</li></ol>";AuthoringEditor editor(original,"work[chapter_attributes][content]");QString draft=original;editor.changed=[&](const QString &s){draft=s;};QCOMPARE(editor.mode->currentIndex(),0);QCOMPARE(draft,original);
+  editor.mode->setCurrentIndex(1);QCOMPARE(editor.source->toPlainText(),original);editor.mode->setCurrentIndex(0);QCOMPARE(draft,original);
+  auto cursor=editor.visual->textCursor();cursor.setPosition(0);cursor.setPosition(1,QTextCursor::KeepAnchor);editor.visual->setTextCursor(cursor);for(auto *b:editor.findChildren<QPushButton *>())if(b->text()=="Italic")b->click();QVERIFY(draft.contains("<em>A</em>"));QVERIFY(draft.contains("<strong>bold &amp; safe</strong>"));QVERIFY(draft.contains("<ol>"));QVERIFY(draft.contains("<li>First</li>"));QVERIFY(!draft.contains("style="));if(qEnvironmentVariableIsSet("AO3_CAPTURE_TOOLS")){editor.resize(760,460);editor.show();QTest::qWait(30);editor.grab().save("/tmp/ao3-rich-desktop.png");}editor.visual->undo();QCOMPARE(editor.visual->toPlainText().left(1),QString("A"));
+  const QString complex="<table><tr><td>Keep</td></tr></table>";AuthoringEditor custom(complex,"work[summary]");QCOMPARE(custom.mode->currentIndex(),1);QCOMPARE(custom.source->toPlainText(),complex);QVERIFY(!Authoring::supported("<p style='color:red'>Keep</p>"));QVERIFY(!Authoring::supported("<ul><li>A<ul><li>B</li></ul></li></ul>"));
+ }
+ void visualEditorKeyboardFormattingKeepsTheSelection(){
+  AuthoringEditor editor("<p>Keyboard</p>","chapter[content]");QString draft;editor.changed=[&](const QString &s){draft=s;};editor.resize(700,400);editor.show();editor.activateWindow();editor.visual->setFocus();QTest::qWait(40);auto cursor=editor.visual->textCursor();cursor.select(QTextCursor::Document);editor.visual->setTextCursor(cursor);QTest::keyClick(editor.visual,Qt::Key_B,Qt::ControlModifier);QTRY_VERIFY(draft.contains("<strong>Keyboard</strong>"));
+ }
  void publishingKeepsActionsAndTextSeparate(){
   const auto html=fixture("work");const auto page=NativeTools::parse(html,"/works/new","Writer");QVERIFY(page.error.isEmpty());QCOMPARE(page.forms.size(),1);const auto f=page.forms.first();QCOMPARE(f.submits.size(),3);QCOMPARE(f.fields.size(),5);QVERIFY(f.fields[1].values.first().contains("<form action='/works/666'"));QCOMPARE(page.links.size(),1);QVERIFY(page.links.first().second.endsWith("/drafts"));
   auto fresh=NativeTools::parse(QString(html).replace("work+token","fresh+token"),"/works/new","Writer");QString error;const auto fields=NativeTools::prepare(f,fresh,{{"work[title]",{"New title"}},{"work[archive_warning_ids][]",{"14","17"}}},f.submits[0],error);QVERIFY2(error.isEmpty(),qPrintable(error));QCOMPARE(fields.value("authenticity_token"),QStringList{"fresh+token"});QVERIFY(fields.contains("save_button"));QVERIFY(!fields.contains("post_button"));QCOMPARE(fields.value("work[archive_warning_ids][]").size(),2);

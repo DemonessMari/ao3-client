@@ -6,9 +6,11 @@ Both editions support work, people, tag and bookmark searches with filters, tag 
 
 Both editions have native kudos, AO3 work bookmarks, Mark for Later/Read, work/author/series subscriptions, account lists, confirmed history deletion/clearing and ordered series lists. Comments support reading, posting, replies, editing, deletion and the moderation controls offered by AO3. Bookmarks support notes, tags, collections, pseuds, privacy and recommendations, including series and external items. Native account forms cover preferences, profile and pseud editing, and block/mute management. Media and fandom directories are also available.
 
-Native AO3 tools now cover publishing and chapter editing, collections/challenges, invitations, icon uploads, bulk forms, site/work skins and account security. Editors use AO3’s current fields and permissions, with plain-text/HTML authoring and a formatted preview. The embedded website remains available for verification challenges and unsupported site interactions. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
+Native AO3 tools now cover publishing and chapter editing, collections/challenges, invitations, icon uploads, bulk forms, site/work skins and account security. Editors use AO3’s current fields and permissions, with visual or HTML authoring and a formatted preview. The embedded website remains available for verification challenges and unsupported site interactions. Its sign-in is separate. For a verification challenge, complete website sign-in yourself, then choose **Use website sign-in in reader**. A fresh server check verifies the account before replacing native sign-in. See [feature coverage](FEATURES.md).
 
-3.2.0-rc.25 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
+Work text, summaries and notes offer visual bold, italic, underline, strike, headings, links and lists, with undo and HTML mode. Existing tables, images, nested lists and custom styling stay in HTML mode to preserve them.
+
+3.2.0-rc.26 is a prerelease. Phone rendering, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 Native skins support component styling and embedded image layers without CSS. Import an image in the skin editor or try the bundled **Neos Nebula** preset. Image credits and licenses travel with exported skins. See [skin format](SKINS.md).
 

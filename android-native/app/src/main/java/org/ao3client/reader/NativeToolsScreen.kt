@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
                             val values=vm.toolDraft[form.key]?.get(field.name) ?: field.values
                             fun update(v:List<String>){vm.editToolField(form.key,field.name,v)}
                             when(field.type) {
+                                "area"->if(AuthoringText.field(field.name))AuthoringEditor(form.key,field,values.firstOrNull().orEmpty(),!vm.toolSending,authoringTypeface(vm)){update(listOf(it))} else AccountFieldControl(form.key,field,values,!vm.toolSending,::update)
                                 "file"->ToolFileControl(vm,form,field)
                                 "password"->SkinOutlinedTextField(values.firstOrNull().orEmpty(),{update(listOf(it))},Modifier.fillMaxWidth(),enabled=!vm.toolSending,label={Text(field.label)},singleLine=true,visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password))
                                 else->{val suggestion=when{field.name.contains("fandom",true)->"fandom";field.name.contains("character",true)->"character";field.name.contains("relationship",true)->"relationship";field.name.contains("freeform",true) || field.name.endsWith("[tag_string]")->"tag";else->null};if(field.type=="text" && suggestion!=null && !vm.toolSending)FilterControl(FilterField(field.name,field.label,suggestion=suggestion),values,::update,vm) else AccountFieldControl(form.key,field,values,!vm.toolSending,::update)}

@@ -38,3 +38,8 @@ import androidx.compose.ui.unit.dp
         if(ReaderFontStore.validId(vm.preferences.fontFamily))SkinTextButton(onClick={vm.removeFont(vm.preferences.fontFamily)},enabled=!vm.fontImporting) {Text("Remove font")}
     }
 }
+
+@Composable internal fun authoringTypeface(vm:ClientState):Typeface {
+    val selected=vm.preferences.fontFamily
+    return remember(selected,vm.importedFonts){if(selected=="sans-serif")Typeface.SANS_SERIF else if(selected=="monospace")Typeface.MONOSPACE else vm.importedFonts.firstOrNull{it.id==selected}?.let{runCatching{Typeface.createFromFile(it.file)}.getOrNull()} ?: Typeface.SERIF}
+}

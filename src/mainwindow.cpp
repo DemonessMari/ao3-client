@@ -1,4 +1,5 @@
 #include "flowlayout.h"
+#include "authoringeditor.h"
 #include <QUuid>
 #include "taglineedit.h"
 #include "discoverysearch.h"
@@ -1299,6 +1300,7 @@ void MainWindow::renderNativeTools()
                 if(field.type=="password" || suggestion.isEmpty())input=new QLineEdit(body);
                 else {auto *tags=new TagLineEdit(suggestion,body);input=tags;const auto requestKey="tools:"+QUuid::createUuid().toString(QUuid::WithoutBraces);connect(tags,&TagLineEdit::suggestionsRequested,this,[this,requestKey](const QString &type,const QString &term,quint64 revision){m_client->fetchTagSuggestions(requestKey,type,term,revision);});connect(m_client,&AO3Client::tagSuggestionsFetched,tags,[tags,requestKey](const QString &key,quint64 revision,const QStringList &names,const QString &error){if(key==requestKey)tags->showSuggestions(revision,names,error);});}
                 input->setText(values.value(0));input->setObjectName("tool_"+field.name);input->setAccessibleName(field.label);if(field.type=="password")input->setEchoMode(QLineEdit::Password);fields->addWidget(input);connect(input,&QLineEdit::textChanged,this,[this,key,name=field.name](const QString &value){m_toolDraft[key][name]={value};});}
+            else if(field.type=="area" && Authoring::field(field.name)) {auto *input=new AuthoringEditor(values.value(0),field.name,body);fields->addWidget(input);input->changed=[this,key,name=field.name](const QString &value){m_toolDraft[key][name]={value};};}
             else if(field.type=="area") {auto *input=new QTextEdit(body);input->setAcceptRichText(false);input->setPlainText(values.value(0));input->setMinimumHeight(150);input->setMaximumHeight(300);input->setObjectName("tool_"+field.name);input->setAccessibleName(field.label);fields->addWidget(input);connect(input,&QTextEdit::textChanged,this,[this,key,name=field.name,input]{m_toolDraft[key][name]={input->toPlainText()};});}
             else if(field.type=="file") {
                 auto *select=new QPushButton(m_toolUploads.value(key).contains(field.name)?m_toolUploads.value(key).value(field.name).filename:QString("Choose image"),body);fields->addWidget(select);

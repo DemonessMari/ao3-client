@@ -1,6 +1,6 @@
 # Feature coverage
 
-3.2.0-rc.25 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
+3.2.0-rc.26 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |
@@ -12,10 +12,12 @@
 | Series and collections | Full series listings, memberships and previous/next visible work navigation from work details and the reader; native tools for related works, gifts, collections, challenge signups, claims and assignments | Role-specific interactions requiring site JavaScript |
 | Account | Avatar account menu, sign-in, persistent native session, sign-out, verified website-session handoff; paginated AO3 Reading History and Marked for Later lists with activity and deleted-work entries; history deletion and clearing with confirmation; AO3 preferences, profile title/biography, pseud creation/editing, block/mute lists and actions; muted content hidden in native lists/comments; icon uploads, pseud deletion/transfer, invitations, password/email/username forms | Human-verification challenges |
 | Appearance | Reader theme/font/spacing/margins/alignment controls; local TrueType/OpenType font importing for reading and native interface text; optional system theme; native app-skin editor, preview and shared JSON import/export with interface scale and independent button, input, card and header colors, borders, spacing, corners and text scale; credited native neos adaptations; portable embedded images, background/overlay layers, header banners, placement and opacity controls; native forms for official site/work skins | — |
-| Creating works | Drafts, plain-text/HTML editing, formatted preview/post/edit/import, chapter management, series association, co-creators and permitted participant tools | Full website rich-text editor |
+| Creating works | Drafts, visual/HTML editing, formatted preview/post/edit/import, chapter management, series association, co-creators and permitted participant tools | Advanced HTML outside the native visual editor’s supported formatting |
 | Help and policies | Privacy/security/license documents | AO3 help, news, support and abuse forms |
 
 Website tools use AO3’s interface and a separate saved website sign-in. The explicit website-session handoff can authenticate the native reader after a fresh server identity check. AO3 human-verification challenges require the user’s interaction. They are not native equivalents. The site controls availability and permissions; staff tools are not part of ordinary client parity.
+
+Visual authoring supports paragraphs, bold, italic, underline, strike, headings, HTTPS links and flat bulleted/numbered lists. Unedited source is preserved. Unsupported HTML, such as tables, images, nested lists or custom styles, stays in HTML mode. Formatting is exported as semantic AO3 HTML. The app does not fetch work images while editing.
 
 Native tools render AO3’s server-provided forms with native controls, including repeated fields, file uploads and supported nested sections. Permissions and tokens are checked again before submission. Uncertain writes are not retried automatically. Drafts and uploaded images remain in memory and are excluded from backups; passwords are cleared when leaving an editor. These tools require a connection. They do not reproduce every JavaScript-only interaction or staff tool.
 
