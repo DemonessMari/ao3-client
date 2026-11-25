@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QSettings>
+#include <QHttpMultiPart>
 
 void AO3Client::fetchOfficialDownloads(const QString &workId) {
     if (!QRegularExpression("^[0-9]+$").match(workId).hasMatch()) return;
@@ -98,6 +99,7 @@ LoginManager *AO3Client::loginManager() const
 
 void AO3Client::login(const QString &login, const QString &password)
 {
+    m_toolsSending=false;
     m_kudosStatus.clear();
     m_workAccountPending.clear();
     const quint64 generation = ++m_authGeneration;
@@ -158,7 +160,7 @@ void AO3Client::checkSession()
 
 void AO3Client::logout()
 {
-    m_accountFormSending=false;
+    m_accountFormSending=false; m_toolsSending=false;
     m_kudosStatus.clear();
     m_workAccountPending.clear();
     ++m_commentsGeneration;
@@ -269,6 +271,84 @@ void AO3Client::search(const QString &query, int page, const SearchFilters &filt
         QString html = QString::fromUtf8(reply->readAll());
         SearchResult result = parseSearchResults(html, query, page);
         emit searchCompleted(result);
+    });
+}
+
+namespace {
+struct ToolsReplyBody {QByteArray bytes;bool large=false;};
+std::shared_ptr<ToolsReplyBody> collectToolsBody(QNetworkReply *reply) {
+    auto body=std::make_shared<ToolsReplyBody>();reply->setReadBufferSize(65536);
+    QObject::connect(reply,&QIODevice::readyRead,reply,[reply,body]{body->bytes+=reply->readAll();if(body->bytes.size()>8*1024*1024){body->large=true;reply->abort();}});return body;
+}
+QString finishToolsBody(QNetworkReply *reply,const std::shared_ptr<ToolsReplyBody> &body) {
+    body->bytes+=reply->readAll();body->large |= body->bytes.size()>8*1024*1024;return body->large?QString():QString::fromUtf8(body->bytes);
+}
+}
+void AO3Client::fetchToolsPage(const QString &path)
+{
+    const auto user=m_loginManager->isLoggedIn()?m_loginManager->username():QString();const auto route=NativeTools::route(path,user);
+    if(route.isEmpty()){ToolPage page;page.source=path;page.error="This AO3 page is unavailable in native tools.";emit toolsPageFetched(page);return;}
+    const auto auth=m_authGeneration,revision=++m_toolsRevision;auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+route)));
+    const auto body=collectToolsBody(reply);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,user,auth,revision,body]{reply->deleteLater();if(auth!=m_authGeneration || revision!=m_toolsRevision)return;
+        ToolPage page;page.user=user;page.source=NativeTools::route(reply->url().toString(),user);const auto html=finishToolsBody(reply,body);if(body->large)page.error="AO3 page exceeds the 8 MB tools limit.";else if(ao3RequestFailed(reply))page.error=ao3NetworkError(reply);else page=NativeTools::parse(html,page.source,user);emit toolsPageFetched(page);
+    });
+}
+void AO3Client::submitTools(const ToolForm &form,const QMap<QString,QStringList> &draft,const ToolSubmit &button,const QVector<ToolUpload> &uploads)
+{
+    const auto user=m_loginManager->isLoggedIn()?m_loginManager->username():QString();
+    auto fail=[this,user,form](const QString &error){ToolPage page;page.source=form.source;page.user=user;page.error=error;emit toolsPageFetched(page);};
+    if(m_toolsSending){fail("Another request is still being sent.");return;}
+    if(NativeTools::route(form.source,user).isEmpty() || NativeTools::route(form.action,user).isEmpty() || (form.method=="post" && user.isEmpty())){fail("Sign-in changed. Reload this page.");return;}
+    qint64 size=0;for(const auto &upload:uploads){bool offered=false;for(const auto &field:form.fields)if(field.name==upload.name && field.type=="file")offered=true;QString error;NativeTools::upload(upload.name,upload.filename,upload.bytes,error);size+=upload.bytes.size();if(!offered || !error.isEmpty() || size>8*1024*1024){fail(error.isEmpty()?"An upload is no longer available.":error);return;}}
+    if(form.method=="get") {
+        ToolPage page;page.forms<<form;QString error;const auto fields=NativeTools::prepare(form,page,draft,button,error);if(!error.isEmpty()){fail(error);return;}
+        QUrl target("https://archiveofourown.org"+form.action);QUrlQuery query;for(auto i=fields.cbegin();i!=fields.cend();++i)if(i.key()!="authenticity_token" && i.key()!="_method")for(const auto &v:i.value())query.addQueryItem(i.key(),v);target.setQuery(query);fetchToolsPage(NativeTools::route(target.toString(),user));return;
+    }
+    m_toolsSending=true;const auto auth=m_authGeneration,revision=++m_toolsRevision;auto *reply=m_manager->get(makeRequest(QUrl("https://archiveofourown.org"+form.source)));
+    const auto body=collectToolsBody(reply);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,form,draft,button,uploads,user,auth,revision,body]{reply->deleteLater();if(auth!=m_authGeneration || revision!=m_toolsRevision)return;
+        auto finishError=[this,form,user](const QString &error){m_toolsSending=false;ToolPage p;p.source=form.source;p.user=user;p.error=error;emit toolsPageFetched(p);};
+        const auto html=finishToolsBody(reply,body);if(body->large){finishError("AO3 page exceeds the 8 MB tools limit.");return;}
+        if(ao3RequestFailed(reply)){finishError(ao3NetworkError(reply));return;}
+        const auto fresh=NativeTools::parse(html,NativeTools::route(reply->url().toString(),user),user);QString error;auto checked=form;
+        if(QUrl(form.source).path().endsWith("/new")) {
+            const auto action=form.authorityAction.isEmpty()?form.action:form.authorityAction;
+            for(const auto &current:fresh.forms)if(current.action==action && current.method==form.method){
+                bool same=current.checkpoint.keys()==form.checkpoint.keys();
+                for(auto i=current.checkpoint.cbegin();i!=current.checkpoint.cend();++i)if(i.key().startsWith('@'))same &= i.value()==form.checkpoint.value(i.key());
+                for(auto i=current.fixed.cbegin();i!=current.fixed.cend();++i)if(i.key()!="authenticity_token" && i.key()!="utf8" && !i.key().contains("password",Qt::CaseInsensitive))same &= i.value()==form.checkpoint.value(i.key());
+                if(!same){finishError("The available fields changed. Reload this form before submitting.");return;}
+                checked.checkpoint=current.checkpoint;break;
+            }
+        }
+        const auto fields=NativeTools::prepare(checked,fresh,draft,button,error);
+        if(!error.isEmpty()){finishError(error);return;}
+        if(form.method=="get") {
+            QUrl target("https://archiveofourown.org"+form.action);QUrlQuery query;
+            for(auto i=fields.cbegin();i!=fields.cend();++i)if(i.key()!="authenticity_token" && i.key()!="_method")for(const auto &v:i.value())query.addQueryItem(i.key(),v);
+            target.setQuery(query);m_toolsSending=false;fetchToolsPage(NativeTools::route(target.toString(),user));return;
+        }
+        auto request=makeRequest(QUrl("https://archiveofourown.org"+form.action));request.setRawHeader("Referer",QUrl("https://archiveofourown.org"+form.source).toEncoded());QNetworkReply *posted;
+        if(uploads.isEmpty()) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader,"application/x-www-form-urlencoded");QByteArray body;
+            for(auto i=fields.cbegin();i!=fields.cend();++i)for(const auto &v:i.value()){if(!body.isEmpty())body+='&';body+=QUrl::toPercentEncoding(i.key())+'='+QUrl::toPercentEncoding(v);}
+            posted=m_manager->post(request,body);
+        } else {
+            auto *multipart=new QHttpMultiPart(QHttpMultiPart::FormDataType);
+            for(auto i=fields.cbegin();i!=fields.cend();++i)for(const auto &v:i.value()){QHttpPart part;part.setHeader(QNetworkRequest::ContentDispositionHeader,"form-data; name=\""+i.key()+"\"");part.setBody(v.toUtf8());multipart->append(part);}
+            for(const auto &upload:uploads){QString error;const auto safe=NativeTools::upload(upload.name,upload.filename,upload.bytes,error);QHttpPart part;part.setHeader(QNetworkRequest::ContentDispositionHeader,"form-data; name=\""+safe.name+"\"; filename=\""+safe.filename+"\"");part.setHeader(QNetworkRequest::ContentTypeHeader,safe.mime);part.setBody(safe.bytes);multipart->append(part);}
+            posted=m_manager->post(request,multipart);multipart->setParent(posted);
+        }
+        const auto postedBody=collectToolsBody(posted);auto redirected=std::make_shared<bool>(false);connect(posted,&QNetworkReply::redirected,this,[redirected]{*redirected=true;});
+        connect(posted,&QNetworkReply::finished,this,[this,posted,form,user,auth,revision,redirected,postedBody]{posted->deleteLater();if(auth!=m_authGeneration || revision!=m_toolsRevision)return;m_toolsSending=false;ToolPage page;page.source=form.source;page.user=user;
+            const auto status=posted->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const auto html=finishToolsBody(posted,postedBody);
+            if(postedBody->large || (ao3RequestFailed(posted) && status!=422)){page.error="Could not confirm the change. Reload this page before trying again.";page.uncertain=true;}
+            else {page=NativeTools::parse(html,NativeTools::route(posted->url().toString(),user),user);if(!*redirected)page=NativeTools::continued(page,form,form.action);if(!page.error.isEmpty()){page.error="The request was sent. Check native sign-in and reload to confirm the result.";page.uncertain=true;}}
+            emit toolsPageFetched(page);
+            if(QRegularExpression("/(?:changed_password|changed_username|changed_email|confirm_change_email)$").match(QUrl(form.action).path()).hasMatch())checkSession();
+        });
     });
 }
 

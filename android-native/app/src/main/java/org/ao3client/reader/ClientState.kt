@@ -21,6 +21,19 @@ data class Preferences(val language: String = "en", val filterLanguage: Boolean 
 class ClientState @JvmOverloads constructor(app: Application, checkSession: Boolean = true, archiveFactory:(android.content.SharedPreferences)->Archive={Archive(it)}) : AndroidViewModel(app) {
     val storage = app.getSharedPreferences("native-reader", Context.MODE_PRIVATE)
     private val archive = archiveFactory(storage)
+    internal var avatarRevision by mutableIntStateOf(0);private set
+    internal var toolPage by mutableStateOf<ToolPage?>(null);private set
+    internal var toolPath="";private set
+    internal var toolReturn="account";private set
+    internal var toolDraft by mutableStateOf<Map<String,Map<String,List<String>>>>(emptyMap());private set
+    internal var toolUploads by mutableStateOf<Map<String,Map<String,ToolUpload>>>(emptyMap());private set
+    internal var toolSending by mutableStateOf(false);private set
+    internal var toolUncertain by mutableStateOf(false);private set
+    internal var pendingTools by mutableStateOf<Pair<String,Boolean>?>(null)
+    private data class ToolHistory(val page:ToolPage,val draft:Map<String,Map<String,List<String>>>,val uploads:Map<String,Map<String,ToolUpload>>,val uncertain:Boolean)
+    private var toolHistory=emptyList<ToolHistory>()
+    private var toolRevision=0
+    private var toolJob:Job?=null
     internal var accountForm by mutableStateOf<AccountForm?>(null);private set
     internal var accountDraft by mutableStateOf<Map<String,List<String>>>(emptyMap())
     internal var accountSending by mutableStateOf(false);private set
@@ -324,6 +337,9 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     }
     fun cancelLoad() { ++requestRevision; loadJob?.cancel(); loading=false }
     fun navigate(destination: String) {
+        if(screen=="nativeTools" && destination!="nativeTools") {
+            toolPage?.forms?.forEach{form->form.fields.filter{it.type=="password"}.forEach{field->editToolField(form.key,field.name,listOf(""))}}
+        }
         if (screen == "reader") saveProgress()
         if(screen=="archiveList" && destination==archiveReturn) {
             if(archiveTrail.isNotEmpty()){val previous=archiveTrail.removeAt(archiveTrail.lastIndex);showArchiveList(previous.first,previous.second,previous.third);return}
@@ -406,7 +422,57 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     internal var archiveId="";private set
     var archiveReturn="home";private set
     var archiveUncertain by mutableStateOf(false);private set
-    private fun clearAccountEditor(){++accountSaveRevision;accountSaveJob?.cancel();accountForm=null;accountDraft=emptyMap();accountSending=false;accountUncertain=false;pendingAccountForm=null}
+    private fun clearTools(){++toolRevision;toolJob?.cancel();toolSending=false;toolUncertain=false;toolPage=null;toolDraft=emptyMap();toolUploads=emptyMap();pendingTools=null;toolHistory=emptyList()}
+    internal fun editToolField(form:String,name:String,value:List<String>){toolDraft=toolDraft+(form to (toolDraft[form].orEmpty()+(name to value)))}
+    internal fun addToolUpload(form:String,file:ToolUpload){if(toolPage?.user!=username.orEmpty() || toolPage?.forms?.none{f->f.key==form && f.fields.any{it.name==file.name && it.type=="file"}}!=false)return;require(toolUploads.values.sumOf{m->m.values.sumOf{it.bytes.size}}+file.bytes.size-(toolUploads[form]?.get(file.name)?.bytes?.size ?: 0)<=8*1024*1024){"Selected images are too large."};toolUploads=toolUploads+(form to (toolUploads[form].orEmpty()+(file.name to file)))}
+    internal fun removeToolUpload(form:String,name:String){toolUploads=toolUploads+(form to (toolUploads[form].orEmpty()-name))}
+    internal fun toolsBack(discard:Boolean=false) {
+        if(toolSending){error="A request is still being sent.";return}
+        val changed=NativeTools.dirty(toolPage,toolDraft,toolUploads)
+        if(changed && !discard){pendingTools="@back" to false;return}
+        if(toolHistory.isNotEmpty()){val previous=toolHistory.last();toolHistory=toolHistory.dropLast(1);toolPage=previous.page;toolPath=previous.page.source;toolDraft=previous.draft;toolUploads=previous.uploads;toolUncertain=previous.uncertain} else {toolDraft=emptyMap();toolUploads=emptyMap();navigate(toolReturn)}
+    }
+    internal fun showTools(path:String,reload:Boolean=false,discard:Boolean=false) {
+        if(path=="@back"){toolsBack(discard);return}
+        if(toolSending){error="A request is still being sent.";return}
+        val changed=NativeTools.dirty(toolPage,toolDraft,toolUploads)
+        if(!discard && changed && reload){pendingTools=path to reload;return}
+        if(!reload && path!=toolPage?.source && toolPage!=null) {
+            val safeDraft=toolDraft.mapValues{(_,values)->values.filterKeys{!it.contains("password",true)}}.filterValues{it.isNotEmpty()}
+            var history=toolHistory+ToolHistory(toolPage!!,safeDraft,toolUploads,toolUncertain)
+            while(history.size>12 || history.sumOf{NativeTools.memoryCost(it.page,it.draft,it.uploads)}>24L*1024*1024) {
+                val index=history.indexOfFirst{!NativeTools.dirty(it.page,it.draft,it.uploads)}
+                if(index<0){error="Save or discard an editor before opening more pages.";return}
+                history=history.filterIndexed{i,_->i!=index}
+            }
+            toolHistory=history
+        }
+        if(screen!="nativeTools")toolReturn=screen
+        navigate("nativeTools")
+        if(!reload && path==toolPage?.source)return
+        val user=username.orEmpty();val route=NativeTools.route(path,user) ?: run{error="This AO3 page is unavailable in native tools.";return}
+        val revision=++toolRevision;toolPath=route;toolPage=null;toolDraft=emptyMap();toolUploads=emptyMap();toolUncertain=false
+        load{val page=withContext(Dispatchers.IO){archive.toolsPage(route,user)};if(revision==toolRevision && user==username.orEmpty())toolPage=page}
+    }
+    internal fun addToolSection(formKey:String,sectionKey:String) {
+        if(toolSending || toolUncertain)return
+        val page=toolPage ?: return
+        val form=page.forms.firstOrNull{it.key==formKey} ?: return
+        try{val next=NativeTools.addSection(form,sectionKey,page.user);toolPage=page.copy(forms=page.forms.map{if(it.key==formKey)next else it},inProgress=true)}catch(e:Exception){error=e.message}
+    }
+    internal fun submitTool(form:ToolForm,button:ToolSubmit) {
+        val page=toolPage ?: return;if(toolSending || toolUncertain || form !in page.forms)return
+        val revision=++toolRevision;val draft=toolDraft[form.key].orEmpty();val uploads=toolUploads[form.key].orEmpty().values.toList();toolSending=true;error=null
+        toolJob=viewModelScope.launch {
+            try {
+                val next=withContext(Dispatchers.IO){archive.submitTools(form,draft,button,uploads,page.user)}
+                if(revision==toolRevision && page.user==username.orEmpty()){toolPage=next;toolPath=next.source;toolDraft=emptyMap();toolUploads=emptyMap();if(form.action.contains("/pseuds"))avatarRevision++}
+            }catch(e:CancellationException){throw e}catch(e:ToolSubmissionUncertain){if(revision==toolRevision){toolUncertain=true;error=e.message}}catch(e:Exception){if(revision==toolRevision)error=e.message ?: "Could not open this AO3 page."}finally{if(revision==toolRevision){toolSending=false;if(form.method=="post" && (form.action.contains(Regex("/(?:changed_password|changed_username|changed_email|confirm_change_email)$"))))viewModelScope.launch {
+                    try{val confirmed=withContext(Dispatchers.IO){archive.session()};if(username==page.user){val expected=draft["new_login"]?.firstOrNull().orEmpty();if(confirmed==null){clearAccountEditor();username=null;notice="AO3 signed out the native session. Sign in again to continue.";navigate("login")}else if(confirmed!=page.user){if(expected.isNotEmpty() && confirmed.equals(expected,true)){clearAccountEditor();accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false;username=confirmed;notice="AO3 verified your new username.";navigate("account")}else{logout();notice="The native session changed. Sign in again."}}}}catch(e:CancellationException){throw e}catch(_:Exception){}
+                }}}
+        }
+    }
+    private fun clearAccountEditor(){clearTools();++accountSaveRevision;accountSaveJob?.cancel();accountForm=null;accountDraft=emptyMap();accountSending=false;accountUncertain=false;pendingAccountForm=null}
     internal fun showAccountEditor(kind:String,id:String="",reload:Boolean=false,discard:Boolean=false) {
         val user=username ?: run{navigate("login");return}
         if(accountSending){error="An account change is still being sent.";return}
@@ -428,7 +494,7 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
                 val result=withContext(Dispatchers.IO){archive.saveAccountForm(original,draft)}
                 if(revision!=accountSaveRevision || username!=original.user || accountForm?.source!=original.source)return@launch
                 accountUncertain=result.uncertain
-                if(result.success){accountForm=null;accountDraft=emptyMap();notice=result.message;if(screen=="accountForm"){navigate(accountFormReturn);if(screen=="archiveList")showArchiveList(archiveKind,archiveId,archiveList?.page ?: 1) else if(screen=="profile")showProfile("/users/$profileUser")}}
+                if(result.success){if(original.kind=="pseud")avatarRevision++;accountForm=null;accountDraft=emptyMap();notice=result.message;if(screen=="accountForm"){navigate(accountFormReturn);if(screen=="archiveList")showArchiveList(archiveKind,archiveId,archiveList?.page ?: 1) else if(screen=="profile")showProfile("/users/$profileUser")}}
                 else error=result.message
             }catch(e:CancellationException){throw e}catch(e:Exception){if(username==original.user)error=e.message ?: "Could not save this form."}finally{if(revision==accountSaveRevision)accountSending=false}
         }
@@ -588,8 +654,10 @@ class ClientState @JvmOverloads constructor(app: Application, checkSession: Bool
     fun login(name: String, password: String) = load {
         ++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision
         sessionJob?.cancel()
+        val editor=toolPage;val editorHistory=toolHistory;val editorDraft=toolDraft;val editorUploads=toolUploads;val uncertain=toolUncertain
         val confirmed=withContext(Dispatchers.IO) { archive.login(name.trim(), password) };clearAccountEditor();accountListing=null;archiveList=null;entitySubscriptions.clear();ownWorks=false;username=confirmed
-        screen = "home"
+        val writing=editor!=null && editor.user==confirmed && editor.forms.any{form->form.fields.any{field->field.name.startsWith("work[") || field.name.startsWith("chapter[") || field.name.startsWith("collection[") || field.name.startsWith("series[")}} && (editor.inProgress || editorDraft.isNotEmpty() || editorUploads.isNotEmpty() || editorHistory.any{it.page.user==confirmed && (it.page.inProgress || it.draft.isNotEmpty() || it.uploads.isNotEmpty())})
+        if(writing){toolHistory=editorHistory.filter{it.page.user==confirmed};toolPage=editor;toolPath=editor!!.source;toolDraft=editorDraft.mapValues{(_,fields)->fields.filterKeys{!it.contains("password",true)}};toolUploads=editorUploads;toolUncertain=uncertain;screen="nativeTools";notice="Signed in. Your unsaved editor was kept."}else screen = "home"
     }
     fun logout() { clearAccountEditor(); entitySubscriptions.clear();entitySubscriptionPending.clear();++kudosGeneration;kudosStates.clear();accountPending.clear();archiveBookmark=null;bookmarkSending=false;bookmarkUncertain=false;++bookmarkRevision;sessionJob?.cancel(); loadJob?.cancel(); archive.logout(); username = null; commentsPage=null; commentsWork="";commentForm=null;commentDraft="";commentEmail="";++commentFormRevision; searchListing = null; accountListing = null; archiveList=null;selected = null; chapters = emptyList(); ownWorks = false; navigate("home") }
     suspend fun suggestions(type: String, term: String) = withContext(Dispatchers.IO) { archive.suggest(type, term) }

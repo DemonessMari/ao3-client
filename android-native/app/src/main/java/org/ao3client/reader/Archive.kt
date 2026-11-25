@@ -84,7 +84,7 @@ object ArchiveParser {
         val doc = Jsoup.parse(html)
         val bodies = doc.select("#chapters .userstuff").filter { el ->
             el.parents().none { it.hasClass("preface") || it.hasClass("afterword") || it.hasClass("notes") || it.hasClass("summary") || it.hasClass("userstuff") }
-        }.filter { readableText(it).isNotBlank() }
+        }.filter { readableText(it).isNotBlank() || hasReadingMedia(it.html()) }
         if (bodies.isEmpty()) error("No readable chapters were returned. The work may need sign-in or be unavailable.")
         fun chapterRoot(el: Element) = el.parents().firstOrNull { it.hasClass("chapter") && !it.hasClass("preface") }
         val order = doc.getAllElements().withIndex().associate { it.value to it.index }
@@ -101,11 +101,11 @@ object ArchiveParser {
                 if (order.getValue(note) < order.getValue(bodies[target])) before[target].add(content) else after[target].add(content)
             }
         }
-        val workCss=doc.select("#work-skin style").joinToString("\n") { it.data() }.take(262144)
+        val workCss=(doc.select("#work-skin link[rel=stylesheet][href]").mapNotNull{publicImageUrl(it.attr("href"))}.joinToString("\n"){"@import url(\""+it.replace("\"","%22")+"\");"}+"\n"+doc.select("#work-skin style").joinToString("\n"){it.data()}).take(262144)
         return bodies.mapIndexed { i, el ->
             val title = chapterRoot(el)?.selectFirst("h3.title")?.text()
             val content=readingText(el)
-            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles,staticReadingHtml(el.html()),workCss)
+            Chapter(title?.ifBlank { "Chapter ${i + 1}" } ?: "Chapter ${i + 1}", content.text.ifBlank{"This chapter contains images or media. Open Original formatting to view it."}, before[i].joinToString("\n\n"), after[i].joinToString("\n\n"),content.styles,staticReadingHtml(el.html()),workCss)
         }
     }
     private fun trustedIdentityNode(node: Element): Boolean =
@@ -182,7 +182,7 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
             return "/works/search?" + args.joinToString("&") { encode(it.first) + "=" + encode(it.second) }
         }
     }
-    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null, cookieJar:CookieManager=cookies, userAgent:String?=null, persist:Boolean=true,extraFields:List<Pair<String,String>> = emptyList()): String {
+    private fun request(path: String, form: Map<String,String>? = null, expectedGeneration:Int? = null, referer:String? = null, cookieJar:CookieManager=cookies, userAgent:String?=null, persist:Boolean=true,extraFields:List<Pair<String,String>> = emptyList(),uploads:List<ToolUpload> = emptyList(),resolved:((String)->Unit)?=null,onRedirect:(()->Unit)?=null): String {
         val generation = expectedGeneration ?: cookieGeneration
         var url = URL(BASE + path)
         var post = form
@@ -205,8 +205,10 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
                 if(referer!=null)connection.setRequestProperty("Referer",BASE+referer)
                 post?.let { values ->
                     connection.requestMethod = "POST"; connection.doOutput = true
-                    connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                    connection.outputStream.use { out -> out.write((values.entries.map{it.key to it.value}+extraFields).joinToString("&") { encode(it.first) + "=" + encode(it.second) }.toByteArray()) }
+                    val fields=values.entries.map{it.key to it.value}+extraFields
+                    val boundary="AO3-"+java.util.UUID.randomUUID().toString()
+                    connection.setRequestProperty("Content-Type",if(uploads.isEmpty())"application/x-www-form-urlencoded" else "multipart/form-data; boundary=$boundary")
+                    connection.outputStream.use { out -> out.write(if(uploads.isEmpty())fields.joinToString("&"){encode(it.first)+"="+encode(it.second)}.toByteArray() else NativeTools.multipart(fields,uploads,boundary)) }
                 }
                 val status = connection.responseCode
                 synchronized(cookieLock) {
@@ -216,16 +218,23 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
 
                 }
                 if (status in 300..399) {
+                    onRedirect?.invoke()
                     url = URL(url, connection.getHeaderField("Location") ?: error("Missing redirect location"))
                     if (status != 307 && status != 308) post = null
                 } else {
-                    val body = (if (status >= 400) connection.errorStream else connection.inputStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    if (status >= 400) {
+                    val stream=if(status>=400)connection.errorStream else connection.inputStream
+                    val body=if(resolved==null)stream?.bufferedReader()?.use{it.readText()}.orEmpty() else stream?.use{input->
+                        val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(16384)
+                        while(true){val count=input.read(buffer);if(count<0)break;require(out.size()+count<=8*1024*1024){"AO3 page exceeds the 8 MB tools limit."};out.write(buffer,0,count)}
+                        out.toString("UTF-8")
+                    }.orEmpty()
+                    if (status >= 400 && !(status==422 && resolved!=null)) {
                         if(status==429)error("AO3 rate limit reached (HTTP 429) for ${url.path}. Wait before trying again.")
                         if(status==404)error("AO3 returned HTTP 404 for ${url.path}. The page was not found; check the same work in the website view.")
                         if (body.contains("archive is down for maintenance", true)) error("AO3 is down for maintenance (HTTP $status). Try again later.")
                         error("AO3 returned HTTP $status. Please try again later.")
                     }
+                    resolved?.invoke(url.toURI().rawPath+(url.toURI().rawQuery?.let{"?$it"} ?: ""))
                     return body
                 }
             } finally { connection.disconnect() }
@@ -233,6 +242,31 @@ class Archive(private val prefs: SharedPreferences,private val connectionFactory
         error("AO3 redirected too many times")
     }
     fun search(query: String, page: Int, filters: Map<String,List<String>>) = ArchiveParser.listing(request(searchPath(query, page, filters)), page)
+    internal fun toolsPage(path:String,user:String):ToolPage {
+        val route=NativeTools.route(path,user) ?: error("This AO3 page is unavailable in native tools.")
+        var source=route;val html=request(route,resolved={source=it})
+        return NativeTools.parse(html,source,user)
+    }
+    internal fun submitTools(form:ToolForm,draft:Map<String,List<String>>,button:ToolSubmit,uploads:List<ToolUpload>,user:String):ToolPage {
+        val generation=cookieGeneration
+        val fresh=if(form.method=="get")ToolPage(form.source,user,"","",emptyList(),emptyList(),listOf(form)) else toolsPage(form.source,user)
+        var checked=form
+        if(form.method=="post" && java.net.URI(BASE+form.source).path.endsWith("/new")) {
+            fresh.forms.firstOrNull{it.action==form.authorityAction.ifEmpty{form.action} && it.method==form.method}?.let{current->
+                require(current.checkpoint.keys==form.checkpoint.keys && current.checkpoint.filterKeys{it.startsWith('@')}.all{(key,value)->form.checkpoint[key]==value} && current.fixed.filterKeys{it !in setOf("authenticity_token","utf8") && !it.contains("password",true)}.all{(key,value)->form.checkpoint[key]==value}){"The available fields changed. Reload this form before submitting."}
+                checked=form.copy(checkpoint=current.checkpoint)
+            }
+        }
+        val fields=NativeTools.prepare(checked,fresh,draft,button)
+        require(uploads.all{file->form.fields.any{it.name==file.name && it.type=="file"}}){"An upload is no longer available."}
+        if(form.method=="get") {
+            val route=form.action.substringBefore('?')+"?"+fields.filter{it.first !in setOf("authenticity_token","_method")}.joinToString("&"){encode(it.first)+"="+encode(it.second)}
+            return toolsPage(route,user)
+        }
+        var source=form.action;var redirected=false
+        val html=try{request(form.action,emptyMap(),generation,referer=form.source,extraFields=fields,uploads=uploads,resolved={source=it},onRedirect={redirected=true})}catch(e:java.util.concurrent.CancellationException){throw e}catch(e:Exception){throw ToolSubmissionUncertain("Could not confirm the change. Reload this page before trying again.",e)}
+        return try{val page=NativeTools.parse(html,source,user);if(redirected)page else NativeTools.continued(page,form,form.action)}catch(e:Exception){throw ToolSubmissionUncertain("The request was sent. Check native sign-in and reload to confirm the result.",e)}
+    }
     internal fun accountForm(kind:String,id:String,user:String):AccountForm=AccountForms.parse(request(AccountForms.source(kind,user,id)),kind,user,id)
     internal fun saveAccountForm(original:AccountForm,draft:Map<String,List<String>>):ArchiveFormResult {
         val generation=cookieGeneration

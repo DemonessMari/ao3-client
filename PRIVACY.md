@@ -4,11 +4,11 @@ AO3 Client is unofficial and is not affiliated with AO3 or OTW.
 
 Search, suggestions, profiles, works, comments and sign-in contact `https://archiveofourown.org` directly. Passwords are sent over HTTPS and are not saved. Native session cookies are stored locally; native sign-out removes them. The embedded AO3 website and external browsers have separate sign-in sessions. Use the website’s sign-out or Clear website sign-in to clear its cookies. Use website sign-in in reader explicitly copies AO3 cookies into the native client only after a fresh server identity check. This also saves the website user-agent string to keep the imported session consistent. Native sign-out clears the native copy; website sign-out is separate.
 
-Private AO3 bookmark, subscription, history and inbox lists are fetched on request and kept in memory, outside library backups. Account and comment changes are sent to AO3 when you use their controls.
+Private AO3 bookmark, subscription, history and inbox lists are fetched on request and kept in memory, outside library backups. Account, publishing, collection and comment changes are sent to AO3 when you confirm their controls. Unsubmitted native tool drafts and selected uploads stay in memory, outside library backups. Password fields are not saved in drafts or navigation history.
 
 Native profile pictures load from AO3 and may follow AO3 image redirects to Amazon S3. AO3 cookies are not sent to S3. Missing or unavailable images use an initial.
 
-Original formatting is a static, isolated view with JavaScript and background network access disabled. Save offline with images explicitly downloads HTTPS chapter images from their hosts without AO3 session cookies; it does not load tracking pixels while reading. Missing images remain labelled. Saved images are embedded in the offline copy and included in backups with downloads.
+Original formatting disables JavaScript and external network access by default. Enabling External content allows public HTTPS images, styles, fonts, audio and video to contact their hosts without AO3 session cookies. This choice lasts only for the current reader view. Embedded-player links open in a separate anonymous view with JavaScript, no app bridge and no AO3 access; providers can observe your IP address and playback requests. Save offline with images explicitly downloads HTTPS chapter images from their hosts without AO3 session cookies; it does not load tracking pixels while reading. Missing images remain labelled. Saved images are embedded in the offline copy and included in backups with downloads.
 
 There are no ads, analytics, crash-reporting SDKs or developer-operated servers.
 

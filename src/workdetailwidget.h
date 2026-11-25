@@ -21,6 +21,7 @@ public:
     Work currentWork() const { return m_currentWork; }
 
 signals:
+    void nativeToolsRequested(const QString &path);
     void seriesRequested(const QString &workId);
     void archiveRequested(const QUrl &url);
     void readingActionRequested(const QString &workId);

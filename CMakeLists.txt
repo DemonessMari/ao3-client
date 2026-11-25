@@ -97,6 +97,12 @@ endif()
 
 if(BUILD_TESTING AND NOT ANDROID)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+    add_executable(native-tools-test tests/native_tools_test.cpp)
+    target_include_directories(native-tools-test PRIVATE src)
+    target_compile_definitions(native-tools-test PRIVATE AO3_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+    target_link_libraries(native-tools-test PRIVATE Qt6::Test Qt6::Widgets Qt6::Network)
+    add_test(NAME native-tools COMMAND native-tools-test)
+    set_tests_properties(native-tools PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(functional-test
         tests/functional_test.cpp
         src/mainwindow.cpp src/ao3client.cpp src/loginmanager.cpp

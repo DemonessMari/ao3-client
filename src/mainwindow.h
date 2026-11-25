@@ -29,6 +29,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
+    void closeEvent(QCloseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -51,6 +52,19 @@ private slots:
     void showLoginView();
 
 private:
+    void showNativeTools(const QString &path,bool reload=false);
+    void renderNativeTools();
+    QWidget *m_toolsWidget=nullptr;
+    QVBoxLayout *m_toolsLayout=nullptr;
+    ToolPage m_tools;
+    struct ToolHistory {ToolPage page;QMap<QString,QMap<QString,QStringList>> draft;QMap<QString,QMap<QString,ToolUpload>> uploads;};
+    QVector<ToolHistory> m_toolsHistory;
+    QString m_toolsPath;
+    QSet<QString> m_toolExpanded;
+    QMap<QString,QMap<QString,QStringList>> m_toolDraft;
+    QMap<QString,QMap<QString,ToolUpload>> m_toolUploads;
+    int m_toolsReturn=0;
+    bool m_toolSending=false,m_toolRefreshAvatar=false;
     void showAccountEditor(const QString &kind,const QString &id={},bool reload=false);
     void renderAccountEditor();
     QWidget *m_accountEditor=nullptr;

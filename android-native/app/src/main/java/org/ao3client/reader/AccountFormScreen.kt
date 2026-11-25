@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 @Composable internal fun AccountFieldControl(source:String,field:AccountField,values:List<String>,enabled:Boolean,update:(List<String>)->Unit) {
     val keyboard=LocalSoftwareKeyboardController.current
     when(field.type) {
-        "text","area"->SkinOutlinedTextField(values.firstOrNull().orEmpty(),{update(listOf(it))},Modifier.fillMaxWidth(),enabled=enabled,label={Text(field.label)},singleLine=field.type=="text",minLines=if(field.type=="area")4 else 1)
+        "text","area"->SkinOutlinedTextField(values.firstOrNull().orEmpty(),{update(listOf(it))},Modifier.fillMaxWidth().heightIn(max=if(field.type=="area")360.dp else androidx.compose.ui.unit.Dp.Unspecified),enabled=enabled,label={Text(field.label)},singleLine=field.type=="text",minLines=if(field.type=="area")4 else 1)
         "check"->{val on=field.choices.firstOrNull()?.value.orEmpty();Row{Checkbox(on in values,{update(listOf(if(it)on else field.offValue))},enabled=enabled);Text(field.label,Modifier.weight(1f).padding(top=12.dp))}}
         else->{
             var expanded by remember(source,field.name){mutableStateOf(false)}

@@ -46,6 +46,9 @@ int main(int argc, char **argv)
     if(formatted.size()!=1 || !formatted[0].html.contains("<table>") || !formatted[0].workCss.contains("white-space") || formatted[0].html.contains("<script")){qCritical()<<"Formatted extraction failed";return 1;}
     const auto page=formattedDocument(formatted[0].html,formatted[0].workCss,"#ffffff","#000000");
     if(!page.contains("default-src 'none'") || page.contains("<img src=\"https:") || !page.contains("Illustration")){qCritical()<<"Formatted isolation failed";return 1;}
+    for(const auto &body:QStringList{"<audio src='https://media.example/a.mp3'></audio>","<iframe src='https://player.example/embed'></iframe>","<img src='https://media.example/a.png'>"}) {
+        const auto media=extractWorkChapters("<div id='workskin'><div id='chapters'><div class='userstuff'>"+body+"</div></div></div>");if(media.size()!=1 || media.first().text.isEmpty() || media.first().html.isEmpty()){qCritical()<<"Media-only chapter was lost";return 1;}
+    }
     const auto hostile=staticReadingHtml("<p onclick='bad()'>Safe</p><a href='javascript:bad()'>Bad</a><img src='file:///secret'><form><input></form>");
     if(hostile.contains("onclick") || hostile.contains("javascript:") || hostile.contains("file:") || hostile.contains("<form")){qCritical()<<"Static sanitization failed";return 1;}
     const auto literal=formattedDocument("<p>Literal %1 and %8</p>",{},"#ffffff","#000000");

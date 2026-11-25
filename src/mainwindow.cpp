@@ -36,6 +36,9 @@
 #include <QLocale>
 #include <QPixmap>
 #include <QFileDialog>
+#include <QGroupBox>
+#include <QCloseEvent>
+#include "formattedreader.h"
 #include <QFile>
 #include <QTextStream>
 #include <QStyle>
@@ -219,7 +222,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(m_client,&AO3Client::archivePageFetched,this,[this](const QString &kind,const QString &id,const ArchivePage &page){if(kind==m_listsKind && id==m_listsId && m_contentStack->currentWidget()==m_listsPage){const auto canSubscribe=m_listsData.canSubscribe,subscribed=m_listsData.subscribed;m_listsSelected.clear();m_listsData=page;m_listsData.canSubscribe=canSubscribe;m_listsData.subscribed=subscribed;renderArchiveList(m_listsData);}});
     connect(m_client,&AO3Client::archiveActionFinished,this,[this](const QString &message,bool uncertain){m_listsUncertain=uncertain;statusBar()->showMessage(message);if(m_listsPage && m_contentStack->currentWidget()==m_listsPage)renderArchiveList(m_listsData);});
-    connect(m_client,&AO3Client::workDetailsFetched,this,[this](const Work &work){if(work.id==m_listsWorkTarget && m_contentStack->currentWidget()==m_listsPage){m_listsWorkTarget.clear();m_pendingReadId.clear();m_detailsReturn=m_contentStack->indexOf(m_listsPage);m_detailWidget->showWork(work);m_contentStack->setCurrentIndex(2);}});
+    connect(m_client,&AO3Client::workDetailsFetched,this,[this](const Work &work){if(work.id==m_listsWorkTarget && (m_contentStack->currentWidget()==m_listsPage || m_contentStack->currentWidget()==m_toolsWidget)){m_listsWorkTarget.clear();m_pendingReadId.clear();m_detailsReturn=m_contentStack->currentIndex();m_detailWidget->showWork(work);m_contentStack->setCurrentIndex(2);}});
     connect(m_client,&AO3Client::accountReadingsFetched,this,[this](bool later,const SearchResult &result) {
         if(m_readingMode==(later?"later":"history"))onSearchCompleted(result);
     });
@@ -411,6 +414,9 @@ void MainWindow::setupUI()
     connect(readingSettings, &QPushButton::clicked, this, [this] { m_reader->showSettings(); });
     navLayout->addWidget(readingSettings);
     auto *online=makeNavBtn("AO3 website"); auto *onlineMenu=new QMenu(online); online->setMenu(onlineMenu); navLayout->addWidget(online);
+    online->setText("AO3 tools");
+    for(const auto &item:QVector<QPair<QString,QString>>{{"Import a work","/works/new?import=true"},{"Account overview","/users/{user}"},{"Statistics","/users/{user}/stats"},{"Co-creator requests","/users/{user}/creatorships"},{"Tag sets and nominations","/users/{user}/tag_sets"},{"Post a work","/works/new"},{"Drafts","/users/{user}/works/drafts"},{"Manage works","/users/{user}/works/show_multiple"},{"Series","/users/{user}/series"},{"Collections","/collections"},{"Create collection","/collections/new"},{"My collections","/users/{user}/collections"},{"Challenges","/collections/list_challenges"},{"Assignments","/users/{user}/assignments"},{"Claims","/users/{user}/claims"},{"Challenge sign-ups","/users/{user}/signups"},{"Gifts","/users/{user}/gifts"},{"Related works","/users/{user}/related_works"},{"Invitations","/users/{user}/invitations"},{"Profile pictures and pseuds","/users/{user}/pseuds"},{"Site and work skins","/users/{user}/skins"},{"Change password","/users/{user}/change_password"},{"Change email","/users/{user}/change_email"},{"Change username","/users/{user}/change_username"},{"Manage AO3 bookmarks","/users/{user}/bookmarks"}})onlineMenu->addAction(item.first,this,[this,item]{auto path=item.second;path.replace("{user}",m_loginManager->username());if(path.contains("/users//")){showLoginView();return;}showNativeTools(path);});
+    onlineMenu->addSeparator();
     onlineMenu->addAction("AO3 website",this,[this] { openArchiveWebsite(QUrl("https://archiveofourown.org/")); });
     for(const auto &item:QVector<QPair<QString,QString>>{{"Profile pictures","pseuds"},{"My profile",""},{"My AO3 bookmarks","bookmarks"},{"My subscriptions","subscriptions"},{"Reading history","readings"},{"Marked for later","readings?show=to-read"},{"Inbox","inbox"},{"Skins","skins"},{"Account preferences","preferences"},{"Drafts","works/drafts"}}) {
         onlineMenu->addAction(item.first,this,[this,item] { const QString user=m_loginManager->username(); openArchiveWebsite(QUrl(user.isEmpty()?"https://archiveofourown.org/users/login":"https://archiveofourown.org/users/"+QString::fromLatin1(QUrl::toPercentEncoding(user))+"/"+item.second)); });
@@ -743,6 +749,13 @@ void MainWindow::setupUI()
     connect(m_archiveBookmarkSave,&QPushButton::clicked,this,[this] {submitArchiveBookmark();});
     connect(m_archiveBookmarkDelete,&QPushButton::clicked,this,[this] {if(QMessageBox::question(this,"Delete AO3 bookmark?","Delete your account bookmark, including its notes and tags?")==QMessageBox::Yes)submitArchiveBookmark(true);});
     connect(m_archiveBookmarkReload,&QPushButton::clicked,this,[this] {if(!m_archiveBookmarkSending && QMessageBox::question(this,"Reload bookmark?","Replace this draft with the bookmark saved on AO3?")==QMessageBox::Yes)editArchiveBookmark(m_archiveBookmarkWork,true);});
+    connect(m_detailWidget,&WorkDetailWidget::nativeToolsRequested,this,[this](const QString &path){showNativeTools(path);});
+    connect(m_client,&AO3Client::toolsPageFetched,this,[this](const ToolPage &page){
+        m_toolSending=false;
+        if(!page.error.isEmpty()){m_tools.error=page.error;m_tools.uncertain=page.uncertain;statusBar()->showMessage(page.error);}
+        else {m_tools=page;m_toolDraft.clear();m_toolUploads.clear();statusBar()->clearMessage();if(m_toolRefreshAvatar && m_loginManager->isLoggedIn()){m_accountPictureUser.clear();m_loginButton->setProperty("accountImage",QVariant());m_loginButton->setText(m_loginManager->username().left(1).toUpper());setLoggedInState(true);}}m_toolRefreshAvatar=false;
+        if(m_toolsWidget)renderNativeTools();
+    });
     connect(m_client,&AO3Client::accountFormFetched,this,[this](const AccountForm &form){
         if(form.kind!=m_accountFormKind || form.id!=m_accountFormId || m_contentStack->currentWidget()!=m_accountEditor)return;
         m_accountForm=form;m_accountDraft.clear();for(const auto &f:form.fields)m_accountDraft[f.name]=f.values;m_accountFormMessage=form.error;m_accountUncertain=false;renderAccountEditor();
@@ -750,7 +763,7 @@ void MainWindow::setupUI()
     connect(m_client,&AO3Client::accountFormSaved,this,[this](const QString &source,const ArchiveFormResult &result){
         if(source!=m_accountForm.source)return;
         m_accountSending=false;m_accountUncertain=result.uncertain;m_accountFormMessage=result.message;
-        if(result.success){const bool visible=m_contentStack->currentWidget()==m_accountEditor;m_accountDraft.clear();m_accountForm={};statusBar()->showMessage(result.message);if(visible){m_contentStack->setCurrentIndex(m_accountEditorReturn);if(m_contentStack->currentWidget()==m_listsPage)showArchiveList(m_listsKind,m_listsId,m_listsData.page);else if(m_contentStack->currentWidget()==m_profilePage)showProfile("/users/"+m_profileUsername);}}
+        if(result.success){if(m_accountForm.kind=="pseud"){m_accountPictureUser.clear();m_loginButton->setProperty("accountImage",QVariant());m_loginButton->setText(m_loginManager->username().left(1).toUpper());setLoggedInState(true);}const bool visible=m_contentStack->currentWidget()==m_accountEditor;m_accountDraft.clear();m_accountForm={};statusBar()->showMessage(result.message);if(visible){m_contentStack->setCurrentIndex(m_accountEditorReturn);if(m_contentStack->currentWidget()==m_listsPage)showArchiveList(m_listsKind,m_listsId,m_listsData.page);else if(m_contentStack->currentWidget()==m_profilePage)showProfile("/users/"+m_profileUsername);}}
         else if(m_contentStack->currentWidget()==m_accountEditor)renderAccountEditor();
     });
     connect(m_client,&AO3Client::archiveBookmarkFetched,this,[this](const ArchiveBookmarkForm &form) {
@@ -1006,6 +1019,7 @@ void MainWindow::showLoginView()
 
 void MainWindow::setLoggedInState(bool loggedIn)
 {
+    if(!loggedIn || (!m_tools.user.isEmpty() && m_tools.user!=m_loginManager->username())){m_tools={};m_toolsHistory.clear();m_toolDraft.clear();m_toolUploads.clear();m_toolSending=false;m_toolRefreshAvatar=false;if(m_toolsWidget){renderNativeTools();if(m_contentStack->currentWidget()==m_toolsWidget)m_contentStack->setCurrentIndex(loggedIn?0:1);}}
     if(!loggedIn || (!m_accountForm.user.isEmpty() && m_accountForm.user!=m_loginManager->username())){m_accountForm={};m_accountDraft.clear();m_accountSending=false;m_accountUncertain=false;m_accountFormMessage.clear();if(m_accountEditor && m_contentStack->currentWidget()==m_accountEditor)m_contentStack->setCurrentIndex(loggedIn?0:1);}
     if(!loggedIn && !QStringList{"series","media","fandoms"}.contains(m_listsKind) && !m_listsKind.startsWith("search:")){m_listsData={};m_listsKind.clear();m_listsWorkTarget.clear();if(m_listsPage)renderArchiveList(m_listsData);}
     if(!loggedIn && !m_readingMode.isEmpty()){m_readingMode.clear();m_currentResult={};m_workList->clear();m_detailWidget->clear();m_paginationWidget->hide();}
@@ -1119,8 +1133,24 @@ void MainWindow::layoutDesktopHeader()
     }
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    bool changed=m_tools.inProgress;
+    for(const auto &entry:m_toolsHistory)changed |= NativeTools::dirty(entry.page,entry.draft,entry.uploads);
+    for(const auto &form:m_tools.forms)for(const auto &field:form.fields)changed |= m_toolDraft.value(form.key).value(field.name,field.values)!=field.values;
+    for(auto i=m_toolUploads.cbegin();i!=m_toolUploads.cend();++i)changed |= !i.value().isEmpty();
+    for(const auto &field:m_accountForm.fields)changed |= m_accountDraft.value(field.name,field.values)!=field.values;
+    if((changed || m_toolSending || m_accountSending) && QMessageBox::question(this,"Close AO3 Client?",m_toolSending || m_accountSending?"A request may already have been submitted. Close the app and check AO3 before trying again?":"Discard your unsaved form changes and close the app?")!=QMessageBox::Yes){event->ignore();return;}
+    m_reader->saveProgress();QMainWindow::closeEvent(event);
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if(watched==m_toolsWidget && event->type()==QEvent::Hide) {
+        for(const auto &form:m_tools.forms)for(const auto &field:form.fields)if(field.type=="password")m_toolDraft[form.key][field.name]={""};
+        if(m_toolsWidget)for(auto *input:m_toolsWidget->findChildren<QLineEdit *>())if(input->echoMode()==QLineEdit::Password)input->clear();
+    }
+
     if(watched==m_headerBar && (event->type()==QEvent::Resize || event->type()==QEvent::FontChange))layoutDesktopHeader();
     if (m_workList && watched == m_workList->viewport() && event->type() == QEvent::Resize && !m_workResizeScheduled) {
         m_workResizeScheduled = true;
@@ -1226,6 +1256,72 @@ void MainWindow::showAuthorListing(bool bookmarks)
     m_readingMode.clear();m_listingAuthor = m_profileUsername; m_listingBookmarks = bookmarks; m_showingUserWorks = false;
     m_currentResult = {}; m_currentPage = 1; m_workList->clear(); m_detailWidget->clear(); m_paginationWidget->hide(); m_contentStack->setCurrentIndex(2);
     statusBar()->showMessage(m_listingAuthor + (bookmarks ? " · Public AO3 bookmarks" : " · Works")); m_client->fetchAuthorWorks(m_listingAuthor, 1, bookmarks);
+}
+
+void MainWindow::showNativeTools(const QString &path,bool reload)
+{
+    if(m_toolSending){statusBar()->showMessage("A request is still being sent.");return;}
+    const bool changed=NativeTools::dirty(m_tools,m_toolDraft,m_toolUploads);
+    if(changed && (reload || path=="@back") && QMessageBox::question(this,"Discard changes?","Discard this unsaved form and open the selected page?")!=QMessageBox::Yes)return;
+    if(path=="@back") {
+        if(m_toolsHistory.isEmpty()){m_toolDraft.clear();m_toolUploads.clear();m_contentStack->setCurrentIndex(m_toolsReturn);return;}
+        const auto previous=m_toolsHistory.takeLast();m_tools=previous.page;m_toolDraft=previous.draft;m_toolUploads=previous.uploads;m_toolsPath=m_tools.source;renderNativeTools();return;
+    }
+    if(!m_toolsWidget){auto *scroll=new QScrollArea(m_contentStack);scroll->setWidgetResizable(true);auto *body=new QWidget;scroll->setWidget(body);m_toolsLayout=new QVBoxLayout(body);m_toolsLayout->setContentsMargins(16,16,16,16);m_toolsLayout->setSpacing(12);m_toolsWidget=scroll;scroll->installEventFilter(this);m_contentStack->addWidget(scroll);}
+    if(!reload && path!=m_tools.source && !m_tools.source.isEmpty()) {
+        auto safe=m_toolDraft;for(auto form=safe.begin();form!=safe.end();++form)for(auto field=form.value().begin();field!=form.value().end();)if(field.key().contains("password",Qt::CaseInsensitive))field=form.value().erase(field);else ++field;
+        auto history=m_toolsHistory;history.append({m_tools,safe,m_toolUploads});
+        while(true){qint64 bytes=0;for(const auto &entry:history)bytes+=NativeTools::memoryCost(entry.page,entry.draft,entry.uploads);if(history.size()<=12 && bytes<=24*1024*1024)break;int discard=-1;for(int i=0;i<history.size();++i)if(!NativeTools::dirty(history[i].page,history[i].draft,history[i].uploads)){discard=i;break;}if(discard<0){statusBar()->showMessage("Save or discard an editor before opening more pages.");return;}history.removeAt(discard);}
+        m_toolsHistory=history;
+    }
+    if(m_contentStack->currentWidget()!=m_toolsWidget)m_toolsReturn=m_contentStack->currentIndex();
+    if(m_contentStack->currentWidget()==m_reader)closeReader();m_contentStack->setCurrentWidget(m_toolsWidget);
+    if(!reload && path==m_tools.source){renderNativeTools();return;}
+    m_tools={};m_toolsPath=path;m_toolDraft.clear();m_toolUploads.clear();renderNativeTools();statusBar()->showMessage("Loading AO3 page…");m_client->fetchToolsPage(path);
+}
+void MainWindow::renderNativeTools()
+{
+    while(auto *item=m_toolsLayout->takeAt(0)){if(item->widget())item->widget()->deleteLater();delete item;}
+    auto *bar=new QWidget;auto *actions=new QHBoxLayout(bar);actions->setContentsMargins(0,0,0,0);auto *back=new QPushButton("Back",bar);auto *reload=new QPushButton("Reload from AO3",bar);actions->addWidget(back);actions->addWidget(reload);auto *website=new QPushButton("Open page on AO3",bar);actions->addWidget(website);connect(website,&QPushButton::clicked,this,[this]{openArchiveWebsite(QUrl("https://archiveofourown.org"+(m_tools.source.isEmpty()?m_toolsPath:m_tools.source)));});actions->addStretch();m_toolsLayout->addWidget(bar);back->setEnabled(!m_toolSending);reload->setEnabled(!m_toolSending);
+    connect(back,&QPushButton::clicked,this,[this]{showNativeTools("@back");});connect(reload,&QPushButton::clicked,this,[this]{showNativeTools(m_tools.source.isEmpty()?m_toolsPath:m_tools.source,true);});
+    auto text=[this](const QString &value){if(value.isEmpty())return;auto *label=new QLabel(value,m_toolsWidget);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);m_toolsLayout->addWidget(label);};
+    const auto currentWork=QRegularExpression("^/works/([0-9]+)$").match(QUrl(m_tools.source).path());
+    if(currentWork.hasMatch()){auto *read=new QPushButton("Open in reader",m_toolsWidget);m_toolsLayout->addWidget(read);connect(read,&QPushButton::clicked,this,[this,id=currentWork.captured(1)]{m_listsWorkTarget=id;m_client->fetchWorkDetails(id);});}
+    if(!m_tools.previewHtml.isEmpty()){auto *preview=new QPushButton("View formatted preview",m_toolsWidget);m_toolsLayout->addWidget(preview);connect(preview,&QPushButton::clicked,this,[this]{Work work;work.id="preview";work.title=m_tools.title;WorkChapter chapter;chapter.title=m_tools.title;chapter.html=m_tools.previewHtml;chapter.workCss=m_tools.previewCss;chapter.text=CommentHtml::text(m_tools.previewHtml);showFormattedReader(m_toolsWidget,work,{chapter},0,false);});}
+    text(m_tools.title);for(const auto &notice:m_tools.notices)text(notice);text(m_tools.error);if(m_tools.uncertain)text("Reload this page to check the result before trying again.");
+    for(const auto &form:m_tools.forms) {
+        auto *group=new QGroupBox(form.title,m_toolsWidget);auto *layout=new QVBoxLayout(group);auto *body=new QWidget(group);auto *fields=new QVBoxLayout(body);fields->setContentsMargins(0,0,0,0);layout->addWidget(body);
+        group->setCheckable(m_tools.forms.size()>1);group->setChecked(m_tools.forms.size()==1 || m_toolExpanded.contains(form.key));body->setVisible(m_tools.forms.size()==1 || group->isChecked());connect(group,&QGroupBox::toggled,this,[this,key=form.key,body](bool checked){body->setVisible(checked);if(checked)m_toolExpanded.insert(key);else m_toolExpanded.remove(key);});
+        for(const auto &field:form.fields) {
+            auto *label=new QLabel(field.label,body);label->setTextFormat(Qt::PlainText);label->setWordWrap(true);fields->addWidget(label);const auto values=m_toolDraft.value(form.key).value(field.name,field.values);const auto key=form.key;
+            if(field.type=="text" || field.type=="password") {QString suggestion;if(field.name.contains("fandom",Qt::CaseInsensitive))suggestion="fandom";else if(field.name.contains("character",Qt::CaseInsensitive))suggestion="character";else if(field.name.contains("relationship",Qt::CaseInsensitive))suggestion="relationship";else if(field.name.contains("freeform",Qt::CaseInsensitive) || field.name.endsWith("[tag_string]"))suggestion="tag";
+                QLineEdit *input;
+                if(field.type=="password" || suggestion.isEmpty())input=new QLineEdit(body);
+                else {auto *tags=new TagLineEdit(suggestion,body);input=tags;const auto requestKey="tools:"+QUuid::createUuid().toString(QUuid::WithoutBraces);connect(tags,&TagLineEdit::suggestionsRequested,this,[this,requestKey](const QString &type,const QString &term,quint64 revision){m_client->fetchTagSuggestions(requestKey,type,term,revision);});connect(m_client,&AO3Client::tagSuggestionsFetched,tags,[tags,requestKey](const QString &key,quint64 revision,const QStringList &names,const QString &error){if(key==requestKey)tags->showSuggestions(revision,names,error);});}
+                input->setText(values.value(0));input->setObjectName("tool_"+field.name);input->setAccessibleName(field.label);if(field.type=="password")input->setEchoMode(QLineEdit::Password);fields->addWidget(input);connect(input,&QLineEdit::textChanged,this,[this,key,name=field.name](const QString &value){m_toolDraft[key][name]={value};});}
+            else if(field.type=="area") {auto *input=new QTextEdit(body);input->setAcceptRichText(false);input->setPlainText(values.value(0));input->setMinimumHeight(150);input->setMaximumHeight(300);input->setObjectName("tool_"+field.name);input->setAccessibleName(field.label);fields->addWidget(input);connect(input,&QTextEdit::textChanged,this,[this,key,name=field.name,input]{m_toolDraft[key][name]={input->toPlainText()};});}
+            else if(field.type=="file") {
+                auto *select=new QPushButton(m_toolUploads.value(key).contains(field.name)?m_toolUploads.value(key).value(field.name).filename:QString("Choose image"),body);fields->addWidget(select);
+                connect(select,&QPushButton::clicked,this,[this,key,name=field.name]{const auto path=QFileDialog::getOpenFileName(this,"Choose image",{},"Images (*.png *.jpg *.jpeg *.gif)");if(path.isEmpty())return;QFile file(path);if(!file.open(QIODevice::ReadOnly)){statusBar()->showMessage("Could not read this image.");return;}QString error;const auto upload=NativeTools::upload(name,QFileInfo(path).fileName(),file.read(2*1024*1024+1),error);qint64 total=upload.bytes.size()-m_toolUploads.value(key).value(name).bytes.size();for(auto i=m_toolUploads.cbegin();i!=m_toolUploads.cend();++i)for(const auto &f:i.value())total+=f.bytes.size();if(!error.isEmpty() || total>8*1024*1024){statusBar()->showMessage(error.isEmpty()?"Selected images are too large.":error);return;}m_toolUploads[key][name]=upload;renderNativeTools();});
+                if(m_toolUploads.value(key).contains(field.name)){auto *clear=new QPushButton("Remove selected image",body);fields->addWidget(clear);connect(clear,&QPushButton::clicked,this,[this,key,name=field.name]{m_toolUploads[key].remove(name);renderNativeTools();});}
+            } else if(field.type=="choice") {auto *input=new QComboBox(body);input->setObjectName("tool_"+field.name);for(const auto &choice:field.choices)input->addItem(choice.first,choice.second);input->setCurrentIndex(input->findData(values.value(0)));fields->addWidget(input);connect(input,&QComboBox::currentIndexChanged,this,[this,key,name=field.name,input]{m_toolDraft[key][name]={input->currentData().toString()};});}
+            else {
+                for(const auto &choice:field.choices){auto *row=new QWidget(body);auto *line=new QHBoxLayout(row);line->setContentsMargins(0,0,0,0);auto *check=new QCheckBox(row);check->setChecked(values.contains(choice.second));check->setAccessibleName(choice.first);auto *caption=new QLabel(choice.first,row);caption->setTextFormat(Qt::PlainText);caption->setWordWrap(true);line->addWidget(check);line->addWidget(caption,1);fields->addWidget(row);connect(check,&QCheckBox::toggled,this,[this,key,field,choice](bool on){auto values=m_toolDraft.value(key).value(field.name,field.values);if(field.type=="check")values={on?choice.second:field.offValue};else {values.removeAll(choice.second);if(on)values<<choice.second;}m_toolDraft[key][field.name]=values;});}
+            }
+        }
+        for(const auto &section:form.sections){auto *add=new QPushButton(section.label,body);fields->addWidget(add);add->setEnabled(!m_toolSending && !m_tools.uncertain);connect(add,&QPushButton::clicked,this,[this,key=form.key,sectionKey=section.key]{for(auto &current:m_tools.forms)if(current.key==key){QString error;const auto next=NativeTools::addSection(current,sectionKey,m_tools.user,error);if(!error.isEmpty()){statusBar()->showMessage(error);return;}current=next;m_tools.inProgress=true;m_toolExpanded.insert(key);renderNativeTools();return;}});}
+        for(const auto &submit:form.submits){auto *button=new QPushButton(submit.label.isEmpty()?QString("Submit"):submit.label,body);fields->addWidget(button);button->setEnabled(!m_toolSending && !m_tools.uncertain);connect(button,&QPushButton::clicked,this,[this,form,submit]{if(form.method!="get" && QMessageBox::question(this,submit.label,"Submit these changes to AO3?")!=QMessageBox::Yes)return;m_toolSending=true;m_toolRefreshAvatar=form.action.contains("/pseuds");QVector<ToolUpload> files;for(const auto &file:m_toolUploads.value(form.key))files<<file;m_client->submitTools(form,m_toolDraft.value(form.key),submit,files);if(m_toolSending)renderNativeTools();});}
+        group->setEnabled(!m_toolSending);m_toolsLayout->addWidget(group);
+    }
+    if(!m_tools.links.isEmpty()) {
+        text("Pages and actions");auto *find=new QLineEdit(m_toolsWidget);find->setPlaceholderText("Find page or action");m_toolsLayout->addWidget(find);auto *list=new QListWidget(m_toolsWidget);list->setMaximumHeight(300);m_toolsLayout->addWidget(list);
+        for(const auto &link:m_tools.links){auto *item=new QListWidgetItem(link.first,list);item->setData(Qt::UserRole,link.second);}
+        auto *open=new QPushButton("Open",m_toolsWidget);open->setEnabled(false);m_toolsLayout->addWidget(open);
+        connect(find,&QLineEdit::textChanged,list,[list,open](const QString &term){for(int i=0;i<list->count();++i)list->item(i)->setHidden(!list->item(i)->text().contains(term,Qt::CaseInsensitive));if(list->currentItem() && list->currentItem()->isHidden()){list->clearSelection();list->setCurrentRow(-1);}open->setEnabled(list->currentItem()!=nullptr);});
+        connect(list,&QListWidget::currentRowChanged,open,[list,open]{open->setEnabled(list->currentItem()!=nullptr);});connect(open,&QPushButton::clicked,this,[this,list]{if(list->currentItem())showNativeTools(list->currentItem()->data(Qt::UserRole).toString());});connect(list,&QListWidget::itemActivated,this,[this](QListWidgetItem *item){showNativeTools(item->data(Qt::UserRole).toString());});
+    }
+    if(!m_tools.text.isEmpty()){auto *preview=new QTextBrowser(m_toolsWidget);preview->setPlainText(m_tools.text);preview->setMinimumHeight(250);preview->setMaximumHeight(600);m_toolsLayout->addWidget(preview);}
+    m_toolsLayout->addStretch();
 }
 
 void MainWindow::showAccountEditor(const QString &kind,const QString &id,bool reload)
@@ -1387,7 +1483,7 @@ void MainWindow::renderArchiveList(const ArchivePage &page)
         if(m_listsKind=="inbox" && !entry.selection.isEmpty()){auto *choose=new QCheckBox("Select comment",m_listsPage);choose->setChecked(m_listsSelected.contains(entry.id));m_listsLayout->addWidget(choose);connect(choose,&QCheckBox::toggled,this,[this,entry](bool checked){if(checked)m_listsSelected.insert(entry.id);else m_listsSelected.remove(entry.id);QTimer::singleShot(0,this,[this]{renderArchiveList(m_listsData);});});}
         text(entry.title);if(entry.unread)text("Unread");if(!entry.body.isEmpty() && entry.body!=entry.title)text(entry.body);
         if(!entry.target.isEmpty()){auto *open=new QPushButton(entry.target.startsWith("/comments/")?"Open thread":entry.target.startsWith("/bookmarks/")?"Open on AO3":"Open",m_listsPage);m_listsLayout->addWidget(open);connect(open,&QPushButton::clicked,this,[this,entry]{openArchiveTarget(entry.target);});}
-        for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if(action=="Edit pseud"){showAccountEditor("pseud",entry.id);return;}if(action=="Edit bookmark"){showAccountEditor("bookmark",entry.id.mid(QString("bookmark_").size()));return;}if(action=="Unblock" || action=="Unmute"){showAccountEditor(action.toLower(),entry.id);return;}if((action=="Unsubscribe" || action=="Delete from inbox" || action=="Delete from history") && QMessageBox::question(this,action+"?",action=="Delete from history"?entry.title+"\n\nRemove this entry from your AO3 history and Marked for Later list?":entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
+        for(const auto &action:entry.actions){auto *button=new QPushButton(action,m_listsPage);button->setEnabled(!m_listsUncertain);m_listsLayout->addWidget(button);connect(button,&QPushButton::clicked,this,[this,entry,action,page]{if(action=="Tag feed"){showNativeTools(entry.selection);return;}if(action=="Edit pseud"){showAccountEditor("pseud",entry.id);return;}if(action=="Edit bookmark"){showAccountEditor("bookmark",entry.id.mid(QString("bookmark_").size()));return;}if(action=="Unblock" || action=="Unmute"){showAccountEditor(action.toLower(),entry.id);return;}if((action=="Unsubscribe" || action=="Delete from inbox" || action=="Delete from history") && QMessageBox::question(this,action+"?",action=="Delete from history"?entry.title+"\n\nRemove this entry from your AO3 history and Marked for Later list?":entry.title)!=QMessageBox::Yes)return;m_listsUncertain=true;renderArchiveList(m_listsData);m_client->performArchiveAction(m_listsKind,m_listsId,page.page,entry.id,action);});}
         QList<QWidget *> entryWidgets;for(int i=start;i<m_listsLayout->count();++i)if(auto *widget=m_listsLayout->itemAt(i)->widget())entryWidgets.append(widget);
         auto applyFilter=[entry,entryWidgets](const QString &value){const bool visible=(entry.title+"\n"+entry.body).contains(value,Qt::CaseInsensitive);for(auto *widget:entryWidgets)widget->setVisible(visible);};applyFilter(filter->text());connect(filter,&QLineEdit::textChanged,this,applyFilter);
     }

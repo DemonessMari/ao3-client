@@ -132,6 +132,7 @@ WorkDetailWidget::WorkDetailWidget(QWidget *parent)
     connect(series,&QPushButton::clicked,this,[this]{if(!m_currentWork.id.isEmpty())emit seriesRequested(m_currentWork.id);});
     auto *comments = new QPushButton("Comments",m_buttonBar); comments->setObjectName("workComments"); btnLayout->addWidget(comments);
     connect(comments,&QPushButton::clicked,this,[this] {if(!m_currentWork.id.isEmpty())emit commentsRequested(m_currentWork.id);});
+    auto *tools=new QPushButton("Work tools",m_buttonBar);btnLayout->addWidget(tools);connect(tools,&QPushButton::clicked,this,[this]{if(!m_currentWork.id.isEmpty())emit nativeToolsRequested("/works/"+m_currentWork.id);});
     auto *online=new QPushButton("AO3 website",m_buttonBar); btnLayout->addWidget(online); online->setToolTip("Official AO3 forms, series, collections and skins. Website sign-in is separate.");
     connect(online,&QPushButton::clicked,this,[this] { if(!m_currentWork.id.isEmpty()) emit archiveRequested(QUrl("https://archiveofourown.org/works/"+m_currentWork.id)); });
     layout->addWidget(m_buttonBar);

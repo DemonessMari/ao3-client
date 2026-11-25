@@ -51,7 +51,7 @@ internal object DiscoverySearch {
             val target=if(kind=="tags" && name.isNotEmpty())if(tagField!=null)"/works/search?"+Archive.encode("work_search[$tagField]")+"="+Archive.encode(name) else link?.let{ao3Path(it.attr("href"))}.orEmpty()
                 else link?.let{ao3Path(it.attr("href"))}.orEmpty().ifBlank{if(kind=="bookmarks" && id.matches(Regex("bookmark_[0-9]+")))"/bookmarks/"+id.removePrefix("bookmark_") else ""}
             val body=if(kind=="tags")item.text() else item.select("blockquote.userstuff, dl.stats, h5.heading, h5.byline").filter{el->el.tagName()=="blockquote" || el.trusted()}.joinToString("\n\n"){it.text()}
-            ArchiveEntry(id,name.ifBlank{if(kind=="bookmarks")"Unavailable bookmarked item" else "Unavailable entry"},body,target)
+            ArchiveEntry(id,name.ifBlank{if(kind=="bookmarks")"Unavailable bookmarked item" else "Unavailable entry"},body,target,if(kind=="tags" && item.select(".canonical").isNotEmpty() && link!=null)listOf("Tag feed") else emptyList(),if(kind=="tags" && link!=null)URI(Archive.BASE).resolve(link.attr("href")).rawPath+"/feed.atom" else "")
         }.orEmpty()
         val pages=main.select(".pagination a[href]").filter{it.trusted()}.mapNotNull{a->
             runCatching{val u=URI(Archive.BASE).resolve(a.attr("href"));if(ao3Path(u.toString())!="/$kind/search")null else u.rawQuery?.split('&')?.firstOrNull{it.startsWith("page=")}?.substringAfter('=')?.toIntOrNull()?.takeIf{it in 1..1000000}}.getOrNull()

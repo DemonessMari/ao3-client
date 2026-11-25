@@ -19,6 +19,7 @@
 #include "archivepages.h"
 #include "commentmanagement.h"
 #include "accountform.h"
+#include "nativetools.h"
 
 class AO3Client : public QObject {
     Q_OBJECT
@@ -28,6 +29,8 @@ public:
 
     void search(const QString &query, int page = 1, const SearchFilters &filters = {});
     void fetchSearchOptions();
+    void fetchToolsPage(const QString &path);
+    void submitTools(const ToolForm &form,const QMap<QString,QStringList> &draft,const ToolSubmit &button,const QVector<ToolUpload> &uploads={});
     void fetchAccountForm(const QString &kind,const QString &id={});
     void saveAccountForm(const AccountForm &original,const QMap<QString,QStringList> &draft);
     void cancelListing(){++m_listingGeneration;}
@@ -68,6 +71,7 @@ public:
     LoginManager *loginManager() const;
 
 signals:
+    void toolsPageFetched(const ToolPage &page);
     void accountFormFetched(const AccountForm &form);
     void accountFormSaved(const QString &source,const ArchiveFormResult &result);
     void archiveBookmarkFetched(const ArchiveBookmarkForm &form);
@@ -104,6 +108,8 @@ signals:
 private:
     void loadProfileAvatar(const QString &username,const QUrl &url,quint64 revision,quint64 auth,int redirects);
     quint64 m_avatarRevision=0;
+    quint64 m_toolsRevision=0;
+    bool m_toolsSending=false;
     quint64 m_accountFormRevision=0;
     bool m_accountFormSending=false;
     void verifySession(bool loginAttempt, quint64 generation);

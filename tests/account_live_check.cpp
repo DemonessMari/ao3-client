@@ -1,4 +1,5 @@
 #include "accountform.h"
+#include "nativetools.h"
 #include <QApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,7 +19,7 @@
 #include "accountbutton.h"
 int main(int argc,char **argv) {
     QApplication app(argc,argv);QStandardPaths::setTestModeEnabled(true);
-    if(argc<2 || argc>5 || (argc>3 && QString::fromLocal8Bit(argv[3])!="--profile" && QString::fromLocal8Bit(argv[3])!="--prepare-bookmark" && QString::fromLocal8Bit(argv[3])!="--forms")){QTextStream(stderr)<<"Pass the native cookie file, optional settings file, and optional --profile [render-path] or --prepare-bookmark or --forms.\n";return 2;}
+    if(argc<2 || argc>5 || (argc>3 && QString::fromLocal8Bit(argv[3])!="--profile" && QString::fromLocal8Bit(argv[3])!="--prepare-bookmark" && QString::fromLocal8Bit(argv[3])!="--forms" && QString::fromLocal8Bit(argv[3])!="--tools")){QTextStream(stderr)<<"Pass the native cookie file, optional settings file, and optional --profile [render-path] or --prepare-bookmark or --forms or --tools.\n";return 2;}
     const auto agent=argc>=3?QSettings(QString::fromLocal8Bit(argv[2]),QSettings::IniFormat).value("network/userAgent","AO3Client/3.0 (Unofficial Desktop Reader)").toString():QString("AO3Client/3.0 (Unofficial Desktop Reader)");
     QTemporaryDir directory;const auto copy=directory.filePath("cookies.dat");
     if(!QFile::copy(QString::fromLocal8Bit(argv[1]),copy))return 2;
@@ -40,6 +41,19 @@ int main(int argc,char **argv) {
         if(greeting && match.hasMatch() && match.captured(1)!="login" && match.captured(1)!="logout")user=match.captured(1);
     }
     if(user.isEmpty() || !siteIdentityMatches(home,user)){QTextStream(stdout)<<"No confirmed native account session is available. No account writes performed.\n";return 77;}
+    if(argc>3 && QString::fromLocal8Bit(argv[3])=="--tools") {
+        const QVector<QPair<QString,QString>> paths={{"work editor","/works/new"},{"collection editor","/collections/new"},{"password editor","/users/"+user+"/change_password"},{"email editor","/users/"+user+"/change_email"},{"username editor","/users/"+user+"/change_username"},{"pseud editor","/users/"+user+"/pseuds/"+user+"/edit"},{"draft list","/users/"+user+"/works/drafts"},{"bulk work list","/users/"+user+"/works/show_multiple"},{"invitations","/users/"+user+"/invitations"},{"collections","/collections"}};
+        bool valid=true;
+        for(const auto &item:paths){QEventLoop pause;QTimer::singleShot(1500,&pause,&QEventLoop::quit);pause.exec();const auto html=get(item.second);if(html.isEmpty())return 77;const auto page=NativeTools::parse(html,item.second,user);const bool expected=item.first.endsWith("editor");
+            QTextStream(stdout)<<item.first<<": "<<page.forms.size()<<" native form(s); "<<(page.error.isEmpty()?QString("page verified"):page.error)<<"; no changes submitted.\n";
+            if(!page.error.isEmpty() || (expected && page.forms.isEmpty())) {
+                valid=false;ArchivePages::Document doc(html);QStringList names;
+                for(int n:doc.select({},{}))if(QStringList{"input","select","textarea"}.contains(doc.list[n].tag) && !doc.list[n].attrs.contains("disabled")){auto name=doc.list[n].attrs.value("name");if(!name.isEmpty() && !NativeTools::fieldAllowed(name)){name.replace(QRegularExpression("[0-9]+"),"#");if(!names.contains(name))names<<name;}}
+                QTextStream(stdout)<<"Unsupported control names: "<<names.join(", ")<<"\n";
+            }
+        }
+        return valid?0:1;
+    }
     if(argc>3 && QString::fromLocal8Bit(argv[3])=="--forms") {
         for(const auto &kind:QStringList{"profile","preferences","pseud","externalBookmark"}) {
             QEventLoop pause;QTimer::singleShot(1000,&pause,&QEventLoop::quit);pause.exec();

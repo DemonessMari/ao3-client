@@ -99,6 +99,16 @@ class FunctionalTest : public QObject {
         return network;
     }
 private slots:
+    void nativeToolsBindAuthoringDraftsAndSubmitOnlyTheSelectedAction() {
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/native-tools-work.html"));QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());
+        MainWindow window;auto *network=installNetwork(window);QTest::qWait(30);window.m_loginManager->setUserInfo({"Writer","https://archiveofourown.org/users/Writer",true});network->page=html.toUtf8();window.showNativeTools("/works/new");QTRY_COMPARE(window.m_tools.forms.size(),1);
+        auto *title=window.m_toolsWidget->findChild<QLineEdit *>("tool_work[title]");QVERIFY(title);title->setText("Unsaved title");const auto key=window.m_tools.forms.first().key;QCOMPARE(window.m_toolDraft.value(key).value("work[title]"),QStringList{"Unsaved title"});
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_TOOLS")){window.resize(1000,900);window.show();QTest::qWait(50);QVERIFY(title->isVisible());window.grab().save("/tmp/ao3-native-authoring.png");}
+        network->page="<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Out</a></nav><div id='main'><h2 class='heading'>Policy</h2><p>Policy text</p></div>";window.showNativeTools("/content");QTRY_COMPARE(window.m_tools.title,QString("Policy"));window.showNativeTools("@back");QCOMPARE(window.m_toolDraft.value(key).value("work[title]"),QStringList{"Unsaved title"});
+        const auto form=window.m_tools.forms.first();network->requests.clear();network->operations.clear();network->bodies.clear();network->pages={QString(html).replace("work+token","fresh+token").toUtf8(),network->page};QSignalSpy finished(window.m_client,&AO3Client::toolsPageFetched);window.m_client->submitTools(form,window.m_toolDraft.value(key),form.submits.first());QTRY_COMPARE(finished.size(),1);QCOMPARE(network->operations,QList<QNetworkAccessManager::Operation>({QNetworkAccessManager::GetOperation,QNetworkAccessManager::PostOperation}));QVERIFY(network->bodies.last().contains("save_button=Save%20As%20Draft"));QVERIFY(!network->bodies.last().contains("post_button"));QVERIFY(network->bodies.last().contains("fresh%2Btoken"));
+        window.setLoggedInState(false);QVERIFY(window.m_tools.forms.isEmpty());QVERIFY(window.m_toolDraft.isEmpty());QVERIFY(window.m_toolsHistory.isEmpty());
+    }
+
     void mutedListingsRespectOnlyAo3VisibilityRules() {
         QFile file(QStringLiteral(AO3_FIXTURE_DIR "/muted-listings.html"));
         QVERIFY(file.open(QIODevice::ReadOnly));const auto html=QString::fromUtf8(file.readAll());

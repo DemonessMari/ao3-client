@@ -4,27 +4,38 @@ import org.jsoup.Jsoup
 import org.jsoup.safety.Safelist
 import java.net.URI
 
-private val readingTags=arrayOf("p","div","span","br","hr","h1","h2","h3","h4","h5","h6","blockquote","pre","code","kbd","samp","var","b","strong","i","em","u","s","strike","del","ins","sup","sub","small","big","abbr","acronym","cite","q","a","img","ul","ol","li","dl","dt","dd","table","thead","tbody","tfoot","tr","th","td","caption","colgroup","col","details","summary","ruby","rt","rp")
+private val readingTags=arrayOf("p","div","span","br","hr","h1","h2","h3","h4","h5","h6","blockquote","pre","code","kbd","samp","var","b","strong","i","em","u","s","strike","del","ins","sup","sub","small","big","abbr","acronym","cite","q","a","img","ul","ol","li","dl","dt","dd","table","thead","tbody","tfoot","tr","th","td","caption","colgroup","col","details","summary","ruby","rt","rp","audio","video","source","track")
+internal fun readingCssUrls(css:String):String=Regex("""url\(\s*(['"]?)(/[^)'"\s]+)\1\s*\)""",RegexOption.IGNORE_CASE).replace(css){m->runCatching{"url(\""+URI(Archive.BASE).resolve(m.groupValues[2]).toASCIIString().replace("\"","%22")+"\")"}.getOrDefault(m.value)}
 internal fun staticReadingHtml(html:String):String {
     if(html.isEmpty())return ""
     require(html.length<=40*1024*1024){"Formatted chapter exceeds 40 MB."}
-    val rules=Safelist().addTags(*readingTags).addAttributes(":all","id","class","style","title","lang","dir").addAttributes("a","href","name").addAttributes("img","src","alt","width","height").addAttributes("td","colspan","rowspan").addAttributes("th","colspan","rowspan","scope").addAttributes("ol","start","type").addAttributes("li","value").addAttributes("col","span","width").addAttributes("details","open").preserveRelativeLinks(true)
-    val safe=Jsoup.clean(html,rules)
+    val rules=Safelist().addTags(*readingTags).addAttributes(":all","id","class","style","title","lang","dir").addAttributes("a","href","name","data-ao3-embed").addAttributes("img","src","alt","width","height").addAttributes("td","colspan","rowspan").addAttributes("th","colspan","rowspan","scope").addAttributes("ol","start","type").addAttributes("li","value").addAttributes("col","span","width").addAttributes("details","open").preserveRelativeLinks(true)
+    rules.addAttributes("audio","src","controls","preload","loop").addAttributes("video","src","controls","preload","loop","poster","width","height").addAttributes("source","src","type","media").addAttributes("track","src","kind","srclang","label","default")
+    val original=Jsoup.parseBodyFragment(html);original.outputSettings().prettyPrint(false)
+    original.select("iframe[src]").forEach{frame->val link=publicImageUrl(frame.attr("src"));if(link!=null)frame.replaceWith(org.jsoup.nodes.Element("p").appendChild(org.jsoup.nodes.Element("a").attr("href",link).attr("data-ao3-embed","1").text("Open embedded player"))) else frame.remove()}
+    val safe=Jsoup.clean(original.body().html(),"",rules,org.jsoup.nodes.Document.OutputSettings().prettyPrint(false))
     val doc=Jsoup.parseBodyFragment(safe)
     doc.outputSettings().prettyPrint(false)
     doc.select("a[href]").forEach { if(!it.attr("href").startsWith("#")){val link=readingLink(it.attr("href"));if(link==null)it.removeAttr("href") else it.attr("href",link)} }
     doc.select("img").forEach { image -> val src=image.attr("src");if(!src.startsWith("data:image/",true) && !src.startsWith("https://",true) && !src.startsWith("//") && !src.startsWith("/"))image.removeAttr("src") }
+    doc.select("audio,video").forEach{it.attr("controls","").attr("preload","none").removeAttr("autoplay")}
+    doc.select("audio[src],video[src],source[src],track[src],video[poster],img[src]").forEach{element->for(name in listOf("src","poster")){if(!element.hasAttr(name))continue;val value=element.attr(name);if(!value.startsWith("data:image/",true) && !value.startsWith("data:audio/",true) && !value.startsWith("data:video/",true)){val url=publicImageUrl(value);if(url==null)element.removeAttr(name) else element.attr(name,url)}}}
+    doc.select("[style]").forEach{it.attr("style",readingCssUrls(it.attr("style")))}
     return doc.body().html()
 }
+internal fun readingEmbedTargets(html:String):Set<URI> = Jsoup.parseBodyFragment(staticReadingHtml(html)).select("a[data-ao3-embed=1][href]").mapNotNull{a->publicImageUrl(a.attr("href"))?.let{runCatching{URI(it)}.getOrNull()}?.takeIf{it.host!="archiveofourown.org" && !it.host.endsWith(".archiveofourown.org")}}.toSet()
+internal fun hasReadingMedia(html:String):Boolean {val safe=staticReadingHtml(html);return safe.contains("Open embedded player</a>") || Jsoup.parseBodyFragment(safe).select("img[src],audio[src],video[src],source[src]").isNotEmpty()}
 internal const val READING_CSP="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; media-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
-internal fun formattedDocument(chapter:Chapter,background:String,text:String,size:Int,spacing:Double,margin:Int,workSkin:Boolean=true,font:ByteArray?=null,fontFamily:String="serif"):String {
+internal fun formattedDocument(chapter:Chapter,background:String,text:String,size:Int,spacing:Double,margin:Int,workSkin:Boolean=true,font:ByteArray?=null,fontFamily:String="serif",external:Boolean=false):String {
     val body=Jsoup.parseBodyFragment(staticReadingHtml(chapter.html));body.outputSettings().prettyPrint(false)
-    body.select("img").forEach { if(!it.attr("src").startsWith("data:image/",true)){it.replaceWith(org.jsoup.nodes.Element("p").text(it.attr("alt").ifBlank{"Image not saved. Save offline with images to include it."}))} }
+    if(!external)body.select("img").forEach { if(!it.attr("src").startsWith("data:image/",true)){it.replaceWith(org.jsoup.nodes.Element("p").text(it.attr("alt").ifBlank{"Image not saved. Save offline with images to include it."}))} }
+    if(!external)body.select("audio,video").forEach{it.replaceWith(org.jsoup.nodes.Element("p").text("Audio/video requires external content."))}
+    val policy=if(external)READING_CSP.replace("img-src data:;","img-src data: https:;").replace("style-src 'unsafe-inline';","style-src 'unsafe-inline' https:;").replace("font-src data:;","font-src data: https:;").replace("media-src data:;","media-src data: https:;") else READING_CSP
     val family=fontFamily.takeIf{it in listOf("serif","sans-serif","monospace")} ?: "serif"
     val validFont=font?.takeIf{it.size in 12..ReaderFontStore.MAX_BYTES && (it.take(4).toByteArray().contentEquals(byteArrayOf(0,1,0,0)) || it.copyOfRange(0,4).toString(Charsets.US_ASCII)=="OTTO")}
     val fontCss=if(validFont!=null)"@font-face{font-family:Ao3Imported;src:url(data:font/ttf;base64,"+java.util.Base64.getEncoder().encodeToString(validFont)+")}body{font-family:Ao3Imported,serif}" else "body{font-family:$family}"
-    val css=if(workSkin)chapter.workCss.replace("</", "<\\/") else ""
-    return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$READING_CSP"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{background:$background;color:$text}body{margin:${margin}px;font: ${size}px serif;line-height:$spacing;overflow-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}th,td{padding:.3em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline}.landmark,.hidden{display:none}</style><style>$css</style><style>$fontCss</style></head><body><div id="workskin"><div id="chapters"><div class="userstuff">${body.body().html()}</div></div></div></body></html>"""
+    val css=if(workSkin)readingCssUrls(chapter.workCss).replace("</", "<\\/") else ""
+    return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$policy"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html{background:$background;color:$text}body{margin:${margin}px;font: ${size}px serif;line-height:$spacing;overflow-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}th,td{padding:.3em}pre{white-space:pre-wrap}a{color:inherit;text-decoration:underline}.landmark,.hidden{display:none}</style><style>$css</style><style>$fontCss</style></head><body><div id="workskin"><div id="chapters"><div class="userstuff">${body.body().html()}</div></div></div></body></html>"""
 }
 internal fun publicImageUrl(value:String):String?=runCatching {
     val u=URI(Archive.BASE).resolve(value)

@@ -48,6 +48,7 @@ inline ArchivePage parse(const QString &source,const QString &kind,int page) {
         const int heading=kind=="tags"?i:d.first("h4",{"heading"},i);
         if(kind=="tags") {
             for(int a:d.select("a",{},i))if(path(d.list[a].attrs.value("href")).startsWith("/tags/")) {
+                if(d.first({}, {"canonical"},i)>=0){e.actions={"Tag feed"};const auto url=QUrl("https://archiveofourown.org").resolved(QUrl(d.list[a].attrs.value("href")));e.selection=url.path(QUrl::FullyEncoded)+"/feed.atom";}
                 e.title=d.textAt(a);const auto type=d.textAt(i).section(':',0,0).trimmed();
                 const QMap<QString,QString> tagFields={{"Fandom","fandom_names"},{"Character","character_names"},{"Relationship","relationship_names"},{"Freeform","freeform_names"}};
                 if(tagFields.contains(type)){QUrl target("/works/search");QUrlQuery q;q.addQueryItem("work_search["+tagFields.value(type)+"]",e.title);target.setQuery(q);e.target=target.toString(QUrl::FullyEncoded);}

@@ -20,6 +20,31 @@ class ArchiveNetworkTest {
         override fun getHeaderFields():Map<String,List<String>> = emptyMap()
         override fun getHeaderField(name:String)=if(name=="Location")location else null
     }
+    @Test fun toolsSubmitFreshDraftActionAndFollowItsPreviewRedirect() {
+        val html=javaClass.classLoader!!.getResource("native-tools-work.html")!!.readText()
+        val preview=javaClass.classLoader!!.getResource("native-tools-preview.html")!!.readText()
+        val form=NativeTools.parse(html,"/works/new","Writer").forms.single()
+        val calls=mutableListOf<Reply>();val client=Archive(MemoryPreferences(),connectionFactory={url->
+            val response=when(calls.size){0->Reply(url,200,html.replace("work+token","fresh+token"));1->Reply(url,302,"","/works/42/preview");else->Reply(url,200,preview)};calls+=response;response
+        })
+        val page=client.submitTools(form,mapOf("work[title]" to listOf("A title")),form.submits.first(),emptyList(),"Writer")
+        assertEquals(listOf("GET","POST","GET"),calls.map{it.requestMethod});assertEquals("/works/42/preview",page.source)
+        val data=java.net.URLDecoder.decode(calls[1].written.toString("UTF-8"),"UTF-8");assertTrue(data.contains("authenticity_token=fresh+token"));assertTrue(data.contains("save_button=Save As Draft"));assertFalse(data.contains("post_button="));assertTrue(calls.all{it.closed})
+    }
+    @Test fun toolsDoNotRetryWritesAndRetainValidationPages() {
+        val html=javaClass.classLoader!!.getResource("native-tools-work.html")!!.readText();val form=NativeTools.parse(html,"/works/new","Writer").forms.single()
+        val failed=mutableListOf<Reply>();val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(failed.isEmpty())200 else 503,html).also{failed+=it}})
+        assertTrue(runCatching{client.submitTools(form,emptyMap(),form.submits.last(),emptyList(),"Writer")}.exceptionOrNull() is ToolSubmissionUncertain);assertEquals(2,failed.size)
+        val calls=mutableListOf<Reply>();val validation=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,if(calls.isEmpty())200 else 422,html.replace("<h2", "<div class='error'>Please correct the title</div><h2")).also{calls+=it}})
+        val page=validation.submitTools(form,emptyMap(),form.submits.first(),emptyList(),"Writer");assertTrue(page.notices.any{it.contains("Please correct")});assertEquals("/works/new",page.forms.first().source)
+    }
+    @Test fun aNewWorkKeepsItsDraftWhenServerDefaultsChangeAcrossMidnight() {
+        val html=javaClass.classLoader!!.getResource("native-tools-work.html")!!.readText()
+        val form=NativeTools.parse(html,"/works/new","Writer").forms.single();val calls=mutableListOf<Reply>()
+        val client=Archive(MemoryPreferences(),connectionFactory={url->Reply(url,200,if(calls.isEmpty())html.replace("value=\"Original\"","value=\"Changed server default\"") else html).also{calls+=it}})
+        client.submitTools(form,mapOf("work[title]" to listOf("My unsaved work")),form.submits.first(),emptyList(),"Writer")
+        assertEquals(listOf("GET","POST"),calls.map{it.requestMethod});assertTrue(java.net.URLDecoder.decode(calls.last().written.toString("UTF-8"),"UTF-8").contains("work[title]=My unsaved work"))
+    }
     @Test fun accountFormsRefetchTokensRejectConflictsAndNeverRetryUnknownWrites() {
         val html=javaClass.classLoader!!.getResource("account-form-profile.html")!!.readText()
         val original=AccountForms.parse(html,"profile","Writer")

@@ -61,7 +61,7 @@ import androidx.compose.ui.unit.dp
                     if(entry.unread)Text("Unread",style=MaterialTheme.typography.labelMedium)
                     if(entry.body.isNotBlank() && entry.body!=entry.title)SelectionContainer{Text(entry.body)}
                     if(entry.target.isNotEmpty())SkinOutlinedButton(onClick={vm.openArchiveEntry(entry.target)},enabled=!vm.loading){Text(if(entry.target.startsWith("/comments/"))"Open thread" else if(entry.target.startsWith("/bookmarks/"))"Open on AO3" else "Open")}
-                    entry.actions.forEach{action->SkinTextButton(onClick={when(action){"Edit pseud"->vm.showAccountEditor("pseud",entry.id);"Edit bookmark"->vm.showAccountEditor("bookmark",entry.id.removePrefix("bookmark_"));"Unblock","Unmute"->vm.showAccountEditor(action.lowercase(),entry.id);else->if(action in listOf("Unsubscribe","Delete from inbox","Delete from history"))confirm=entry to action else vm.actOnArchiveEntry(entry,action)}},enabled=!vm.loading && !vm.archiveUncertain){Text(action)}}
+                    entry.actions.forEach{action->SkinTextButton(onClick={when(action){"Tag feed"->vm.showTools(entry.selection);"Edit pseud"->vm.showAccountEditor("pseud",entry.id);"Edit bookmark"->vm.showAccountEditor("bookmark",entry.id.removePrefix("bookmark_"));"Unblock","Unmute"->vm.showAccountEditor(action.lowercase(),entry.id);else->if(action in listOf("Unsubscribe","Delete from inbox","Delete from history"))confirm=entry to action else vm.actOnArchiveEntry(entry,action)}},enabled=!vm.loading && !vm.archiveUncertain){Text(action)}}
                     HorizontalDivider()
                 }
             }

@@ -119,7 +119,9 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                 for (auto it = removals.crbegin(); it != removals.crend(); ++it) body.remove(it->first, it->second);
                 QTextDocument document;
                 document.setHtml(body);
-                const QString text = document.toPlainText().trimmed();
+                QString text = document.toPlainText().trimmed();
+                auto plain=text;plain.remove(QChar::ObjectReplacementCharacter);const bool mediaOnly=plain.trimmed().isEmpty() && hasReadingMedia(body);
+                if(mediaOnly)text="This chapter contains images or media. Open Original formatting to view it.";
                 if (!text.isEmpty()) {
                     QString title;
                     const QString prelude = html.mid(previousBodyEnd, bodyStart - previousBodyEnd);
@@ -136,8 +138,8 @@ QVector<WorkChapter> extractWorkChapters(const QString &html)
                     if (title.isEmpty()) title = QStringLiteral("Chapter %1").arg(chapters.size() + 1);
                     WorkChapter chapter{title,text};
                     chapter.html=staticReadingHtml(body);chapter.workCss=readingWorkCss(html);
-                    const int trim = document.toPlainText().indexOf(text);
-                    for (auto block = document.begin(); block.isValid(); block = block.next()) {
+                    const int trim = qMax(0,document.toPlainText().indexOf(text));
+                    for (auto block = document.begin(); !mediaOnly && block.isValid(); block = block.next()) {
                         for (auto it = block.begin(); !it.atEnd(); ++it) {
                             const auto fragment = it.fragment(); if (!fragment.isValid()) continue;
                             const auto format = fragment.charFormat();

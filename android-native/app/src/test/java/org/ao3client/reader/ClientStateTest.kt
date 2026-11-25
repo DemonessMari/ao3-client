@@ -21,6 +21,21 @@ class ClientStateTest {
     @After fun cleanup() { models.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain() }
     private fun state(app:TestApp)=ClientState(app,checkSession=false).also { models+=it }
     private fun awaitLoaded(vm:ClientState)=runBlocking { withTimeout(5000) { while(vm.loading) delay(10) } }
+    @Test fun nativeToolsKeepWritingAcrossHelpAndClearPasswordsAndPrivateState() {
+        val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
+        val vm=ClientState(TestApp(directory.newFolder(),MemoryPreferences()),false,{prefs->Archive(prefs,connectionFactory={url->
+            calls+=url.file
+            val kind=when(url.path){"/works/new"->"work";"/skins/7/edit"->"sections";"/users/Writer/change_password"->"account";else->null}
+            val html=if(kind!=null)javaClass.classLoader!!.getResource("native-tools-$kind.html")!!.readText() else "<nav id='greeting'><a href='/users/Writer'>Writer</a><a href='/users/logout'>Out</a></nav><div id='main'><h2 class='heading'>Content policy</h2><p>Policy text</p></div>"
+            object:java.net.HttpURLConnection(url){override fun connect(){};override fun disconnect(){};override fun usingProxy()=false;override fun getResponseCode()=200;override fun getInputStream()=java.io.ByteArrayInputStream(html.toByteArray());override fun getHeaderFields():Map<String,List<String>> = emptyMap()}
+        })}).also{models+=it}
+        vm.username="Writer";vm.navigate("account");vm.showTools("/works/new");awaitLoaded(vm);val key=vm.toolPage!!.forms.single().key
+        vm.editToolField(key,"work[title]",listOf("Unsaved title"));vm.showTools("/content");awaitLoaded(vm);assertNull(vm.pendingTools);vm.toolsBack();assertEquals(listOf("Unsaved title"),vm.toolDraft[key]?.get("work[title]"));assertEquals(2,calls.size)
+        vm.toolsBack();assertEquals("@back",vm.pendingTools?.first);vm.pendingTools=null;vm.showTools("@back",discard=true);assertEquals("account",vm.screen)
+        vm.showTools("/users/Writer/change_password");awaitLoaded(vm);val secret=vm.toolPage!!.forms.first().key;vm.editToolField(secret,"password",listOf("test-only-secret"));vm.showTools("/content");awaitLoaded(vm);vm.toolsBack();assertFalse(vm.toolDraft.values.any{fields->fields.values.flatten().contains("test-only-secret")})
+        vm.showTools("/skins/7/edit");awaitLoaded(vm);val form=vm.toolPage!!.forms.single();vm.addToolSection(form.key,form.sections.single().key);assertEquals(3,vm.toolPage!!.forms.single().fields.size);assertTrue(vm.toolPage!!.inProgress)
+        vm.logout();assertNull(vm.toolPage);assertTrue(vm.toolDraft.isEmpty());assertTrue(vm.toolUploads.isEmpty())
+    }
     @Test fun accountEditorsPreserveDraftsAndClearPrivateDataOnLogout() {
         val calls=java.util.Collections.synchronizedList(mutableListOf<String>())
         val app=TestApp(directory.newFolder(),MemoryPreferences())

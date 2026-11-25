@@ -1,5 +1,17 @@
 # Verification
 
+## 3.2.0-rc.25
+
+2026-11-25: both editions add native server-form tools for publishing and chapters, collections/challenges, invitations, related works/gifts, account security, pseud images/deletion/transfer, official skins and supported bulk actions. Authoring uses plain text/HTML with a sanitized formatted preview. Supported nested sections are decoded as data without executing site scripts. Tag feeds are native. Original formatting optionally loads external styles and audio/video; embedded players are separate anonymous views.
+
+All seven desktop suites pass, including 72 functional and nine native-tool checks. The authoring layout was rendered and inspected; a single-form visibility defect was corrected. The installed desktop binary matches the tested build and starts from `/tmp` with isolated app data.
+
+A read-only authenticated check verified live work, collection, password, email, username and pseud editors, plus drafts, bulk-work, invitations and collection lists. Empty account lists offered no actions. No production changes were submitted. A broken standalone AO3 series-creation route was excluded; series can be created through the work editor.
+
+Android passes 170 offline tests with one optional live test skipped. Tests cover fresh tokens, preview and bulk transitions, nested sections, draft history, password clearing, bounded image uploads, anonymous resource requests, cookie-policy restoration and formatted-content backup/restore. A sanitizer whitespace regression was corrected.
+
+Physical-phone installation and acceptance remain pending because no device is connected. Production writes, role-specific workflows, provider playback and long reading sessions remain unverified. The website rich-text editor and unsupported JavaScript-only interactions remain website workflows. This is a prerelease, not a claim of exhaustive website or device coverage.
+
 ## 3.2.0-rc.24
 
 2026-11-24: both editions add native AO3 preferences, profile title/biography editing, pseud creation/editing, block/mute management, media/fandom directories, series/external bookmark creation, and bookmark editing/deletion by bookmark record ID. Routes and fields were checked against official otwarchive forms, helpers and controllers. Unblock/unmute use member confirmation routes. Online native lists and comments honor AO3’s numeric-user mute visibility rule; story content cannot supply that rule.

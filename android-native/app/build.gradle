@@ -14,8 +14,8 @@ android {
         testInstrumentationRunner 'org.ao3client.reader.DeviceNetworkInstrumentation'
         minSdk 28
         targetSdk 36
-        versionCode 39
-        versionName '3.2.0-rc.24'
+        versionCode 40
+        versionName '3.2.0-rc.25'
     }
     sourceSets { main.assets.srcDir file("../../resources/web"); test.resources.srcDir file("../../tests/fixtures"); main.assets.srcDir file("../../skins"); test.resources.srcDir file("../../skins") }
     signingConfigs {

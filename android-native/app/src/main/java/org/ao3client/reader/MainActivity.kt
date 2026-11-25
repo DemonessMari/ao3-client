@@ -94,7 +94,8 @@ class MainActivity : ComponentActivity() {
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler(vm.screen !in listOf("home", "reader")) {
         keyboard?.hide()
-        vm.navigate(when (vm.screen) { "accountForm"->vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
+        if(vm.screen=="nativeTools"){vm.toolsBack();return@BackHandler}
+        vm.navigate(when (vm.screen) { "nativeTools"->vm.toolReturn; "accountForm"->vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn; "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "filters" -> "search"; "details" -> vm.detailsReturn; "profile" -> vm.profileReturn; else -> "home" })
     }
     if(vm.screen=="website") {key(vm.websiteRevision) {ArchiveWebsiteScreen(vm)};return}
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
@@ -119,6 +120,7 @@ class MainActivity : ComponentActivity() {
                 "archiveBookmark" -> ArchiveBookmarkScreen(vm)
                 "comments" -> CommentsScreen(vm)
                 "archiveList" -> ArchiveListScreen(vm)
+                "nativeTools" -> NativeToolsScreen(vm)
                 "accountForm" -> AccountFormScreen(vm)
                 "series" -> SeriesScreen(vm)
                 "profile" -> ProfileScreen(vm)
@@ -134,10 +136,10 @@ class MainActivity : ComponentActivity() {
 }
 }
 @Composable private fun ClientTopBar(vm: ClientState) {
-    val showBack=vm.screen in listOf("accountForm","skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
+    val showBack=vm.screen in listOf("nativeTools","accountForm","skins","archiveBookmark","comments","filters","details","login","profile","series","archiveList") || vm.screen=="settings" && vm.settingsReturn=="reader"
     val navigation: @Composable () -> Unit = {
-        if(showBack)IconButton(onClick={vm.navigate(when(vm.screen) {
-            "accountForm" -> vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
+        if(showBack)IconButton(onClick={if(vm.screen=="nativeTools")vm.toolsBack() else vm.navigate(when(vm.screen) {
+            "nativeTools" -> vm.toolReturn; "accountForm" -> vm.accountFormReturn; "skins" -> vm.skinReturn; "settings" -> vm.settingsReturn; "archiveBookmark" -> vm.bookmarkReturn
             "archiveList" -> vm.archiveReturn; "series" -> vm.seriesReturn; "comments" -> vm.commentsReturn; "profile" -> vm.profileReturn; "login" -> "home"; "details" -> vm.detailsReturn; else -> "search"
         })}) {Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}
     }
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     } else TopAppBar(title={Text(when(vm.screen) {
-        "accountForm" -> vm.accountForm?.title ?: "AO3 account"; "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
+        "nativeTools" -> vm.toolPage?.title ?: "AO3 tools"; "accountForm" -> vm.accountForm?.title ?: "AO3 account"; "skins" -> "App skin"; "archiveBookmark" -> "AO3 bookmark"; "comments" -> "Comments"; "filters" -> "Search filters"
         "archiveList" -> vm.archiveList?.title.orEmpty(); "series" -> "Series"; "details" -> "About this fic"; "login" -> "Sign in"; "profile" -> vm.profileUser; else -> "Archive of Our Own"
     },maxLines=1,overflow=TextOverflow.Ellipsis)},navigationIcon=navigation,actions={account()},colors=TopAppBarDefaults.topAppBarColors(containerColor=Color.Transparent,scrolledContainerColor=Color.Transparent))
     }
@@ -208,6 +210,7 @@ class MainActivity : ComponentActivity() {
             FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 listOf("people" to "People","tags" to "Tags","bookmarks" to "Bookmarks").forEach{(kind,title)->SkinTextButton(onClick={vm.startDiscovery(kind)}){Text(title)}}
                 SkinTextButton(onClick={vm.showArchiveList("media")}){Text("Fandoms")}
+                SkinTextButton(onClick={vm.showTools("/collections")}){Text("Collections")}
             }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SkinOutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
