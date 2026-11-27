@@ -24,8 +24,14 @@ object KudosParser {
 }
 
 @androidx.compose.runtime.Composable
-fun KudosButton(vm:ClientState,id:String) {
- SkinOutlinedButton(onClick={vm.giveKudos(id)},enabled=!vm.kudosStates.containsKey(id)) {
-  androidx.compose.material3.Text(vm.kudosStates[id] ?: if(vm.username==null) "Give guest kudos" else "Give kudos")
- }
+fun KudosButton(vm:ClientState,id:String,menu:Boolean=false) {
+ val label=vm.kudosStates[id] ?: if(vm.username==null) "Give guest kudos" else "Give kudos"
+ val enabled=!vm.kudosStates.containsKey(id)
+ KudosControl(label,enabled,menu){vm.giveKudos(id)}
+}
+
+@androidx.compose.runtime.Composable
+internal fun KudosControl(label:String,enabled:Boolean,menu:Boolean,onClick:()->Unit) {
+ if(menu)MenuRow(label,onClick=onClick,enabled=enabled)
+ else SkinOutlinedButton(onClick=onClick,enabled=enabled){androidx.compose.material3.Text(label)}
 }

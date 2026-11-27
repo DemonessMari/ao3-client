@@ -1,5 +1,15 @@
 # Verification
 
+## 3.2.0-rc.27
+
+2026-11-27: reading-menu commands use consistent rows, including guest kudos, account actions and translation. Work details separate metadata from actions; account and website navigation use matching rows. Desktop Series belongs to the action group, toolbars wrap, and repeated checkbox labels were removed.
+
+Fullscreen notes and exit controls share a non-overlapping header row. Header, page and footer use the reading surface; arrows replace outlined footer buttons. Pagination subtracts measured footer height and page padding rather than a fixed reserve. Text-only mode reclaims the footer space. The native visual editor follows input skin colors, borders, corners, padding and scaled typography.
+
+All seven desktop suites pass, including 72 functional and 11 native-tool/editor checks. Android passes 180 offline tests, with one optional live test skipped. Focused rendering and interaction checks cover fullscreen control bounds, navigation callbacks, guest-kudos row geometry and disabled behavior, and input skin colors/font scaling. Page-height tests cover visible, hidden and larger footers. Phone-width and desktop renders were inspected. Release lint reports no errors.
+
+The desktop install matches the tested build and passes isolated startup from `/tmp`. APK/AAB signatures, previous APK signer and 16 KB alignment verify; Android version code is 42. No production account writes were submitted. Physical-phone acceptance remains pending because no device is connected.
+
 ## 3.2.0-rc.26
 
 2026-11-25: work text, summaries and notes have native visual editors on both editions. They support inline formatting, headings, links, flat lists, undo/redo and HTML mode. Formatting exports semantic HTML. Unedited source stays unchanged, and unsupported tables, images, nested lists and custom styles remain in HTML mode. Editing does not run site scripts or fetch images.

@@ -215,7 +215,7 @@ private slots:
     }
     void workActionsWrapInsideNarrowDetails() {
         WorkDetailWidget detail;Work work;work.id="123";work.title="A story";work.author="Writer";detail.showWork(work);detail.resize(380,850);detail.show();QTest::qWait(30);
-        auto *actions=detail.findChild<QWidget *>("detailActions");QVERIFY(actions);QVERIFY(actions->layout()->hasHeightForWidth());
+        auto *actions=detail.findChild<QWidget *>("detailActions");QVERIFY(actions);QVERIFY(actions->layout()->hasHeightForWidth());auto *series=detail.findChild<QPushButton *>("workSeries");QVERIFY(series);QCOMPARE(series->parentWidget(),actions);
         int top=-1;bool wrapped=false;
         for(auto *button:actions->findChildren<QPushButton *>(QString(),Qt::FindDirectChildrenOnly)) {
             QVERIFY(button->geometry().right()<actions->width());QVERIFY(button->geometry().bottom()<actions->height());

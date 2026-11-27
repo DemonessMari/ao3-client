@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
         else->{
             var expanded by remember(source,field.name){mutableStateOf(false)}
             Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                MenuRow(title=field.label,supportingText=field.choices.filter{it.value in values}.joinToString{it.label},onClick={if(enabled)expanded=!expanded},trailing={Text(if(expanded)"−" else "+")})
+                MenuRow(title=if(field.type=="multi" && field.name.contains("[archive_warning_ids]"))"Archive warnings" else field.label,supportingText=field.choices.filter{it.value in values}.joinToString{it.label},onClick={if(enabled)expanded=!expanded},trailing={Text(if(expanded)"−" else "+")})
                 if(expanded) {
                     fun choose(option:Choice){update(if(field.type=="multi")if(option.value in values)values-option.value else values+option.value else listOf(option.value));if(field.type!="multi"){expanded=false;keyboard?.hide()}}
                     if(field.choices.size>12) {

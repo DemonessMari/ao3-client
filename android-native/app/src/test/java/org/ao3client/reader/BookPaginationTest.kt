@@ -3,6 +3,13 @@ import org.junit.Assert.*
 import org.junit.Test
 import androidx.compose.ui.geometry.Offset
 class BookPaginationTest {
+    @Test fun usablePageHeightTracksActualControlsInsteadOfAConstantReserve(){
+        assertEquals(912,bookContentHeight(1000,40,48))
+        assertEquals(960,bookContentHeight(1000,40,0))
+        assertEquals(880,bookContentHeight(1000,40,80))
+        assertEquals(1,bookContentHeight(20,40,48))
+    }
+
     @Test fun pagesPreserveAllTextAndUnicode() {
         val text = "A long paragraph 😀 with words\n\n第二段\n".repeat(500)
         val pages = paginateBook(text) { minOf(173,it.length) }

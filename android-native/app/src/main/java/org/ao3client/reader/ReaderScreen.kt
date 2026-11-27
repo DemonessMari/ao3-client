@@ -121,7 +121,7 @@ import androidx.lifecycle.LifecycleEventObserver
         snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.distinctUntilChanged().collect { (index, offset) -> if(vm.chapter == chapterIndex && !vm.bookMode) { vm.bookOffset=-1; vm.positionIndex = index; vm.positionOffset = offset; val now=android.os.SystemClock.uptimeMillis();if(!autoScroll || now-lastAutoSave>=1000){vm.saveProgress();lastAutoSave=now} } }
     }
     BackHandler { when { speechOptions -> speechOptions=false; notes -> notes = false; appearance -> appearance = false; tools -> tools = false; vm.textOnly -> vm.textOnly = false; vm.fullScreen -> vm.fullScreen = false; else -> vm.navigate(vm.readerReturn) } }
-    Scaffold(
+    Scaffold(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.onSurface,contentWindowInsets=WindowInsets.safeDrawing,
         topBar = { if(!hideChrome) SkinHeader {TopAppBar(title = { Text(fic.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { vm.navigate(vm.readerReturn) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to fic") } }, actions = { IconButton(onClick = { tools = true }) { Icon(Icons.Default.MoreVert, "Reading options") } },colors=TopAppBarDefaults.topAppBarColors(containerColor=androidx.compose.ui.graphics.Color.Transparent,scrolledContainerColor=androidx.compose.ui.graphics.Color.Transparent))} },
         bottomBar = { if(!hideChrome) Surface(tonalElevation = 3.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -140,10 +140,7 @@ import androidx.lifecycle.LifecycleEventObserver
                 if(vm.loading && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); SkinTextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
                 if(speech.active && !vm.textOnly) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {SkinTextButton(onClick={speech.pauseOrResume()}){Text(if(speech.paused)"Resume speech" else "Pause speech")};SkinTextButton(onClick={speech.stop()}){Text("Stop speech")}}
                 if(autoScroll && !vm.textOnly) SkinTextButton(onClick={autoScroll=false}) {Text("Pause auto-scroll")}
-                if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(start=24.dp,end=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Text(currentChapter.title,Modifier.weight(1f).padding(vertical=6.dp),style=MaterialTheme.typography.labelLarge)
-                    if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) SkinTextButton(onClick={notes=true}) { Text("Author notes") }
-                }
+                if(!vm.textOnly)ReaderChapterHeader(currentChapter.title,currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank(),vm.fullScreen,{notes=true},{vm.fullScreen=false})
                 if(!vm.textOnly) vm.error?.let { ErrorCard(it) { vm.error = null } }
                 if(vm.translating && !vm.textOnly) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(vm.translationProgress, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium) }
                 if(vm.translation != null && !vm.textOnly) Text("Machine translation · ${vm.preferences.language}", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
@@ -162,7 +159,6 @@ import androidx.lifecycle.LifecycleEventObserver
                 }
             }
             if(vm.textOnly && !vm.bookMode) Box(Modifier.align(Alignment.Center).size(80.dp).clickable(onClickLabel="Show reading controls") { vm.textOnly=false })
-            if(vm.fullScreen && !vm.textOnly) FilledTonalIconButton(onClick = { vm.fullScreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Icon(Icons.Default.Close, "Exit fullscreen") }
         }
     }
     if(formatted)FormattedReader(vm,vm::closeFormattedReading)
@@ -187,8 +183,8 @@ import androidx.lifecycle.LifecycleEventObserver
             if(currentChapter.html.isNotBlank())MenuRow("Original formatting",supportingText="Tables, poetry, images and work skin",onClick={tools=false;vm.formattedReading=true})
             MenuRow("Save offline with images",onClick={tools=false;vm.saveOffline(true)})
             MenuRow(if(vm.libraryEntries.any { it.fic.id == fic.id && it.offline }) "Save current copy offline" else "Save offline", onClick = { tools = false; vm.saveOffline() })
-            KudosButton(vm,fic.id)
-            WorkAccountButton(vm,fic.id)
+            KudosButton(vm,fic.id,menu=true)
+            WorkAccountButton(vm,fic.id,menu=true)
             MenuRow("Series",onClick={tools=false;vm.showSeries()})
             MenuRow("Comments",onClick={tools=false;vm.showComments(fic.id)})
             if(currentChapter.notesBefore.isNotBlank() || currentChapter.notesAfter.isNotBlank()) MenuRow("Author notes",onClick={tools=false;notes=true})
@@ -199,7 +195,7 @@ import androidx.lifecycle.LifecycleEventObserver
                 Text("Text size · ${vm.preferences.fontSize}", Modifier.weight(1f))
                 Row { SkinOutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize - 1) }) { Text("A−") }; Spacer(Modifier.width(12.dp)); SkinOutlinedButton(onClick = { vm.fontSize(vm.preferences.fontSize + 1) }) { Text("A+") } }
             }
-            SkinButton(onClick = { if(vm.translating || vm.storage.getBoolean("translationConsented",false)) { vm.translate(); tools = false } else translationConsent=true }, Modifier.fillMaxWidth()) { Text(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}") }
+            MenuRow(if(vm.translating) "Cancel translation" else "Translate chapter to ${vm.preferences.language}",onClick={if(vm.translating || vm.storage.getBoolean("translationConsented",false)){vm.translate();tools=false}else translationConsent=true})
             if(vm.translation != null) MenuRow("Show original", onClick = { vm.original(); tools = false })
             MenuRow("Text only", supportingText="Hide all controls. Tap the center or press Back to restore them.", onClick={ tools=false; vm.textOnly=true })
             Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) { Text("Book mode",Modifier.weight(1f)); Switch(checked=vm.bookMode,onCheckedChange={vm.readingMode(book=it)}) }

@@ -39,6 +39,8 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
     return pages.ifEmpty { listOf(BookPage(0,"")) }
 }
 
+internal fun bookContentHeight(available:Int,padding:Int,footer:Int)= (available-padding-footer).coerceAtLeast(1)
+
 @Composable fun BookReader(vm: ClientState, text: String, paragraphs: List<String>, modifier: Modifier = Modifier, rich: AnnotatedString = AnnotatedString(text)) {
     val chapterIndex=vm.chapter
     val density = LocalDensity.current
@@ -48,7 +50,8 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
         fontSize = prefs.fontSize.sp, lineHeight = (prefs.fontSize*prefs.lineSpacing).sp,textAlign=readingAlignment(prefs.alignment))
     BoxWithConstraints(modifier) {
         val width = with(density) { (maxWidth-(prefs.margin*2).dp).roundToPx() }.coerceAtLeast(1)
-        val height = with(density) { (maxHeight-100.dp).roundToPx() }.coerceAtLeast(1)
+        var footerHeight by remember(density.density,density.fontScale){mutableIntStateOf(with(density){48.dp.roundToPx()})}
+        val height=bookContentHeight(with(density){maxHeight.roundToPx()},with(density){40.dp.roundToPx()},if(vm.textOnly)0 else footerHeight)
         val linePixels = with(density) { (prefs.fontSize*prefs.lineSpacing).sp.toPx() }
         if(width < 60 || height < linePixels) {
             Text("Close the keyboard or enlarge the reading area to show a page.")
@@ -71,7 +74,7 @@ internal fun paginateBookRanges(text: String, fit: (String,Int) -> Int): List<Bo
         val starts = remember(text) { var cursor=0; paragraphs.map { p -> text.indexOf(p,cursor).coerceAtLeast(cursor).also { cursor=it+p.length } } }
         val anchor = if(vm.bookOffset >= 0) vm.bookOffset else starts.getOrElse(vm.positionIndex) { 0 }
         key(text,rich,width,height,style,vm.readerRevision,vm.chapter) {
-            CurlBookPages(vm,pages,pages.indexOfLast { it.offset <= anchor }.coerceAtLeast(0),style,width,rich) { page ->
+            CurlBookPages(vm,pages,pages.indexOfLast { it.offset <= anchor }.coerceAtLeast(0),style,width,rich,footerMeasured={footerHeight=it}) { page ->
                 if(vm.chapter!=chapterIndex) return@CurlBookPages
                 vm.bookOffset=pages[page].offset
                 vm.positionIndex=starts.indexOfLast { it<=vm.bookOffset }.coerceAtLeast(0)

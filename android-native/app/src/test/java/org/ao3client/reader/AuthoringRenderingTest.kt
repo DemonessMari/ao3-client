@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -41,4 +42,14 @@ class AuthoringRenderingTest {
             compose.onNodeWithText("Visual").performClick();compose.runOnIdle{assertTrue(value.contains("<strong>Selected</strong>"))}
         } finally {compose.runOnUiThread{controller.pause().stop().destroy()};compose.waitForIdle()}
     }
+    @Test fun visualEditorUsesInputSkinColorsAndScaledTypography(){
+        val field=AccountField("chapter[content]","Work text","area",listOf("<p>Preview</p>"))
+        val skin=AppSkin(version=3,components=mapOf("inputs" to mapOf("background" to "#18304a","text" to "#ffffff","borderWidth" to 0,"cornerRadius" to 12,"textScale" to 1.25,"padding" to 4)))
+        val controller=Robolectric.buildActivity(ComponentActivity::class.java)
+        var expectedSize=0f
+        fun find(v:View):EditText?=if(v is EditText)v else if(v is ViewGroup)(0 until v.childCount).firstNotNullOfOrNull{find(v.getChildAt(it))} else null
+        compose.runOnUiThread{controller.get().setTheme(android.R.style.Theme_Material_Light_NoActionBar);controller.setup().visible().get().setContent{MaterialTheme{CompositionLocalProvider(LocalAppSkin provides skin,LocalSkinTypography provides MaterialTheme.typography,androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1.2f,1.1f)){expectedSize=with(androidx.compose.ui.platform.LocalDensity.current){20.sp.toPx()};AuthoringEditor("skin-test",field,field.values.first(),true){}}}}}
+        try{compose.waitForIdle();compose.runOnIdle{val edit=find(controller.get().window.decorView)!!;assertEquals(android.graphics.Color.WHITE,edit.currentTextColor);assertEquals(android.graphics.Color.parseColor("#18304a"),(edit.background as android.graphics.drawable.ColorDrawable).color);assertEquals(expectedSize,edit.textSize,.1f)}}finally{compose.runOnUiThread{controller.pause().stop().destroy()};compose.waitForIdle()}
+    }
+
 }

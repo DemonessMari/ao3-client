@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
                 "skins" -> SkinControls(vm)
                 "settings" -> SettingsScreen(vm)
                 "login" -> LoginScreen(vm)
-                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); SkinTextButton(onClick = { vm.showProfile("/users/" + vm.username.orEmpty()) }) { Text("View my profile") }; SkinTextButton(onClick = vm::myWorks) { Text("Browse my works") }; SkinTextButton(onClick={vm.showAccountReadings(true)}){Text("Marked for Later")}; SkinTextButton(onClick={vm.showArchiveList("history")}){Text("AO3 reading history")}; NativeAccountLinks(vm); Ao3AccountLinks(vm); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
+                "account" -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { ProfilePicture(vm,vm.username.orEmpty()); Text(vm.username.orEmpty(), style = MaterialTheme.typography.headlineSmall); MenuRow("View my profile",onClick={vm.showProfile("/users/"+vm.username.orEmpty())}); MenuRow("Browse my works",onClick=vm::myWorks); MenuRow("Marked for Later",onClick={vm.showAccountReadings(true)}); MenuRow("AO3 reading history",onClick={vm.showArchiveList("history")}); HorizontalDivider(); NativeAccountLinks(vm); HorizontalDivider(); Ao3AccountLinks(vm); HorizontalDivider(); SkinOutlinedButton(onClick=vm::verifyNativeSession){Text("Check native sign-in")}; SkinOutlinedButton(onClick = vm::logout) { Text("Sign out") } }
             }
         }
     }
@@ -323,20 +323,20 @@ class MainActivity : ComponentActivity() {
     },confirmButton={SkinTextButton(onClick={vm.officialDownloads=null}) { Text("Close") }}) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(fic.title, style = MaterialTheme.typography.headlineMedium)
-        Text("by ${fic.author}", style = MaterialTheme.typography.titleMedium)
+        Text("by ${fic.author}",modifier=if(fic.authorPath.isNotBlank())Modifier.clickable(role=androidx.compose.ui.semantics.Role.Button){vm.showProfile(fic.authorPath)} else Modifier,style=MaterialTheme.typography.titleMedium,color=if(fic.authorPath.isNotBlank())MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,textDecoration=if(fic.authorPath.isNotBlank())androidx.compose.ui.text.style.TextDecoration.Underline else null)
+        SkinButton(onClick=vm::read,enabled=!vm.loading,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)){Text(if(vm.loading)"Loading fic…" else "Read fic")}
+        HorizontalDivider()
         if(fic.rating.isNotBlank()) Text("Rating · ${fic.rating}")
         if(fic.warnings.isNotBlank()) Text("Warnings · ${fic.warnings}")
-        if(fic.authorPath.isNotBlank()) SkinOutlinedButton(onClick = { vm.showProfile(fic.authorPath) }) { Text("Author profile") }
-        SkinButton(onClick = vm::read, enabled = !vm.loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if(vm.loading) "Loading fic…" else "Read fic") }
         if(fic.fandom.isNotBlank()) Text(fic.fandom, color = MaterialTheme.colorScheme.primary)
         if(fic.stats.isNotBlank()) Text(fic.stats, style = MaterialTheme.typography.bodyMedium)
         if(fic.summary.isNotBlank()) { Text("Summary", style = MaterialTheme.typography.titleMedium); SelectionContainer { Text(fic.summary) } }
         if(fic.tags.isNotBlank()) { Text("Tags", style = MaterialTheme.typography.titleMedium); Text(fic.tags) }
-        KudosButton(vm,fic.id)
-        WorkAccountButton(vm,fic.id)
-        SkinOutlinedButton(onClick={vm.showSeries()},enabled=!vm.loading) { Text("Series") }
-        SkinOutlinedButton(onClick={vm.showComments(fic.id)}) { Text("Comments") }
-        SkinOutlinedButton(onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading) { Text("Download") }
+        HorizontalDivider()
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){KudosButton(vm,fic.id);WorkAccountButton(vm,fic.id)}
+        MenuRow("Series",onClick={vm.showSeries()},enabled=!vm.loading)
+        MenuRow("Comments",onClick={vm.showComments(fic.id)})
+        MenuRow("Download",onClick={vm.fetchOfficialDownloads(fic.id)},enabled=!vm.loading)
         Ao3WorkLinks(vm,fic.id)
 
     }

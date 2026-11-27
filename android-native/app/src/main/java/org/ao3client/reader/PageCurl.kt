@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -152,7 +153,7 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
 
 }
 
-@Composable internal fun CurlBookPages(vm: ClientState, pages: List<BookPage>, initial: Int, style: TextStyle, textWidth: Int, rich: AnnotatedString, changed: (Int)->Unit) {
+@Composable internal fun CurlBookPages(vm: ClientState, pages: List<BookPage>, initial: Int, style: TextStyle, textWidth: Int, rich: AnnotatedString, footerMeasured:(Int)->Unit={}, changed: (Int)->Unit) {
     var index by remember { mutableIntStateOf(initial) }
     var target by remember { mutableIntStateOf(initial) }
     var phase by remember { mutableFloatStateOf(0f) }
@@ -217,10 +218,8 @@ private fun DrawScope.paperTurn(old: TextLayoutResult, under: TextLayoutResult, 
             }
 
         }
-        if(!vm.textOnly) Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-            SkinTextButton(onClick={turn(-1)},enabled=(index>0 || vm.chapter>0) && !busy) { Text(if(index==0 && vm.chapter>0) "Previous chapter" else "Previous") }
-            Text("${index+1} / ${pages.size}")
-            SkinTextButton(onClick={turn(1)},enabled=(index<pages.lastIndex || vm.chapter<vm.chapters.lastIndex) && !busy) { Text(if(index==pages.lastIndex && vm.chapter<vm.chapters.lastIndex) "Next chapter" else "Next") }
-        }
+        if(!vm.textOnly)ReaderPageFooter(index+1,pages.size,(index>0 || vm.chapter>0) && !busy,(index<pages.lastIndex || vm.chapter<vm.chapters.lastIndex) && !busy,
+            previousLabel=if(index==0 && vm.chapter>0)"Previous chapter" else "Previous page",nextLabel=if(index==pages.lastIndex && vm.chapter<vm.chapters.lastIndex)"Next chapter" else "Next page",
+            onPrevious={turn(-1)},onNext={turn(1)},modifier=Modifier.onSizeChanged{footerMeasured(it.height)})
     }
 }
