@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -44,7 +45,9 @@ internal fun Map<String,Any>.color(key:String,fallback:Color)=(get(key) as? Stri
     MaterialTheme(colorScheme=scheme.copy(surface=bg,onSurface=fg,onSurfaceVariant=fg,background=bg,onBackground=fg,surfaceContainer=bg,primary=fg),typography=typography){ProvideTextStyle(typography.bodyLarge.copy(color=fg),content)}
 }
 @Composable internal fun SkinHeader(content:@Composable ()->Unit){
-    val rule=skinRule("header");val banner=LocalAppSkin.current?.layers?.firstOrNull{it.target=="header" && it.placement=="banner"}
+    val rule=skinRule("header");val config=LocalConfiguration.current
+    val shortLandscape=config.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE && config.screenHeightDp<480
+    val banner=LocalAppSkin.current?.layers?.firstOrNull{it.target=="header" && it.placement=="banner"}?.takeUnless{shortLandscape}
     SkinRole("header"){Surface(shape=skinShape("header"),border=skinBorder("header"),color=MaterialTheme.colorScheme.background){Column{
         Box(Modifier.fillMaxWidth()) {SkinImageCanvas("header",Modifier.matchParentSize(),background=MaterialTheme.colorScheme.background,foreground=MaterialTheme.colorScheme.onBackground);Box(Modifier.fillMaxWidth().padding(rule.number("padding",0.0).dp)){content()}}
         if(banner!=null)SkinImageCanvas("header",Modifier.fillMaxWidth().height(banner.height.dp),banner=true)

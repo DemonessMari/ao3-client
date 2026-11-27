@@ -101,14 +101,20 @@ class MainActivity : ComponentActivity() {
     if (vm.screen == "reader") { key(vm.selected?.id, vm.chapter, vm.readerRevision) { ReaderScreen(vm) }; return }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     SkinImageCanvas("window",Modifier.matchParentSize())
-    Scaffold(containerColor=Color.Transparent,
+    Scaffold(containerColor=Color.Transparent,contentColor=MaterialTheme.colorScheme.onBackground,
         topBar = { ClientTopBar(vm) },
-        bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) NavigationBar {
-            NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
-            NavigationBarItem(selected = vm.screen == "search" && !vm.ownWorks, onClick = { vm.ownWorks = false; vm.navigate("search") }, icon = { Icon(Icons.Default.Search, null) }, label = { Text("Search") })
-            NavigationBarItem(selected = vm.screen == "library", onClick = { vm.navigate("library") }, icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Library") })
-            NavigationBarItem(selected = vm.screen == "settings", onClick = { vm.navigate("settings") }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
-        } }
+        bottomBar = { if (vm.screen in listOf("home", "search", "library", "settings")) BoxWithConstraints {
+            val density=androidx.compose.ui.platform.LocalDensity.current
+            val lines=if(density.fontScale>=1.5f)2 else 1
+            val labelHeight=with(density){(MaterialTheme.typography.labelMedium.lineHeight*lines).toDp()}
+            val labelWidth=(maxWidth/4).coerceAtLeast(32.dp)
+            val navLabel:@Composable (String)->Unit={value->Text(value,Modifier.requiredWidth(labelWidth).heightIn(min=labelHeight),maxLines=lines,overflow=TextOverflow.Ellipsis,textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
+            NavigationBar(modifier=Modifier.heightIn(min=maxOf(80.dp,48.dp+labelHeight))) {
+            NavigationBarItem(selected = vm.screen == "home", onClick = { vm.navigate("home") }, icon = { Icon(Icons.Default.Home, null) }, label = { navLabel("Home") })
+            NavigationBarItem(selected = vm.screen == "search" && !vm.ownWorks, onClick = { vm.ownWorks = false; vm.navigate("search") }, icon = { Icon(Icons.Default.Search, null) }, label = { navLabel("Search") })
+            NavigationBarItem(selected = vm.screen == "library", onClick = { vm.navigate("library") }, icon = { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { navLabel("Library") })
+            NavigationBarItem(selected = vm.screen == "settings", onClick = { vm.navigate("settings") }, icon = { Icon(Icons.Default.Settings, null) }, label = { navLabel("Settings") })
+        } } }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
             if (vm.loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); SkinTextButton(onClick=vm::cancelLoad) { Text("Cancel request") } }
@@ -203,28 +209,28 @@ class MainActivity : ComponentActivity() {
     }
 }
 @Composable fun SearchScreen(vm: ClientState) {
-    val keyboard = LocalSoftwareKeyboardController.current
-    val listState = rememberLazyListState()
-    Column(Modifier.fillMaxSize()) {
-        if (!vm.ownWorks) {
-            FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+    val keyboard=LocalSoftwareKeyboardController.current
+    val listState=rememberLazyListState()
+    val result=vm.listing
+    LazyColumn(state=listState,modifier=Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(!vm.ownWorks) {
+            item {FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 listOf("people" to "People","tags" to "Tags","bookmarks" to "Bookmarks").forEach{(kind,title)->SkinTextButton(onClick={vm.startDiscovery(kind)}){Text(title)}}
                 SkinTextButton(onClick={vm.showArchiveList("media")}){Text("Fandoms")}
                 SkinTextButton(onClick={vm.showTools("/collections")}){Text("Collections")}
-            }
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                SkinOutlinedTextField(vm.query, { vm.query = it }, Modifier.weight(1f), placeholder = { Text("Title, author, keywords") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); vm.search() }))
-                IconButton(onClick = { keyboard?.hide(); vm.search() }, enabled = !vm.loading) { Icon(Icons.Default.Search, "Search AO3") }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Search", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                FilterChip(selected = vm.filters.isNotEmpty(), onClick = { keyboard?.hide(); vm.navigate("filters") }, label = { Text("Filters${if(vm.filters.isEmpty()) "" else " · ${vm.filters.size}"}") })
-            }
-        } else Text(vm.accountListTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
-        val result = vm.listing
-        if (result == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(if(vm.ownWorks) if(vm.loading) "Loading account list…" else "Account list unavailable." else "Enter a search.", Modifier.padding(24.dp)) }
-        else LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            }}
+            item {Row(verticalAlignment=Alignment.CenterVertically) {
+                SkinOutlinedTextField(vm.query,{vm.query=it},Modifier.weight(1f),placeholder={Text("Title, author, keywords")},singleLine=true,
+                    keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={keyboard?.hide();vm.search()}))
+                IconButton(onClick={keyboard?.hide();vm.search()},enabled=!vm.loading){Icon(Icons.Default.Search,"Search AO3")}
+            }}
+            item {Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+                Text("Search",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
+                FilterChip(selected=vm.filters.isNotEmpty(),onClick={keyboard?.hide();vm.navigate("filters")},label={Text("Filters${if(vm.filters.isEmpty()) "" else " · ${vm.filters.size}"}")})
+            }}
+        } else item {Text(vm.accountListTitle,style=MaterialTheme.typography.headlineSmall)}
+        if(result==null)item{Text(if(vm.ownWorks)if(vm.loading)"Loading account list…" else "Account list unavailable." else "Enter a search.",Modifier.padding(24.dp))}
+        else {
             if (result.total.isNotBlank()) item { Text(result.total, style = MaterialTheme.typography.labelLarge) }
             if (result.works.isEmpty() && result.unavailable.isEmpty()) item { Text(if(vm.ownWorks) "No works in this list." else "No works found.") }
             items(result.works, key = { it.id }) { fic ->
@@ -247,9 +253,10 @@ class MainActivity : ComponentActivity() {
                     SkinOutlinedButton(onClick = { vm.search(result.page + 1, false) }, enabled = result.page < result.pages && !vm.loading) { Text("Next") }
                 }
             }
+
         }
-        LaunchedEffect(result?.page, result?.works?.firstOrNull()?.id) { listState.scrollToItem(0) }
     }
+    LaunchedEffect(result?.page,result?.works?.firstOrNull()?.id){listState.scrollToItem(0)}
 }
 @Composable fun FilterScreen(vm: ClientState) {
     val draft = vm.filterDraft

@@ -1,5 +1,13 @@
 # Verification
 
+## 3.2.0-rc.28
+
+2026-11-27: full Android activity simulations cover compact (320×640), standard/light (390×844), landscape (780×360), large text (360×740 at 1.8×), Nebula (360×780 at 1.15×) and Nebula landscape (780×360 at 1.3×). Each checks 19 screen states, including search results after scrolling, settings/account bottoms, profile, native editor, reader menu, fullscreen and text-only reading. Fixtures replace network requests and reject form submissions.
+
+The checks exposed low-contrast default text on dark backgrounds, clipped avatar initials at large font sizes, inconsistent navigation label space, a decorative banner consuming landscape height, and search controls leaving almost no result viewport. These are corrected. Search controls now scroll with results; short landscape hides decorative header banners. Fullscreen is entered through its actual menu action, and notes/exit bounds are checked for overlap. Text clipping, body-text contrast and available scroll height are checked automatically; rendered screenshots are inspected separately.
+
+Physical-device acceptance, authenticated writes and long-session testing remain separate from this simulated-layout coverage.
+
 ## 3.2.0-rc.27
 
 2026-11-27: reading-menu commands use consistent rows, including guest kudos, account actions and translation. Work details separate metadata from actions; account and website navigation use matching rows. Desktop Series belongs to the action group, toolbars wrap, and repeated checkbox labels were removed.
