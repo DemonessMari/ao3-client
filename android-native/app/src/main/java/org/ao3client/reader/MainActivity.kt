@@ -408,11 +408,20 @@ class MainActivity : ComponentActivity() {
         AboutControls()
         HorizontalDivider()
         Text("Language", style = MaterialTheme.typography.titleLarge)
-        SkinOutlinedTextField(language, { language = it }, Modifier.fillMaxWidth(), label = { Text("Default language code") }, supportingText = { Text("For example: en, et, es, fr, de, ja") }, singleLine = true)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Default language code", style = MaterialTheme.typography.labelLarge)
+            SkinOutlinedTextField(language, { language = it }, Modifier.fillMaxWidth().semantics { contentDescription = "Default language code" }, supportingText = { Text("For example: en, et, es, fr, de, ja") }, singleLine = true)
+        }
         Row(Modifier.fillMaxWidth().clickable { filter = !filter }, verticalAlignment = Alignment.CenterVertically) { Checkbox(filter, { filter = it }); Text("Use this language for new searches", Modifier.weight(1f)) }
         HorizontalDivider(); Text("Translation service", style = MaterialTheme.typography.titleLarge)
-        SkinOutlinedTextField(service, { service = it }, Modifier.fillMaxWidth(), label = { Text("LibreTranslate URL") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
-        SkinOutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text("API key (optional)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("LibreTranslate URL", style = MaterialTheme.typography.labelLarge)
+            SkinOutlinedTextField(service, { service = it }, Modifier.fillMaxWidth().semantics { contentDescription = "LibreTranslate URL" }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("API key (optional)", style = MaterialTheme.typography.labelLarge)
+            SkinOutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth().semantics { contentDescription = "API key (optional)" }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+        }
         SkinButton(onClick = { vm.savePreferences(vm.preferences.copy(language = language, filterLanguage = filter, service = service, apiKey = apiKey)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Save language and translation") }
     }
 }

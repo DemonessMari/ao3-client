@@ -1,6 +1,6 @@
 # Feature coverage
 
-3.2.0-rc.28 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
+3.2.0-rc.29 prerelease. The 3.1.0 release excludes the newest native account actions and embedded website view.
 
 | Area | Native controls | Embedded AO3 website |
 | --- | --- | --- |

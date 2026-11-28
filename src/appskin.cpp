@@ -38,7 +38,11 @@
 #include <QScreen>
 
 namespace {
+bool embeddedInput(const QWidget *widget) {
+    return qobject_cast<const QLineEdit *>(widget) && (qobject_cast<const QComboBox *>(widget->parentWidget()) || qobject_cast<const QAbstractSpinBox *>(widget->parentWidget()));
+}
 QString skinRole(const QWidget *widget) {
+    if(embeddedInput(widget))return {};
     for(auto *w=widget;w;w=w->parentWidget()){if(w->objectName()=="skinPreview")break;if(qobject_cast<const QMenu *>(w) || w->property("skinEditor").toBool())return {};}
     if(auto *button=qobject_cast<const QPushButton *>(widget))return button->isFlat()?"navigation":"buttons";
     if(qobject_cast<const QLineEdit *>(widget)||qobject_cast<const QComboBox *>(widget)||qobject_cast<const QAbstractSpinBox *>(widget)||qobject_cast<const QTextEdit *>(widget))return "inputs";
@@ -62,6 +66,7 @@ public:
         return result;
     }
     void drawPrimitive(PrimitiveElement element,const QStyleOption *option,QPainter *painter,const QWidget *widget=nullptr)const override {
+        if(custom && embeddedInput(widget) && (element==PE_PanelLineEdit || element==PE_FrameLineEdit))return;
         const auto rule=skin.component("inputs");
         if(custom && !rule.isEmpty() && skinRole(widget)=="inputs" && (element==PE_PanelLineEdit || element==PE_FrameLineEdit)){
             painter->save();painter->setRenderHint(QPainter::Antialiasing);const double width=rule.value("borderWidth").toDouble(1);
@@ -149,6 +154,9 @@ void componentWidget(QWidget *widget) {
         widget->setMinimumHeight(widget->property("ao3OriginalMinimumHeight").toInt());widget->setMaximumHeight(widget->property("ao3OriginalMaximumHeight").toInt());
     }
     if(widget->property("accountAvatar").toBool()){const int side=qRound(44*nativeStyle->scale);widget->setFixedSize(side,side);}
+    if(embeddedInput(widget)){
+        auto *edit=qobject_cast<QLineEdit *>(widget);edit->setFrame(false);edit->setMinimumHeight(0);edit->setMaximumHeight(QWIDGETSIZE_MAX);edit->setAutoFillBackground(false);edit->setPalette(widget->parentWidget()->palette());edit->setFont(widget->parentWidget()->font());return;
+    }
     if(!overrideStyle){configureSkinBanner(widget);return;}
     const auto role=skinRole(widget);const auto &skin=nativeStyle->skin;
     const QColor bg(rule.value("background").toString(role=="buttons"?skin.accent:role=="header"?skin.background:skin.surface)),fg(rule.value("text").toString(role=="buttons"?skin.onAccent:skin.text));

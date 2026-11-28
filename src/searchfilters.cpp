@@ -54,7 +54,7 @@ SearchFilterPanel::SearchFilterPanel(QWidget *parent) : QWidget(parent)
             });
             edit = tag;
         } else edit = new QLineEdit(body);
-        edit->setObjectName(key); edit->setPlaceholderText(hint);
+        edit->setObjectName(key); edit->setPlaceholderText(hint); edit->setMinimumHeight(32);
         m_text[key] = edit; form->addRow(label, edit);
     };
     text(QStringLiteral("title"), QStringLiteral("Title"));
@@ -75,7 +75,7 @@ SearchFilterPanel::SearchFilterPanel(QWidget *parent) : QWidget(parent)
     text(QStringLiteral("bookmarks_count"), QStringLiteral("Bookmarks"), QStringLiteral("e.g. >50 or 50-500"));
     form = workForm;
     auto combo = [&](const QString &key, const QString &label, const QVector<QPair<QString, QString>> &choices) {
-        auto *box = new QComboBox(body); box->setObjectName(key);
+        auto *box = new QComboBox(body); box->setObjectName(key); box->setMinimumHeight(32);
         box->addItem(QStringLiteral("Any / default"), QString());
         for (const auto &choice : choices) box->addItem(choice.first, choice.second);
         m_combos[key] = box; form->addRow(label, box);
@@ -118,12 +118,6 @@ SearchFilterPanel::SearchFilterPanel(QWidget *parent) : QWidget(parent)
         m_lists[entry.first] = list;
         excludeForm->addRow(entry.second, list);
     }
-    auto *row = new QHBoxLayout;
-    m_status = new QLabel(QStringLiteral("Filters are available offline. Typing suggestions require AO3."), this);
-    m_status->setWordWrap(true); row->addWidget(m_status, 1);
-
-    layout->addLayout(row);
-
     auto *buttons = new QHBoxLayout;
     auto *reset = new QPushButton(QStringLiteral("Reset"), this);
     reset->setObjectName(QStringLiteral("resetFilters"));
@@ -185,17 +179,9 @@ void SearchFilterPanel::setFilters(const SearchFilters &filters)
         }
 }
 
-void SearchFilterPanel::setLoading()
-{
-    m_status->setText(QStringLiteral("Filters remain available offline. Typing suggestions require AO3."));
-}
-
 void SearchFilterPanel::setOptions(const SearchOptions &options)
 {
-    if (!options.error.isEmpty()) {
-        m_status->setText(QStringLiteral("Filters are available offline. Typing suggestions require AO3."));
-        return;
-    }
+    if (!options.error.isEmpty()) return;
     // Merge optional imported choices without deleting the bundled catalogue.
     for (auto it = options.choices.cbegin(); it != options.choices.cend(); ++it) {
         for (const auto &choice : it.value()) {
@@ -228,7 +214,6 @@ void SearchFilterPanel::setOptions(const SearchOptions &options)
         }
     }
     setFilters(selected);
-    m_status->setText(QStringLiteral("Filters are available offline. Typing suggestions require AO3."));
 }
 
 void SearchFilterPanel::showTagSuggestions(const QString &field, quint64 revision, const QStringList &suggestions, const QString &error)

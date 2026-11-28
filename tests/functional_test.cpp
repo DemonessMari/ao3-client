@@ -353,6 +353,16 @@ private slots:
         applyAppSkin();QVERIFY(qAbs(button.font().pointSizeF()-base*1.25)<.1);
         QSettings().setValue("appearance/skin",AppSkin::preset(0).json());applyAppSkin();QCOMPARE(button.styleSheet(),QString("padding: 8px;"));QVERIFY(qAbs(button.font().pointSizeF()-base)<.1);
     }
+    void editableFilterHasOneFrame() {
+        const auto prior=QSettings().value("appearance/skin");auto restore=qScopeGuard([&]{QSettings().setValue("appearance/skin",prior);applyAppSkin();});
+        MainWindow window;installNetwork(window);window.resize(1100,850);window.show();
+        QFile file(QStringLiteral(AO3_FIXTURE_DIR "/app-skin-v3.json"));QVERIFY(file.open(QIODevice::ReadOnly));AppSkin skin;QString error;QVERIFY(AppSkin::parse(file.readAll(),skin,error));
+        QSettings().setValue("appearance/skin",skin.json());applyAppSkin();QTest::mouseClick(window.m_filterButton,Qt::LeftButton);QTest::qWait(40);
+        auto *combo=window.m_filterPanel->findChild<QComboBox *>("language_id");QVERIFY(combo);QVERIFY(combo->isEditable());QVERIFY(!combo->lineEdit()->hasFrame());QCOMPARE(combo->lineEdit()->minimumHeight(),0);QVERIFY(combo->rect().contains(combo->lineEdit()->geometry()));
+        combo->setEditText("fr");QCOMPARE(window.m_filterPanel->filters().value("language_id"),QStringList{"fr"});
+        for(auto *label:window.m_filterPanel->findChildren<QLabel *>())QVERIFY(!label->text().contains("Typing suggestions"));
+        if(qEnvironmentVariableIsSet("AO3_CAPTURE_FILTER_FRAME"))window.grab().save(qEnvironmentVariable("AO3_CAPTURE_FILTER_FRAME"));
+    }
     void appSkinUpdatesExistingChromeAndReader() {
         const auto prior=QSettings().value("appearance/skin"),use=QSettings().value("reader/useAppSkin");const auto palette=QApplication::palette();auto restore=qScopeGuard([&]{if(prior.isValid())QSettings().setValue("appearance/skin",prior);else QSettings().remove("appearance/skin");if(use.isValid())QSettings().setValue("reader/useAppSkin",use);else QSettings().remove("reader/useAppSkin");applyAppSkin();QApplication::setPalette(palette);});
         MainWindow window;installNetwork(window);window.resize(1100,850);window.show();QTest::qWait(30);
@@ -830,7 +840,6 @@ private slots:
 <input type='checkbox' name='work_search[archive_warning_ids][]' id='w17' value='917'><label for='w17'>Violence &amp; injury</label>
 <input type='checkbox' name='work_search[category_ids][]' id='c23' value='923'><label for='c23'>F/F</label>)";
         QSignalSpy options(window.m_client, &AO3Client::searchOptionsFetched);
-        window.m_filterPanel->setLoading();
         window.m_client->fetchSearchOptions();
         QTRY_COMPARE(options.count(), 1);
         QVERIFY(window.m_filterChoicesLoaded);

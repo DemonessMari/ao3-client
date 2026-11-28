@@ -23,7 +23,6 @@ public:
     SearchFilters filters() const;
     void setFilters(const SearchFilters &filters);
     void setOptions(const SearchOptions &options);
-    void setLoading();
     void showTagSuggestions(const QString &field, quint64 revision, const QStringList &suggestions, const QString &error);
 signals:
     void optionsRequested();
@@ -33,6 +32,5 @@ private:
     QMap<QString, QLineEdit *> m_text;
     QMap<QString, QComboBox *> m_combos;
     QMap<QString, QListWidget *> m_lists;
-    QLabel *m_status;
     SearchOptions m_catalogue;
 };

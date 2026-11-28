@@ -10,7 +10,7 @@ Native AO3 tools now cover publishing and chapter editing, collections/challenge
 
 Work text, summaries and notes offer visual bold, italic, underline, strike, headings, links and lists, with undo and HTML mode. Existing tables, images, nested lists and custom styling stay in HTML mode to preserve them.
 
-3.2.0-rc.28 is a prerelease. Simulated phone layouts are checked; physical-device acceptance, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
+3.2.0-rc.29 is a prerelease. Simulated phone layouts are checked; physical-device acceptance, authenticated writes and long-session testing remain pending. See [verification](VERIFICATION.md).
 
 Native skins support component styling and embedded image layers without CSS. Import an image in the skin editor or try the bundled **Neos Nebula** preset. Image credits and licenses travel with exported skins. See [skin format](SKINS.md).
 

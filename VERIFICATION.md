@@ -1,5 +1,13 @@
 # Verification
 
+## 3.2.0-rc.29
+
+2026-11-28: mobile profile pictures use circular clipping and center cropping independently of skin corner shapes. Language and translation fields have labels above their borders. Desktop editable selectors leave their internal text editor unframed and inherit the outer selector's font and palette; filter fields have a 32 px minimum height. The offline/suggestions note is removed.
+
+A rectangular bitmap under a cut-corner theme checks the avatar mask and center crop. The desktop regression check verifies the language editor has no inner frame, fits inside its selector and still accepts typed language codes. The rendered filter panel was inspected. All seven desktop suites pass, and the installed binary matches the build and passes isolated startup.
+
+Android passes 187 offline tests, including the bitmap cropping regression, with one optional live test skipped. Physical-phone acceptance, production account writes and long-session testing remain pending. This remains a prerelease.
+
 ## 3.2.0-rc.28
 
 2026-11-27: full Android activity simulations cover compact (320×640), standard/light (390×844), landscape (780×360), large text (360×740 at 1.8×), Nebula (360×780 at 1.15×) and Nebula landscape (780×360 at 1.3×). Each checks 19 screen states, including search results after scrolling, settings/account bottoms, profile, native editor, reader menu, fullscreen and text-only reading. Fixtures replace network requests and reject form submissions.
